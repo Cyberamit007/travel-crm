@@ -108,7 +108,7 @@ Resources:
       - EmailUserParam
       - EmailPassParam
     Properties:
-      InstanceType: t2.micro
+      InstanceType: t3.micro
       # Latest Amazon Linux 2023 AMI — auto-resolved per region
       ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
       IamInstanceProfile: !Ref EC2InstanceProfile
