@@ -6,10 +6,6 @@ Parameters:
     Type: String
     NoEcho: true
     Description: PostgreSQL password
-  GHDeployToken:
-    Type: String
-    NoEcho: true
-    Description: GitHub Personal Access Token with repo scope (for cloning private repo)
   EmailUser:
     Type: String
     Default: 'NONE'
@@ -34,13 +30,6 @@ Resources:
       Name: /travel-crm/db-password
       Type: String
       Value: !Ref DBPassword
-
-  GHTokenParam:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /travel-crm/github-token
-      Type: String
-      Value: !Ref GHDeployToken
 
   JWTSecretParam:
     Type: AWS::SSM::Parameter
@@ -115,7 +104,6 @@ Resources:
     Type: AWS::EC2::Instance
     DependsOn:
       - DBPasswordParam
-      - GHTokenParam
       - JWTSecretParam
       - EmailUserParam
       - EmailPassParam
@@ -170,16 +158,15 @@ Resources:
             echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
             # ── Read secrets from SSM ────────────────────────────────────
-            GH_TOKEN=$(aws ssm get-parameter --name /travel-crm/github-token --query Parameter.Value --output text --region $REGION)
             DB_PASSWORD=$(aws ssm get-parameter --name /travel-crm/db-password --query Parameter.Value --output text --region $REGION)
             JWT_SECRET=$(aws ssm get-parameter --name /travel-crm/jwt-secret --query Parameter.Value --output text --region $REGION)
             EMAIL_USER=$(aws ssm get-parameter --name /travel-crm/email-user --query Parameter.Value --output text --region $REGION)
             EMAIL_PASS=$(aws ssm get-parameter --name /travel-crm/email-pass --query Parameter.Value --output text --region $REGION)
             PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
-            # ── Clone private repo using token ───────────────────────────
+            # ── Clone repo (public) ──────────────────────────────────────
             cd /home/ec2-user
-            git clone https://x-access-token:${!GH_TOKEN}@github.com/Cyberamit007/travel-crm.git travel-crm
+            git clone https://github.com/Cyberamit007/travel-crm.git travel-crm
             cd travel-crm
             chown -R ec2-user:ec2-user /home/ec2-user/travel-crm
 
