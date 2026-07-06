@@ -8,11 +8,13 @@ Parameters:
     Description: PostgreSQL password (alphanumeric + hyphens only)
   EmailUser:
     Type: String
-    Description: Gmail address used to send notifications
+    Default: ''
+    Description: Gmail address (optional — leave blank to skip email)
   EmailPass:
     Type: String
     NoEcho: true
-    Description: Gmail App Password (16 chars, no spaces)
+    Default: ''
+    Description: Gmail App Password (optional — leave blank to skip email)
   JWTSecret:
     Type: String
     NoEcho: true
