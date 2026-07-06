@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Travel CRM — single EC2 t2.micro with Docker (free tier)
+Description: Travel CRM - single EC2 t2.micro with Docker (free tier)
 
 Parameters:
   DBPassword:
@@ -8,13 +8,13 @@ Parameters:
     Description: PostgreSQL password (alphanumeric + hyphens only)
   EmailUser:
     Type: String
-    Default: ''
-    Description: Gmail address (optional — leave blank to skip email)
+    Default: 'NONE'
+    Description: Gmail address (optional, leave as NONE to skip email)
   EmailPass:
     Type: String
     NoEcho: true
-    Default: ''
-    Description: Gmail App Password (optional — leave blank to skip email)
+    Default: 'NONE'
+    Description: Gmail App Password (optional, leave as NONE to skip email)
   JWTSecret:
     Type: String
     NoEcho: true
@@ -56,7 +56,7 @@ Resources:
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Travel CRM — HTTP + SSH
+      GroupDescription: Travel CRM - HTTP and SSH
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
