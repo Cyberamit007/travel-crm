@@ -3,12 +3,12 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY backend/package*.json ./
-RUN npm install --omit=dev
+# Install all deps (including devDeps) so prisma CLI is available for generate
+RUN npm install
 
 COPY backend/ ./
-
-RUN npx prisma generate
+# Generate Prisma client, then strip devDeps to keep image small
+RUN npx prisma generate && npm prune --omit=dev
 
 EXPOSE 5000
-
 CMD ["npm", "start"]
