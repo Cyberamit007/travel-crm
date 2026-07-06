@@ -1,0 +1,226 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Travel CRM — single EC2 t2.micro with Docker (free tier)
+
+Parameters:
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: PostgreSQL password (alphanumeric + hyphens only)
+  EmailUser:
+    Type: String
+    Description: Gmail address used to send notifications
+  EmailPass:
+    Type: String
+    NoEcho: true
+    Description: Gmail App Password (16 chars, no spaces)
+  JWTSecret:
+    Type: String
+    NoEcho: true
+    Default: cba7fe9e4a18ff708aedc94cc15a3de850b3260ab1162162d70fb23a612250e6
+    Description: JWT signing secret (pre-generated, do not change)
+
+Resources:
+
+  # ── Secrets stored in SSM so shell special chars in passwords are safe ──
+  DBPasswordParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /travel-crm/db-password
+      Type: String
+      Value: !Ref DBPassword
+
+  JWTSecretParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /travel-crm/jwt-secret
+      Type: String
+      Value: !Ref JWTSecret
+
+  EmailUserParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /travel-crm/email-user
+      Type: String
+      Value: !Ref EmailUser
+
+  EmailPassParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /travel-crm/email-pass
+      Type: String
+      Value: !Ref EmailPass
+
+  # ── Networking ───────────────────────────────────────────────────────────
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Travel CRM — HTTP + SSH
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  # ── IAM: EC2 can read SSM params and receive SSM Run Commands ────────────
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TravelCRMEC2Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ReadCRMParams
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/travel-crm/*
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: TravelCRMEC2Profile
+      Roles:
+        - !Ref EC2Role
+
+  # ── EC2 Instance ─────────────────────────────────────────────────────────
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - DBPasswordParam
+      - JWTSecretParam
+      - EmailUserParam
+      - EmailPassParam
+    Properties:
+      InstanceType: t2.micro
+      # Latest Amazon Linux 2023 AMI — auto-resolved per region
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroups:
+        - !Ref SecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: travel-crm
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            exec > >(tee /var/log/userdata.log | logger -t userdata -s 2>/dev/console) 2>&1
+            echo "=== Travel CRM Bootstrap started ==="
+
+            REGION="${AWS::Region}"
+
+            # ── System packages ──────────────────────────────────────────
+            yum update -y
+            yum install -y docker git
+            systemctl start docker
+            systemctl enable docker
+            usermod -aG docker ec2-user
+
+            # ── Docker Compose plugin ────────────────────────────────────
+            mkdir -p /usr/local/lib/docker/cli-plugins
+            curl -SL https://github.com/docker/compose/releases/download/v2.29.1/docker-compose-linux-x86_64 \
+              -o /usr/local/lib/docker/cli-plugins/docker-compose
+            chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+            # ── Node.js 20 (for frontend build) ─────────────────────────
+            curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+            yum install -y nodejs
+
+            # ── 2 GB swap (critical for t2.micro) ───────────────────────
+            fallocate -l 2G /swapfile
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+            # ── Clone repo ───────────────────────────────────────────────
+            cd /home/ec2-user
+            git clone https://github.com/Cyberamit007/travel-crm.git travel-crm
+            cd travel-crm
+            chown -R ec2-user:ec2-user /home/ec2-user/travel-crm
+
+            # ── Read secrets from SSM (handles special chars safely) ─────
+            DB_PASSWORD=$(aws ssm get-parameter --name /travel-crm/db-password --query Parameter.Value --output text --region $REGION)
+            JWT_SECRET=$(aws ssm get-parameter --name /travel-crm/jwt-secret --query Parameter.Value --output text --region $REGION)
+            EMAIL_USER=$(aws ssm get-parameter --name /travel-crm/email-user --query Parameter.Value --output text --region $REGION)
+            EMAIL_PASS=$(aws ssm get-parameter --name /travel-crm/email-pass --query Parameter.Value --output text --region $REGION)
+            PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+
+            # ── Write .env (docker-compose reads this automatically) ─────
+            printf 'DB_PASSWORD=%s\n'           "$DB_PASSWORD"  >  /home/ec2-user/travel-crm/.env
+            printf 'SERVER_IP=%s\n'             "$PUBLIC_IP"    >> /home/ec2-user/travel-crm/.env
+            printf 'JWT_SECRET=%s\n'            "$JWT_SECRET"   >> /home/ec2-user/travel-crm/.env
+            printf 'EMAIL_HOST=smtp.gmail.com\n'                >> /home/ec2-user/travel-crm/.env
+            printf 'EMAIL_PORT=587\n'                           >> /home/ec2-user/travel-crm/.env
+            printf 'EMAIL_USER=%s\n'            "$EMAIL_USER"   >> /home/ec2-user/travel-crm/.env
+            printf 'EMAIL_PASS=%s\n'            "$EMAIL_PASS"   >> /home/ec2-user/travel-crm/.env
+            printf 'EMAIL_FROM=Travel CRM <%s>\n' "$EMAIL_USER" >> /home/ec2-user/travel-crm/.env
+            chown ec2-user:ec2-user /home/ec2-user/travel-crm/.env
+            chmod 600 /home/ec2-user/travel-crm/.env
+
+            # ── Make scripts executable ──────────────────────────────────
+            chmod +x /home/ec2-user/travel-crm/scripts/redeploy.sh
+
+            # ── Build frontend ───────────────────────────────────────────
+            cd /home/ec2-user/travel-crm/frontend
+            npm install
+            npm run build
+
+            # ── Start all containers ─────────────────────────────────────
+            cd /home/ec2-user/travel-crm
+            docker compose up -d --build
+
+            # ── DB schema + seed ─────────────────────────────────────────
+            echo "Waiting for database to be ready..."
+            sleep 20
+            docker compose exec -T backend npx prisma db push
+            docker compose exec -T backend npx tsx src/utils/seed.ts
+
+            # ── Done marker (deploy workflow waits for this) ─────────────
+            touch /home/ec2-user/.userdata-complete
+            echo "=== Bootstrap complete! App at http://$PUBLIC_IP ==="
+
+  # ── Static public IP ─────────────────────────────────────────────────────
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref EC2Instance
+
+Outputs:
+  InstanceId:
+    Description: EC2 instance ID (used by GitHub Actions for SSM deploys)
+    Value: !Ref EC2Instance
+    Export:
+      Name: TravelCRM-InstanceId
+
+  PublicIP:
+    Description: Static public IP of the server
+    Value: !Ref ElasticIP
+    Export:
+      Name: TravelCRM-PublicIP
+
+  AppURL:
+    Description: URL to access the Travel CRM app
+    Value: !Sub http://${ElasticIP}
+    Export:
+      Name: TravelCRM-AppURL
