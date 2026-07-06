@@ -34,13 +34,15 @@ jobs:
 
           echo "Stack status: $STATUS"
 
-          # Clean up stacks that are stuck in a bad terminal state
-          if [ "$STATUS" = "ROLLBACK_COMPLETE" ] || [ "$STATUS" = "DELETE_COMPLETE" ]; then
-            echo "Stack in bad state ($STATUS) — deleting and re-creating..."
-            aws cloudformation delete-stack --stack-name travel-crm
-            aws cloudformation wait stack-delete-complete --stack-name travel-crm
-            STATUS="DOES_NOT_EXIST"
-          fi
+          # Clean up stacks stuck in any bad terminal state
+          case "$STATUS" in
+            ROLLBACK_COMPLETE|CREATE_FAILED|UPDATE_ROLLBACK_COMPLETE|DELETE_FAILED)
+              echo "Stack in bad state ($STATUS) — deleting and re-creating..."
+              aws cloudformation delete-stack --stack-name travel-crm
+              aws cloudformation wait stack-delete-complete --stack-name travel-crm
+              STATUS="DOES_NOT_EXIST"
+              ;;
+          esac
 
           if [ "$STATUS" = "DOES_NOT_EXIST" ]; then
             echo "fresh=true" >> $GITHUB_OUTPUT
@@ -59,7 +61,15 @@ jobs:
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
-              DBPassword="${{ secrets.DB_PASSWORD }}"
+              DBPassword="${{ secrets.DB_PASSWORD }}" || {
+            echo ""
+            echo "=== CloudFormation FAILED. Stack events (failures only): ==="
+            aws cloudformation describe-stack-events \
+              --stack-name travel-crm \
+              --query 'StackEvents[?contains(`["CREATE_FAILED","UPDATE_FAILED"]`, ResourceStatus)].[LogicalResourceId,ResourceType,ResourceStatusReason]' \
+              --output table 2>/dev/null || true
+            exit 1
+          }
           echo "CloudFormation stack created."
 
       # ── Always: get instance ID + IP from stack outputs ─────────────────────
