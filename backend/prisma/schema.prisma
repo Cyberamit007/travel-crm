@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  password     String
+  role         String   @default("EMPLOYEE")
+  phone        String?
+  avatar       String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedLeads         Lead[]              @relation("AssignedTo")
+  campaignAssignments   CampaignEmployee[]
+  notifications         Notification[]
+  activityLogs          ActivityLog[]
+  feedbacks             Feedback[]
+
+  @@map("users")
+}
+
+model Campaign {
+  id              String   @id @default(uuid())
+  name            String
+  destination     String
+  description     String?
+  status          String   @default("ACTIVE")
+  startDate       DateTime?
+  endDate         DateTime?
+  targetLeads     Int?
+  budget          Float?
+
+  whatsappNumber  String?
+  instagramAdId   String?
+  utmSource       String?
+  utmCampaign     String?
+  keywords        String   @default("[]")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  leads           Lead[]
+  employees       CampaignEmployee[]
+
+  @@map("campaigns")
+}
+
+model CampaignEmployee {
+  id          String   @id @default(uuid())
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignId  String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  assignedAt  DateTime @default(now())
+
+  @@unique([campaignId, userId])
+  @@map("campaign_employees")
+}
+
+model Lead {
+  id              String   @id @default(uuid())
+  name            String
+  phone           String
+  email           String?
+  source          String
+  status          String   @default("NEW")
+  message         String?
+  destination     String?
+
+  campaign        Campaign? @relation(fields: [campaignId], references: [id])
+  campaignId      String?
+
+  assignedTo      User?    @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedToId    String?
+
+  followUpDate    DateTime?
+  followUpNotes   String?
+  followUpDone    Boolean  @default(false)
+
+  whatsappMsgId   String?
+  instagramLeadId String?
+  metaPageId      String?
+  adId            String?
+  adName          String?
+
+  notes           String?
+  budget          Float?
+  groupSize       Int?
+  preferredDate   String?
+
+  isRead          Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  notifications   Notification[]
+  activityLogs    ActivityLog[]
+
+  @@map("leads")
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  type        String
+  title       String
+  message     String
+  isRead      Boolean  @default(false)
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+
+  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId      String?
+
+  createdAt   DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  action      String
+  details     String?
+
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+
+  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId      String?
+
+  createdAt   DateTime @default(now())
+
+  @@map("activity_logs")
+}
+
+model WebhookLog {
+  id          String   @id @default(uuid())
+  source      String
+  payload     String
+  processed   Boolean  @default(false)
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@map("webhook_logs")
+}
+
+model Feedback {
+  id            String   @id @default(uuid())
+  type          String   // BUG | SUGGESTION | OTHER
+  title         String
+  description   String
+  page          String?
+  priority      String   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  status        String   @default("OPEN")   // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+  adminNotes    String?
+
+  submittedBy   User     @relation(fields: [submittedById], references: [id])
+  submittedById String
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("feedback")
+}

@@ -1,0 +1,309 @@
+import { useState } from 'react';
+import { AlertCircle, Clock, Calendar, CheckCircle, RotateCcw } from 'lucide-react';
+import { useLeads, useUpdateLead } from '../../hooks/useLeads';
+import { useAuthStore } from '../../store/authStore';
+import { Lead } from '../../types/index';
+import LeadDetail from '../../components/leads/LeadDetail';
+import Modal from '../../components/ui/Modal';
+import Badge from '../../components/ui/Badge';
+import { formatDate, formatDateTime, isOverdue, cn } from '../../utils/helpers';
+import { useForm } from 'react-hook-form';
+
+interface RescheduleForm {
+  followUpDate: string;
+  followUpNotes?: string;
+}
+
+function RescheduleModal({
+  open,
+  onClose,
+  lead,
+}: {
+  open: boolean;
+  onClose: () => void;
+  lead: Lead | null;
+}) {
+  const updateLead = useUpdateLead();
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<RescheduleForm>();
+
+  const onSubmit = (data: RescheduleForm) => {
+    if (!lead) return;
+    updateLead.mutate(
+      { id: lead.id, followUpDate: data.followUpDate, followUpNotes: data.followUpNotes, followUpDone: false },
+      { onSuccess: () => { onClose(); reset(); } }
+    );
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Reschedule Follow-up" size="sm">
+      {lead && (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <p className="text-sm font-medium text-slate-700">{lead.name}</p>
+            <p className="text-xs text-slate-500">{lead.phone}</p>
+          </div>
+          <div>
+            <label className="label">New Follow-up Date & Time *</label>
+            <input
+              {...register('followUpDate', { required: 'Please select a date and time' })}
+              type="datetime-local"
+              className="input"
+              min={new Date().toISOString().slice(0, 16)}
+            />
+            {errors.followUpDate && <p className="text-red-500 text-xs mt-1">{errors.followUpDate.message}</p>}
+          </div>
+          <div>
+            <label className="label">Notes</label>
+            <textarea
+              {...register('followUpNotes')}
+              rows={2}
+              className="input resize-none"
+              placeholder="Reminder note..."
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+            <button type="submit" disabled={updateLead.isPending} className="btn-primary">
+              {updateLead.isPending ? 'Saving...' : 'Reschedule'}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+function FollowUpCard({
+  lead,
+  onView,
+  onMarkDone,
+  onReschedule,
+  variant,
+}: {
+  lead: Lead;
+  onView: (lead: Lead) => void;
+  onMarkDone: (lead: Lead) => void;
+  onReschedule: (lead: Lead) => void;
+  variant: 'overdue' | 'today' | 'upcoming';
+}) {
+  const colorMap = {
+    overdue: 'bg-red-50 border-red-200',
+    today: 'bg-orange-50 border-orange-200',
+    upcoming: 'bg-blue-50 border-blue-100',
+  };
+
+  const textMap = {
+    overdue: 'text-red-700',
+    today: 'text-orange-700',
+    upcoming: 'text-blue-700',
+  };
+
+  return (
+    <div className={cn('rounded-xl border p-4', colorMap[variant])}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <p className="font-semibold text-slate-900">{lead.name}</p>
+          <p className="text-sm text-slate-500">{lead.phone}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <Badge status={lead.status} />
+          <Badge source={lead.source} />
+        </div>
+      </div>
+
+      <div className={cn('flex items-center gap-1.5 text-xs font-medium mb-2', textMap[variant])}>
+        {variant === 'overdue' ? (
+          <AlertCircle className="w-3.5 h-3.5" />
+        ) : variant === 'today' ? (
+          <Clock className="w-3.5 h-3.5" />
+        ) : (
+          <Calendar className="w-3.5 h-3.5" />
+        )}
+        <span>{formatDateTime(lead.followUpDate)}</span>
+      </div>
+
+      {lead.followUpNotes && (
+        <p className="text-xs text-slate-600 italic mb-3 line-clamp-2">"{lead.followUpNotes}"</p>
+      )}
+
+      {lead.destination && (
+        <p className="text-xs text-slate-500 mb-3">
+          <span className="mr-1">🏔</span>
+          {lead.destination}
+        </p>
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => onMarkDone(lead)}
+          className="flex items-center gap-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <CheckCircle className="w-3.5 h-3.5" />
+          Mark Done
+        </button>
+        <button
+          onClick={() => onReschedule(lead)}
+          className="flex items-center gap-1.5 text-xs font-medium btn-secondary py-1.5"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Reschedule
+        </button>
+        <button
+          onClick={() => onView(lead)}
+          className="text-xs font-medium text-slate-600 hover:text-slate-800 underline"
+        >
+          View Lead
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function EmployeeFollowUpsPage() {
+  const { user } = useAuthStore();
+  const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
+  const [rescheduleLeadId, setRescheduleLeadId] = useState<Lead | null>(null);
+
+  const { data, isLoading, refetch } = useLeads({
+    assignedToId: user?.id,
+    limit: 200,
+  });
+
+  const updateLead = useUpdateLead();
+
+  const leads = (data?.data ?? []).filter((l) => l.followUpDate && !l.followUpDone);
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const overdue = leads.filter((l) => new Date(l.followUpDate!) < now);
+  const today = leads.filter((l) => {
+    const d = new Date(l.followUpDate!);
+    return d >= now && l.followUpDate!.startsWith(todayStr);
+  });
+  const upcoming = leads.filter((l) => {
+    const d = new Date(l.followUpDate!);
+    return d > now && !l.followUpDate!.startsWith(todayStr) && d <= nextWeek;
+  });
+
+  const handleMarkDone = (lead: Lead) => {
+    updateLead.mutate({ id: lead.id, followUpDone: true });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">Follow-ups</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {overdue.length} overdue · {today.length} today · {upcoming.length} upcoming
+          </p>
+        </div>
+        <button onClick={() => refetch()} className="btn-secondary flex items-center gap-2 py-2">
+          <RotateCcw className="w-4 h-4" />
+          <span className="hidden sm:inline text-sm">Refresh</span>
+        </button>
+      </div>
+
+      {/* Overdue */}
+      {overdue.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle className="w-4 h-4 text-red-500" />
+            <h3 className="text-sm font-bold text-red-700">Overdue ({overdue.length})</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {overdue.map((lead) => (
+              <FollowUpCard
+                key={lead.id}
+                lead={lead}
+                variant="overdue"
+                onView={(l) => setDetailLeadId(l.id)}
+                onMarkDone={handleMarkDone}
+                onReschedule={setRescheduleLeadId}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Today */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Clock className="w-4 h-4 text-orange-500" />
+          <h3 className="text-sm font-bold text-orange-700">
+            Today's Follow-ups {today.length > 0 ? `(${today.length})` : ''}
+          </h3>
+        </div>
+        {today.length === 0 ? (
+          <div className="card p-8 text-center">
+            <Clock className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-slate-500 text-sm">No follow-ups scheduled for today</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {today.map((lead) => (
+              <FollowUpCard
+                key={lead.id}
+                lead={lead}
+                variant="today"
+                onView={(l) => setDetailLeadId(l.id)}
+                onMarkDone={handleMarkDone}
+                onReschedule={setRescheduleLeadId}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Upcoming 7 days */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar className="w-4 h-4 text-primary-500" />
+          <h3 className="text-sm font-bold text-primary-700">
+            Upcoming (Next 7 Days) {upcoming.length > 0 ? `(${upcoming.length})` : ''}
+          </h3>
+        </div>
+        {upcoming.length === 0 ? (
+          <div className="card p-8 text-center">
+            <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-slate-500 text-sm">No upcoming follow-ups in the next 7 days</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {upcoming.map((lead) => (
+              <FollowUpCard
+                key={lead.id}
+                lead={lead}
+                variant="upcoming"
+                onView={(l) => setDetailLeadId(l.id)}
+                onMarkDone={handleMarkDone}
+                onReschedule={setRescheduleLeadId}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {!isLoading && overdue.length === 0 && today.length === 0 && upcoming.length === 0 && (
+        <div className="card p-12 text-center">
+          <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-3" />
+          <p className="text-slate-700 font-semibold text-lg">All caught up!</p>
+          <p className="text-slate-400 text-sm mt-1">No pending follow-ups. Great work!</p>
+        </div>
+      )}
+
+      <LeadDetail
+        leadId={detailLeadId}
+        open={!!detailLeadId}
+        onClose={() => setDetailLeadId(null)}
+      />
+
+      <RescheduleModal
+        open={!!rescheduleLeadId}
+        onClose={() => setRescheduleLeadId(null)}
+        lead={rescheduleLeadId}
+      />
+    </div>
+  );
+}

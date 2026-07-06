@@ -1,0 +1,17 @@
+import { Router } from 'express';
+import { getLeads, getLeadById, createLeadManual, updateLead, deleteLead, getStats, getOverdueFollowUps, getRecentActivity } from '../controllers/lead.controller.js';
+import { authenticate, requireAdmin } from '../middleware/auth.js';
+
+const router = Router();
+
+router.use(authenticate);
+router.get('/', getLeads);
+router.get('/stats', getStats);
+router.get('/overdue', getOverdueFollowUps);
+router.get('/activity', getRecentActivity);
+router.get('/:id', getLeadById);
+router.post('/', createLeadManual);
+router.put('/:id', updateLead);
+router.delete('/:id', requireAdmin, deleteLead);
+
+export default router;

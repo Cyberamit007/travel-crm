@@ -1,0 +1,229 @@
+import { useState } from 'react';
+import { Search, Plus, Eye, Edit, RefreshCw } from 'lucide-react';
+import { useLeads, useCreateLead, useUpdateLead } from '../../hooks/useLeads';
+import { Lead } from '../../types/index';
+import { useAuthStore } from '../../store/authStore';
+import Table, { Column } from '../../components/ui/Table';
+import Modal from '../../components/ui/Modal';
+import Pagination from '../../components/ui/Pagination';
+import LeadForm from '../../components/leads/LeadForm';
+import LeadDetail from '../../components/leads/LeadDetail';
+import Badge from '../../components/ui/Badge';
+import { formatDate, isOverdue, cn } from '../../utils/helpers';
+
+const STATUSES = [
+  { value: '', label: 'All Statuses' },
+  { value: 'NEW', label: 'New' },
+  { value: 'CONTACTED', label: 'Contacted' },
+  { value: 'INTERESTED', label: 'Interested' },
+  { value: 'FOLLOW_UP_SCHEDULED', label: 'Follow-up Sched.' },
+  { value: 'CONFIRMED', label: 'Confirmed' },
+  { value: 'LOST', label: 'Lost' },
+];
+
+export default function EmployeeLeadsPage() {
+  const { user } = useAuthStore();
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editLead, setEditLead] = useState<Lead | null>(null);
+  const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
+
+  const filters = {
+    page,
+    limit: 20,
+    assignedToId: user?.id,
+    search: search || undefined,
+    status: status || undefined,
+  };
+
+  const { data, isLoading, refetch } = useLeads(filters);
+  const createLead = useCreateLead();
+  const updateLead = useUpdateLead();
+
+  const leads = data?.data ?? [];
+  const meta = data?.meta;
+
+  const handleCreate = (formData: any) => {
+    createLead.mutate({ ...formData, assignedToId: user?.id }, { onSuccess: () => setCreateOpen(false) });
+  };
+
+  const handleEdit = (formData: any) => {
+    if (!editLead) return;
+    updateLead.mutate({ id: editLead.id, ...formData }, { onSuccess: () => setEditLead(null) });
+  };
+
+  const columns: Column<Lead>[] = [
+    {
+      key: 'name',
+      header: 'Lead',
+      render: (row) => (
+        <div>
+          <p className="font-medium text-slate-800">{row.name}</p>
+          <p className="text-xs text-slate-400">{row.phone}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'source',
+      header: 'Source',
+      render: (row) => <Badge source={row.source} />,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => <Badge status={row.status} />,
+    },
+    {
+      key: 'destination',
+      header: 'Destination',
+      render: (row) => (
+        <span className="text-sm text-slate-600">{row.destination ?? '—'}</span>
+      ),
+    },
+    {
+      key: 'campaign',
+      header: 'Campaign',
+      render: (row) =>
+        row.campaign ? (
+          <span className="text-xs text-slate-600 truncate max-w-[120px] block">{row.campaign.name}</span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
+      key: 'followUpDate',
+      header: 'Follow-up',
+      render: (row) =>
+        row.followUpDate ? (
+          <span
+            className={cn(
+              'text-xs font-medium',
+              isOverdue(row.followUpDate) && !row.followUpDone
+                ? 'text-red-600'
+                : 'text-orange-600'
+            )}
+          >
+            {isOverdue(row.followUpDate) && !row.followUpDone ? '⚠ ' : ''}
+            {formatDate(row.followUpDate)}
+          </span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
+      key: 'createdAt',
+      header: 'Created',
+      render: (row) => <span className="text-xs text-slate-500">{formatDate(row.createdAt)}</span>,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (row) => (
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setDetailLeadId(row.id)}
+            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-primary-600 transition-colors"
+            title="View"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setEditLead(row)}
+            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+            title="Edit"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">My Leads</h2>
+          <p className="text-sm text-slate-500 mt-0.5">{meta?.total ?? 0} leads assigned to you</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => refetch()} className="btn-secondary p-2" title="Refresh">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">New Lead</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="card p-4">
+        <div className="flex flex-wrap gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search by name, phone..."
+              className="input py-1.5 text-sm"
+            />
+          </div>
+          <select
+            value={status}
+            onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+            className="input py-1.5 text-sm w-auto min-w-[160px]"
+          >
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="card overflow-hidden">
+        <Table
+          columns={columns}
+          data={leads}
+          loading={isLoading}
+          emptyMessage="No leads assigned to you yet"
+          onRowClick={(row) => setDetailLeadId(row.id)}
+        />
+      </div>
+
+      {meta && meta.totalPages > 1 && (
+        <Pagination page={page} totalPages={meta.totalPages} onPageChange={setPage} />
+      )}
+
+      {/* Create modal */}
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create New Lead" size="2xl">
+        <LeadForm
+          onSubmit={handleCreate}
+          isLoading={createLead.isPending}
+          onCancel={() => setCreateOpen(false)}
+        />
+      </Modal>
+
+      {/* Edit modal */}
+      <Modal open={!!editLead} onClose={() => setEditLead(null)} title="Edit Lead" size="2xl">
+        {editLead && (
+          <LeadForm
+            defaultValues={editLead}
+            onSubmit={handleEdit}
+            isLoading={updateLead.isPending}
+            onCancel={() => setEditLead(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Detail modal */}
+      <LeadDetail
+        leadId={detailLeadId}
+        open={!!detailLeadId}
+        onClose={() => setDetailLeadId(null)}
+      />
+    </div>
+  );
+}
