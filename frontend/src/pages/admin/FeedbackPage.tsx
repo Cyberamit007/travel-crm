@@ -4,7 +4,7 @@ import { useFeedbacks, useFeedbackStats, useUpdateFeedback, useDeleteFeedback } 
 import { Feedback, FeedbackStatus } from '../../types/index';
 import { formatRelativeTime, cn } from '../../utils/helpers';
 import StatsCard from '../../components/ui/StatsCard';
-import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import Modal from '../../components/ui/Modal';
 
 const typeIcon = { BUG: Bug, SUGGESTION: Lightbulb, OTHER: MessageCircle };
@@ -43,7 +43,7 @@ function FeedbackDetailModal({
   const cfg = statusConfig[item.status];
 
   return (
-    <Modal isOpen onClose={onClose} title="Feedback Detail" size="lg">
+    <Modal open onClose={onClose} title="Feedback Detail" size="lg">
       <div className="space-y-5">
         {/* Header info */}
         <div className="flex flex-wrap gap-2 items-start">
@@ -144,11 +144,11 @@ export default function FeedbackPage() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatsCard title="Total" value={stats.total} icon={MessageCircle} color="blue" />
-          <StatsCard title="Open" value={stats.open} icon={AlertCircle} color="yellow" />
-          <StatsCard title="In Progress" value={stats.inProgress} icon={Clock} color="purple" />
-          <StatsCard title="Bug Reports" value={stats.bugs} icon={Bug} color="red" />
-          <StatsCard title="Suggestions" value={stats.suggestions} icon={Lightbulb} color="green" />
+          <StatsCard label="Total" value={stats.total} icon={MessageCircle} iconBg="bg-blue-100" iconColor="text-blue-600" />
+          <StatsCard label="Open" value={stats.open} icon={AlertCircle} iconBg="bg-yellow-100" iconColor="text-yellow-600" />
+          <StatsCard label="In Progress" value={stats.inProgress} icon={Clock} iconBg="bg-purple-100" iconColor="text-purple-600" />
+          <StatsCard label="Bug Reports" value={stats.bugs} icon={Bug} iconBg="bg-red-100" iconColor="text-red-600" />
+          <StatsCard label="Suggestions" value={stats.suggestions} icon={Lightbulb} iconBg="bg-green-100" iconColor="text-green-600" />
         </div>
       )}
 
