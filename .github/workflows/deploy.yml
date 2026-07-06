@@ -1,8 +1,8 @@
 name: 🚀 Deploy to EC2
 
 # Runs on every push to master.
-# First push: auto-creates EC2 via CloudFormation and waits for full bootstrap.
-# Subsequent pushes: SSMs into EC2, pulls latest code, rebuilds, restarts containers.
+# First push: provisions EC2 via CloudFormation, waits for full bootstrap.
+# Subsequent pushes: updates CloudFormation template if needed, then SSM redeployss.
 on:
   push:
     branches: [master]
@@ -23,7 +23,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # ── Check if this is a first-time deploy ────────────────────────────────
+      # ── Detect first-time vs existing deploy ─────────────────────────────────
       - name: Check stack state
         id: check
         run: |
@@ -50,18 +50,23 @@ jobs:
             echo "fresh=false" >> $GITHUB_OUTPUT
           fi
 
-      # ── First time: create EC2 via CloudFormation ───────────────────────────
-      - name: Provision infrastructure (first deploy only)
-        if: steps.check.outputs.fresh == 'true'
+      # ── Always sync CloudFormation (provision on first run, update on subsequent) ──
+      - name: Sync CloudFormation stack
         run: |
-          echo "No stack found — creating EC2 infrastructure..."
+          if [ "${{ steps.check.outputs.fresh }}" = "true" ]; then
+            echo "Creating EC2 infrastructure (first deploy)..."
+          else
+            echo "Updating CloudFormation stack (applying template changes if any)..."
+          fi
+
           aws cloudformation deploy \
             --template-file cloudformation.yml \
             --stack-name travel-crm \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
-              DBPassword="${{ secrets.DB_PASSWORD }}" || {
+              DBPassword="${{ secrets.DB_PASSWORD }}" \
+              GHDeployToken="${{ secrets.GH_DEPLOY_TOKEN }}" || {
             echo ""
             echo "=== CloudFormation FAILED. Stack events (failures only): ==="
             aws cloudformation describe-stack-events \
@@ -70,9 +75,9 @@ jobs:
               --output table 2>/dev/null || true
             exit 1
           }
-          echo "CloudFormation stack created."
+          echo "CloudFormation stack synced."
 
-      # ── Always: get instance ID + IP from stack outputs ─────────────────────
+      # ── Get instance ID + IP ─────────────────────────────────────────────────
       - name: Get stack outputs
         id: stack
         run: |
@@ -95,15 +100,14 @@ jobs:
             --instance-ids ${{ steps.stack.outputs.instance_id }}
           echo "EC2 is healthy."
 
-      # ── First time: wait for full app bootstrap (docker build, DB seed, etc.) ─
+      # ── First time: wait for app bootstrap (Docker build, DB seed, etc.) ─────
       - name: Wait for bootstrap to complete (first deploy only, up to 25 min)
         if: steps.check.outputs.fresh == 'true'
         run: |
           INSTANCE_ID=${{ steps.stack.outputs.instance_id }}
-          echo "New instance — waiting for app bootstrap to finish..."
-          echo "This installs Docker, builds the app, runs DB seed — takes ~15-20 min."
+          echo "New instance — waiting for app bootstrap to finish (~15-20 min)..."
 
-          # Give SSM agent a moment to start
+          # Give SSM agent time to start
           sleep 30
 
           for i in $(seq 1 50); do
@@ -133,7 +137,20 @@ jobs:
             fi
 
             if [ "$i" -eq 50 ]; then
-              echo "Bootstrap timed out after 25 minutes."
+              echo "=== Bootstrap timed out. Fetching userdata log for diagnosis ==="
+              aws ssm send-command \
+                --instance-ids "$INSTANCE_ID" \
+                --document-name "AWS-RunShellScript" \
+                --parameters '{"commands":["tail -50 /var/log/userdata.log"]}' \
+                --query 'Command.CommandId' --output text > /tmp/log_cmd_id 2>/dev/null || true
+              sleep 5
+              LOG_CMD=$(cat /tmp/log_cmd_id)
+              if [ -n "$LOG_CMD" ]; then
+                aws ssm get-command-invocation \
+                  --command-id "$LOG_CMD" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query 'StandardOutputContent' --output text 2>/dev/null || true
+              fi
               exit 1
             fi
 

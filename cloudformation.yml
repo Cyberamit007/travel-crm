@@ -1,11 +1,15 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Travel CRM - single EC2 t2.micro with Docker (free tier)
+Description: Travel CRM - single EC2 t3.micro with Docker (free tier)
 
 Parameters:
   DBPassword:
     Type: String
     NoEcho: true
-    Description: PostgreSQL password (alphanumeric + hyphens only)
+    Description: PostgreSQL password
+  GHDeployToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub Personal Access Token with repo scope (for cloning private repo)
   EmailUser:
     Type: String
     Default: 'NONE'
@@ -23,13 +27,20 @@ Parameters:
 
 Resources:
 
-  # ── Secrets stored in SSM so shell special chars in passwords are safe ──
+  # ── Secrets stored in SSM Parameter Store ──────────────────────────────────
   DBPasswordParam:
     Type: AWS::SSM::Parameter
     Properties:
       Name: /travel-crm/db-password
       Type: String
       Value: !Ref DBPassword
+
+  GHTokenParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /travel-crm/github-token
+      Type: String
+      Value: !Ref GHDeployToken
 
   JWTSecretParam:
     Type: AWS::SSM::Parameter
@@ -104,12 +115,12 @@ Resources:
     Type: AWS::EC2::Instance
     DependsOn:
       - DBPasswordParam
+      - GHTokenParam
       - JWTSecretParam
       - EmailUserParam
       - EmailPassParam
     Properties:
       InstanceType: t3.micro
-      # Latest Amazon Linux 2023 AMI — auto-resolved per region
       ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
       IamInstanceProfile: !Ref EC2InstanceProfile
       SecurityGroups:
@@ -126,10 +137,13 @@ Resources:
         Fn::Base64:
           !Sub |
             #!/bin/bash
+            set -euo pipefail
             exec > >(tee /var/log/userdata.log | logger -t userdata -s 2>/dev/console) 2>&1
             echo "=== Travel CRM Bootstrap started ==="
 
             REGION="${AWS::Region}"
+            # IMDSv2 token for metadata queries
+            IMDS_TOKEN=$(curl -s -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" http://169.254.169.254/latest/api/token)
 
             # ── System packages ──────────────────────────────────────────
             yum update -y
@@ -148,27 +162,28 @@ Resources:
             curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
             yum install -y nodejs
 
-            # ── 2 GB swap (critical for t2.micro) ───────────────────────
+            # ── 2 GB swap (helps t3.micro handle Docker builds) ─────────
             fallocate -l 2G /swapfile
             chmod 600 /swapfile
             mkswap /swapfile
             swapon /swapfile
             echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
-            # ── Clone repo ───────────────────────────────────────────────
-            cd /home/ec2-user
-            git clone https://github.com/Cyberamit007/travel-crm.git travel-crm
-            cd travel-crm
-            chown -R ec2-user:ec2-user /home/ec2-user/travel-crm
-
-            # ── Read secrets from SSM (handles special chars safely) ─────
+            # ── Read secrets from SSM ────────────────────────────────────
+            GH_TOKEN=$(aws ssm get-parameter --name /travel-crm/github-token --query Parameter.Value --output text --region $REGION)
             DB_PASSWORD=$(aws ssm get-parameter --name /travel-crm/db-password --query Parameter.Value --output text --region $REGION)
             JWT_SECRET=$(aws ssm get-parameter --name /travel-crm/jwt-secret --query Parameter.Value --output text --region $REGION)
             EMAIL_USER=$(aws ssm get-parameter --name /travel-crm/email-user --query Parameter.Value --output text --region $REGION)
             EMAIL_PASS=$(aws ssm get-parameter --name /travel-crm/email-pass --query Parameter.Value --output text --region $REGION)
-            PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+            PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
-            # ── Write .env (docker-compose reads this automatically) ─────
+            # ── Clone private repo using token ───────────────────────────
+            cd /home/ec2-user
+            git clone https://x-access-token:${!GH_TOKEN}@github.com/Cyberamit007/travel-crm.git travel-crm
+            cd travel-crm
+            chown -R ec2-user:ec2-user /home/ec2-user/travel-crm
+
+            # ── Write .env ───────────────────────────────────────────────
             printf 'DB_PASSWORD=%s\n'           "$DB_PASSWORD"  >  /home/ec2-user/travel-crm/.env
             printf 'SERVER_IP=%s\n'             "$PUBLIC_IP"    >> /home/ec2-user/travel-crm/.env
             printf 'JWT_SECRET=%s\n'            "$JWT_SECRET"   >> /home/ec2-user/travel-crm/.env
@@ -198,7 +213,7 @@ Resources:
             docker compose exec -T backend npx prisma db push
             docker compose exec -T backend npx tsx src/utils/seed.ts
 
-            # ── Done marker (deploy workflow waits for this) ─────────────
+            # ── Done marker ──────────────────────────────────────────────
             touch /home/ec2-user/.userdata-complete
             echo "=== Bootstrap complete! App at http://$PUBLIC_IP ==="
 
