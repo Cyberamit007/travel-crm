@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+
 import { createLead } from '../services/lead.service.js';
 import { WebhookWhatsAppEntry, WebhookInstagramEntry } from '../types/index.js';
 import logger from '../utils/logger.js';
 
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma.js';
 
 export const verifyWhatsAppWebhook = (req: Request, res: Response): void => {
   const mode = req.query['hub.mode'];

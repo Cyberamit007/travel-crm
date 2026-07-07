@@ -1,8 +1,6 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
-
-const prisma = new PrismaClient();
 
 export const getCampaigns = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {

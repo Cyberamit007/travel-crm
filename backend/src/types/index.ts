@@ -8,6 +8,7 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     role: Role;
     name: string;
+    organizationId?: string | null;
   };
 }
 
@@ -16,6 +17,7 @@ export interface JWTPayload {
   email: string;
   role: Role;
   name: string;
+  organizationId?: string | null;
 }
 
 export interface WebhookWhatsAppEntry {

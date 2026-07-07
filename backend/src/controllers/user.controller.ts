@@ -1,9 +1,7 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
-
-const prisma = new PrismaClient();
 
 export const getUsers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -47,15 +45,32 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response): Promis
 export const createUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { name, email, password, role, phone } = req.body;
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+
+    if (!name?.trim() || !email?.trim() || !password) {
+      res.status(400).json({ success: false, error: 'Name, email, and password are required' });
+      return;
+    }
+    if (password.length < 8) {
+      res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+      return;
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
     if (existing) {
-      res.status(409).json({ success: false, error: 'Email already exists' });
+      res.status(409).json({ success: false, error: 'Email already in use' });
       return;
     }
 
     const hashed = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
-      data: { name, email: email.toLowerCase(), password: hashed, role, phone },
+      data: {
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        password: hashed,
+        role: role || 'EMPLOYEE',
+        phone: phone || null,
+        organizationId: req.user?.organizationId ?? null,
+      },
       select: { id: true, name: true, email: true, role: true, phone: true, createdAt: true },
     });
     res.status(201).json({ success: true, data: user });

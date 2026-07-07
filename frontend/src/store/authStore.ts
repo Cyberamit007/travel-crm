@@ -1,16 +1,21 @@
 import { create } from 'zustand';
+import axios from 'axios';
 import { User } from '../types/index.ts';
+
+const apiBase = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   login: (user: User, token: string) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   updateUser: (user: Partial<User>) => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: (() => {
     try {
       const stored = localStorage.getItem('crm_user');
@@ -26,7 +31,20 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user, token, isAuthenticated: true });
   },
 
-  logout: () => {
+  logout: async () => {
+    try {
+      const token = get().token;
+      await axios.post(
+        `${apiBase}/auth/logout`,
+        {},
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          withCredentials: true,
+        },
+      );
+    } catch {
+      // best-effort — clear client state regardless
+    }
     localStorage.removeItem('crm_token');
     localStorage.removeItem('crm_user');
     set({ user: null, token: null, isAuthenticated: false });

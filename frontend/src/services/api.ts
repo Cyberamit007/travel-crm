@@ -1,8 +1,6 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-// In production VITE_API_URL points to the Railway backend (e.g. https://travel-crm.railway.app)
-// In dev, /api is proxied by Vite to localhost:5000
 const baseURL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : '/api';
@@ -10,7 +8,10 @@ const baseURL = import.meta.env.VITE_API_URL
 const api = axios.create({
   baseURL,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // send httpOnly refresh cookie on /api/auth/* calls
 });
+
+// ─── Request: attach access token ────────────────────────────────────────────
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('crm_token');
@@ -18,18 +19,75 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// ─── Response: silent token refresh on 401 ───────────────────────────────────
+
+let isRefreshing = false;
+let pendingQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = [];
+
+function flushQueue(token: string | null, error: unknown = null) {
+  pendingQueue.forEach((p) => (token ? p.resolve(token) : p.reject(error)));
+  pendingQueue = [];
+}
+
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
+  async (err) => {
+    const original = err.config;
+
+    // Not a 401, or already retried, or this IS the refresh call itself — bail out
+    if (
+      err.response?.status !== 401 ||
+      original._retry ||
+      original.url?.includes('/auth/refresh')
+    ) {
+      if (err.response?.status >= 500) {
+        toast.error('Server error. Please try again.');
+      }
+      return Promise.reject(err);
+    }
+
+    original._retry = true;
+
+    if (isRefreshing) {
+      // Another request is already refreshing — queue this one
+      return new Promise((resolve, reject) => {
+        pendingQueue.push({
+          resolve: (token) => {
+            original.headers.Authorization = `Bearer ${token}`;
+            resolve(api(original));
+          },
+          reject,
+        });
+      });
+    }
+
+    isRefreshing = true;
+
+    try {
+      // Use plain axios (not the intercepted `api`) to avoid infinite loops
+      const { data } = await axios.post(
+        `${baseURL}/auth/refresh`,
+        {},
+        { withCredentials: true },
+      );
+
+      const newToken: string = data.data.token;
+      localStorage.setItem('crm_token', newToken);
+      api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
+      original.headers.Authorization = `Bearer ${newToken}`;
+
+      flushQueue(newToken);
+      return api(original);
+    } catch (refreshErr) {
+      flushQueue(null, refreshErr);
       localStorage.removeItem('crm_token');
       localStorage.removeItem('crm_user');
       window.location.href = '/login';
-    } else if (err.response?.status >= 500) {
-      toast.error('Server error. Please try again.');
+      return Promise.reject(refreshErr);
+    } finally {
+      isRefreshing = false;
     }
-    return Promise.reject(err);
-  }
+  },
 );
 
 export default api;

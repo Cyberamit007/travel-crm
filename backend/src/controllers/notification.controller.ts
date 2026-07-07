@@ -1,8 +1,8 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+
 import { AuthenticatedRequest } from '../types/index.js';
 
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma.js';
 
 export const getNotifications = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {

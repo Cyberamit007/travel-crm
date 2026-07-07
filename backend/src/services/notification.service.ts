@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+
 import { Server } from 'socket.io';
 
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma.js';
 let io: Server | null = null;
 
 export const setSocketServer = (socketServer: Server) => { io = socketServer; };

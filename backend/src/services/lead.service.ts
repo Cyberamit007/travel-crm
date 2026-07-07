@@ -1,7 +1,6 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import prisma from '../lib/prisma.js';
 import { createNotification } from './notification.service.js';
-
-const prisma = new PrismaClient();
 
 export interface CreateLeadInput {
   name: string;
@@ -18,14 +17,19 @@ export interface CreateLeadInput {
   groupSize?: number;
   budget?: number;
   preferredDate?: string;
+  organizationId?: string | null;
 }
 
 export const matchCampaign = async (input: {
   whatsappNumber?: string;
   instagramAdId?: string;
   message?: string;
+  organizationId?: string | null;
 }): Promise<string | null> => {
-  const campaigns = await prisma.campaign.findMany({ where: { status: 'ACTIVE' } });
+  const where: Prisma.CampaignWhereInput = { status: 'ACTIVE' };
+  if (input.organizationId) where.organizationId = input.organizationId;
+
+  const campaigns = await prisma.campaign.findMany({ where });
 
   for (const campaign of campaigns) {
     if (input.whatsappNumber && campaign.whatsappNumber === input.whatsappNumber) return campaign.id;
@@ -34,8 +38,7 @@ export const matchCampaign = async (input: {
       const keywords: string[] = JSON.parse(campaign.keywords || '[]');
       if (keywords.length > 0) {
         const msgLower = input.message.toLowerCase();
-        const matched = keywords.some((kw) => msgLower.includes(kw.toLowerCase()));
-        if (matched) return campaign.id;
+        if (keywords.some((kw) => msgLower.includes(kw.toLowerCase()))) return campaign.id;
       }
     }
   }
@@ -47,14 +50,17 @@ export const assignEmployeeForCampaign = async (campaignId: string): Promise<str
     where: { campaignId },
     include: {
       user: {
-        include: { assignedLeads: { where: { status: { notIn: ['CONFIRMED', 'LOST'] } } } },
+        include: {
+          assignedLeads: {
+            where: { status: { notIn: ['CONFIRMED', 'LOST'] }, deletedAt: null },
+          },
+        },
       },
     },
   });
 
   if (assignments.length === 0) return null;
-  const sorted = assignments.sort((a, b) => a.user.assignedLeads.length - b.user.assignedLeads.length);
-  return sorted[0].user.id;
+  return assignments.sort((a, b) => a.user.assignedLeads.length - b.user.assignedLeads.length)[0].user.id;
 };
 
 export const createLead = async (
@@ -65,6 +71,7 @@ export const createLead = async (
     whatsappNumber: matchOptions?.whatsappNumber,
     instagramAdId: matchOptions?.instagramAdId,
     message: input.message,
+    organizationId: input.organizationId,
   });
 
   const assignedToId = campaignId ? await assignEmployeeForCampaign(campaignId) : null;
@@ -83,16 +90,22 @@ export const createLead = async (
       assignedToId,
       'NEW_LEAD_ASSIGNED',
       'New Lead Assigned',
-      `New lead from ${input.source}: ${input.name} - "${input.message?.slice(0, 80) ?? 'No message'}"`,
-      lead.id
+      `New lead from ${input.source}: ${input.name} — "${input.message?.slice(0, 80) ?? 'No message'}"`,
+      lead.id,
     );
   }
 
   return lead;
 };
 
-export const getLeadStats = async (userId?: string, role?: string) => {
-  const where: Prisma.LeadWhereInput = role === 'EMPLOYEE' && userId ? { assignedToId: userId } : {};
+export const getLeadStats = async (
+  userId?: string,
+  role?: string,
+  organizationId?: string | null,
+) => {
+  const where: Prisma.LeadWhereInput = { deletedAt: null };
+  if (role === 'EMPLOYEE' && userId) where.assignedToId = userId;
+  if (organizationId) where.organizationId = organizationId;
 
   const [total, byStatus, bySource, overdue] = await Promise.all([
     prisma.lead.count({ where }),
@@ -103,11 +116,11 @@ export const getLeadStats = async (userId?: string, role?: string) => {
     }),
   ]);
 
-  const statusMap: Record<string, number> = {};
-  byStatus.forEach((s) => (statusMap[s.status] = s._count));
+  const byStatusMap: Record<string, number> = {};
+  byStatus.forEach((s) => (byStatusMap[s.status] = s._count));
 
-  const sourceMap: Record<string, number> = {};
-  bySource.forEach((s) => (sourceMap[s.source] = s._count));
+  const bySourceMap: Record<string, number> = {};
+  bySource.forEach((s) => (bySourceMap[s.source] = s._count));
 
-  return { total, byStatus: statusMap, bySource: sourceMap, overdue };
+  return { total, byStatus: byStatusMap, bySource: bySourceMap, overdue };
 };

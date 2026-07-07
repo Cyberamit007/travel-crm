@@ -8,167 +8,247 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Tenant / SaaS Foundation ───────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("FREE")    // FREE | STARTER | PRO | ENTERPRISE
+  status    String   @default("ACTIVE")  // ACTIVE | SUSPENDED | CANCELLED
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  campaigns Campaign[]
+  leads     Lead[]
+
+  @@map("organizations")
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
 model User {
-  id           String   @id @default(uuid())
-  name         String
-  email        String   @unique
-  password     String
-  role         String   @default("EMPLOYEE")
-  phone        String?
-  avatar       String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
-  assignedLeads         Lead[]              @relation("AssignedTo")
-  campaignAssignments   CampaignEmployee[]
-  notifications         Notification[]
-  activityLogs          ActivityLog[]
-  feedbacks             Feedback[]
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("EMPLOYEE") // ADMIN | EMPLOYEE
+  phone     String?
+  avatar    String?
+  isActive  Boolean  @default(true)
 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedLeads       Lead[]             @relation("AssignedTo")
+  campaignAssignments CampaignEmployee[]
+  notifications       Notification[]
+  activityLogs        ActivityLog[]
+  feedbacks           Feedback[]
+  refreshTokens       RefreshToken[]
+
+  @@index([organizationId])
   @@map("users")
 }
 
+// ─── Auth: Refresh Tokens ────────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique   // SHA-256 of the raw token (never store raw)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── Campaigns ───────────────────────────────────────────────────────────────
+
 model Campaign {
-  id              String   @id @default(uuid())
-  name            String
-  destination     String
-  description     String?
-  status          String   @default("ACTIVE")
-  startDate       DateTime?
-  endDate         DateTime?
-  targetLeads     Int?
-  budget          Float?
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
-  whatsappNumber  String?
-  instagramAdId   String?
-  utmSource       String?
-  utmCampaign     String?
-  keywords        String   @default("[]")
+  name        String
+  destination String
+  description String?
+  status      String    @default("ACTIVE") // ACTIVE | PAUSED | DRAFT | ENDED
+  startDate   DateTime?
+  endDate     DateTime?
+  targetLeads Int?
+  budget      Float?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  whatsappNumber String?
+  instagramAdId  String?
+  utmSource      String?
+  utmCampaign    String?
+  keywords       String   @default("[]")
 
-  leads           Lead[]
-  employees       CampaignEmployee[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  leads     Lead[]
+  employees CampaignEmployee[]
+
+  @@index([organizationId])
+  @@index([status])
   @@map("campaigns")
 }
 
 model CampaignEmployee {
-  id          String   @id @default(uuid())
-  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  campaignId  String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
-  assignedAt  DateTime @default(now())
+  id         String   @id @default(uuid())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  assignedAt DateTime @default(now())
 
   @@unique([campaignId, userId])
   @@map("campaign_employees")
 }
 
+// ─── Leads ───────────────────────────────────────────────────────────────────
+
 model Lead {
-  id              String   @id @default(uuid())
-  name            String
-  phone           String
-  email           String?
-  source          String
-  status          String   @default("NEW")
-  message         String?
-  destination     String?
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
-  campaign        Campaign? @relation(fields: [campaignId], references: [id])
-  campaignId      String?
+  name  String
+  phone String
+  email String?
 
-  assignedTo      User?    @relation("AssignedTo", fields: [assignedToId], references: [id])
-  assignedToId    String?
+  source  String  @default("MANUAL") // WHATSAPP | INSTAGRAM | MANUAL | WEBSITE
+  status  String  @default("NEW")    // NEW | CONTACTED | INTERESTED | FOLLOW_UP_SCHEDULED | CONFIRMED | LOST
+  message String?
 
-  followUpDate    DateTime?
-  followUpNotes   String?
-  followUpDone    Boolean  @default(false)
+  destination String?
+  campaign    Campaign? @relation(fields: [campaignId], references: [id])
+  campaignId  String?
 
+  assignedTo   User?   @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedToId String?
+
+  followUpDate  DateTime?
+  followUpNotes String?
+  followUpDone  Boolean   @default(false)
+
+  // Webhook tracking
   whatsappMsgId   String?
   instagramLeadId String?
   metaPageId      String?
   adId            String?
   adName          String?
 
-  notes           String?
-  budget          Float?
-  groupSize       Int?
-  preferredDate   String?
+  notes         String?
+  budget        Float?
+  groupSize     Int?
+  preferredDate String?
 
-  isRead          Boolean  @default(false)
+  isRead    Boolean   @default(false)
+  deletedAt DateTime? // soft delete — null means active
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  notifications   Notification[]
-  activityLogs    ActivityLog[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
 
+  @@index([organizationId])
+  @@index([status])
+  @@index([source])
+  @@index([assignedToId])
+  @@index([campaignId])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@index([followUpDate])
   @@map("leads")
 }
 
+// ─── Notifications ───────────────────────────────────────────────────────────
+
 model Notification {
-  id          String   @id @default(uuid())
-  type        String
-  title       String
-  message     String
-  isRead      Boolean  @default(false)
+  id      String  @id @default(uuid())
+  type    String
+  title   String
+  message String
+  isRead  Boolean @default(false)
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
 
-  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  leadId      String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId String?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
+  @@index([userId, isRead])
   @@map("notifications")
 }
 
+// ─── Activity Log ────────────────────────────────────────────────────────────
+
 model ActivityLog {
-  id          String   @id @default(uuid())
-  action      String
-  details     String?
+  id      String  @id @default(uuid())
+  action  String
+  details String?
 
-  user        User     @relation(fields: [userId], references: [id])
-  userId      String
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
 
-  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  leadId      String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId String?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
+  @@index([userId])
+  @@index([leadId])
+  @@index([createdAt])
   @@map("activity_logs")
 }
 
-model WebhookLog {
-  id          String   @id @default(uuid())
-  source      String
-  payload     String
-  processed   Boolean  @default(false)
-  error       String?
-  createdAt   DateTime @default(now())
+// ─── Webhooks ────────────────────────────────────────────────────────────────
 
+model WebhookLog {
+  id        String   @id @default(uuid())
+  source    String
+  payload   String
+  processed Boolean  @default(false)
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([processed])
   @@map("webhook_logs")
 }
 
-model Feedback {
-  id            String   @id @default(uuid())
-  type          String   // BUG | SUGGESTION | OTHER
-  title         String
-  description   String
-  page          String?
-  priority      String   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
-  status        String   @default("OPEN")   // OPEN | IN_PROGRESS | RESOLVED | CLOSED
-  adminNotes    String?
+// ─── Feedback ────────────────────────────────────────────────────────────────
 
-  submittedBy   User     @relation(fields: [submittedById], references: [id])
+model Feedback {
+  id          String  @id @default(uuid())
+  type        String  // BUG | SUGGESTION | OTHER
+  title       String
+  description String
+  page        String?
+  priority    String  @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  status      String  @default("OPEN")   // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+  adminNotes  String?
+
+  submittedBy   User   @relation(fields: [submittedById], references: [id])
   submittedById String
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("feedback")
 }

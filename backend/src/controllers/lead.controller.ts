@@ -1,33 +1,47 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { createLead, getLeadStats } from '../services/lead.service.js';
 import { createNotification, emitLeadUpdated } from '../services/notification.service.js';
 
-const prisma = new PrismaClient();
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function orgFilter(req: AuthenticatedRequest): Record<string, unknown> {
+  return req.user?.organizationId ? { organizationId: req.user.organizationId } : {};
+}
+
+// ─── Read ─────────────────────────────────────────────────────────────────────
 
 export const getLeads = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { status, source, campaignId, assignedToId, search, page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    const {
+      status, source, campaignId, assignedToId,
+      search, page = 1, limit = 20,
+      sortBy = 'createdAt', sortOrder = 'desc',
+    } = req.query;
+
     const skip = (Number(page) - 1) * Number(limit);
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      ...orgFilter(req),
+      deletedAt: null, // only active leads
+    };
+
     if (req.user?.role === 'EMPLOYEE') where.assignedToId = req.user.id;
     if (status) where.status = status;
     if (source) where.source = source;
     if (campaignId) where.campaignId = campaignId;
     if (assignedToId && req.user?.role === 'ADMIN') where.assignedToId = assignedToId;
+
     if (search) {
       where.OR = [
-        { name: { contains: search as string } },
+        { name: { contains: search as string, mode: 'insensitive' } },
         { phone: { contains: search as string } },
-        { email: { contains: search as string } },
-        { destination: { contains: search as string } },
-        { message: { contains: search as string } },
+        { email: { contains: search as string, mode: 'insensitive' } },
+        { destination: { contains: search as string, mode: 'insensitive' } },
+        { message: { contains: search as string, mode: 'insensitive' } },
       ];
     }
-
-    const orderBy: Record<string, unknown> = { [sortBy as string]: sortOrder };
 
     const [leads, total] = await Promise.all([
       prisma.lead.findMany({
@@ -38,7 +52,7 @@ export const getLeads = async (req: AuthenticatedRequest, res: Response): Promis
           campaign: { select: { id: true, name: true, destination: true } },
           assignedTo: { select: { id: true, name: true, email: true } },
         },
-        orderBy,
+        orderBy: { [sortBy as string]: sortOrder },
       }),
       prisma.lead.count({ where }),
     ]);
@@ -49,7 +63,7 @@ export const getLeads = async (req: AuthenticatedRequest, res: Response): Promis
       meta: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) },
     });
   } catch (e) {
-    console.error(e);
+    console.error('[leads] getLeads error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
@@ -57,8 +71,9 @@ export const getLeads = async (req: AuthenticatedRequest, res: Response): Promis
 export const getLeadById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const lead = await prisma.lead.findUnique({
-      where: { id },
+
+    const lead = await prisma.lead.findFirst({
+      where: { id, deletedAt: null, ...orgFilter(req) },
       include: {
         campaign: true,
         assignedTo: { select: { id: true, name: true, email: true, phone: true } },
@@ -73,6 +88,7 @@ export const getLeadById = async (req: AuthenticatedRequest, res: Response): Pro
     if (req.user?.role === 'EMPLOYEE' && lead.assignedToId !== req.user.id) {
       res.status(403).json({ success: false, error: 'Access denied' }); return;
     }
+
     if (!lead.isRead) await prisma.lead.update({ where: { id }, data: { isRead: true } });
 
     res.json({ success: true, data: lead });
@@ -80,6 +96,8 @@ export const getLeadById = async (req: AuthenticatedRequest, res: Response): Pro
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
+
+// ─── Create ───────────────────────────────────────────────────────────────────
 
 export const createLeadManual = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -89,19 +107,19 @@ export const createLeadManual = async (req: AuthenticatedRequest, res: Response)
       groupSize, budget, preferredDate,
     } = req.body;
 
-    if (!name || !phone) {
+    if (!name?.trim() || !phone?.trim()) {
       res.status(400).json({ success: false, error: 'Name and phone are required' });
       return;
     }
 
     const lead = await prisma.lead.create({
       data: {
-        name,
-        phone,
-        email: email || null,
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email?.trim() || null,
         source: source || 'MANUAL',
         message: message || null,
-        destination: destination || null,
+        destination: destination?.trim() || null,
         notes: notes || null,
         status: status || 'NEW',
         campaignId: campaignId || null,
@@ -111,6 +129,7 @@ export const createLeadManual = async (req: AuthenticatedRequest, res: Response)
         preferredDate: preferredDate || null,
         followUpDate: followUpDate ? new Date(followUpDate) : null,
         followUpNotes: followUpNotes || null,
+        organizationId: req.user?.organizationId ?? null,
       },
       include: {
         campaign: { select: { id: true, name: true } },
@@ -119,53 +138,64 @@ export const createLeadManual = async (req: AuthenticatedRequest, res: Response)
     });
 
     await prisma.activityLog.create({
-      data: { action: 'Lead Created', details: `Lead created manually by ${req.user?.name}`, userId: req.user!.id, leadId: lead.id },
+      data: {
+        action: 'Lead Created',
+        details: `Created manually by ${req.user?.name}`,
+        userId: req.user!.id,
+        leadId: lead.id,
+      },
     });
 
     if (lead.assignedToId) {
       await createNotification(
-        lead.assignedToId,
-        'NEW_LEAD_ASSIGNED',
+        lead.assignedToId, 'NEW_LEAD_ASSIGNED',
         'New Lead Assigned',
-        `New lead: ${lead.name} has been assigned to you.`,
-        lead.id
+        `Lead "${lead.name}" has been assigned to you.`,
+        lead.id,
       );
     }
 
     emitLeadUpdated(lead.id);
     res.status(201).json({ success: true, data: lead });
   } catch (e) {
-    console.error(e);
+    console.error('[leads] createLeadManual error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
+// ─── Update ───────────────────────────────────────────────────────────────────
+
 export const updateLead = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const existing = await prisma.lead.findUnique({ where: { id } });
+
+    const existing = await prisma.lead.findFirst({ where: { id, deletedAt: null, ...orgFilter(req) } });
     if (!existing) { res.status(404).json({ success: false, error: 'Lead not found' }); return; }
     if (req.user?.role === 'EMPLOYEE' && existing.assignedToId !== req.user.id) {
       res.status(403).json({ success: false, error: 'Access denied' }); return;
     }
 
     const { status, notes, followUpDate, followUpNotes, followUpDone, campaignId, assignedToId, ...rest } = req.body;
-
     const updateData: Record<string, unknown> = { ...rest };
+
     if (status !== undefined) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
-    if (followUpDate !== undefined) {
-      const parsedDate = followUpDate ? new Date(followUpDate) : null;
-      if (parsedDate && parsedDate < existing.createdAt) {
-        res.status(400).json({ success: false, error: 'Follow-up date cannot be earlier than the lead\'s creation date' });
-        return;
-      }
-      updateData.followUpDate = parsedDate;
-    }
     if (followUpNotes !== undefined) updateData.followUpNotes = followUpNotes;
     if (followUpDone !== undefined) updateData.followUpDone = followUpDone;
-    if (campaignId !== undefined && req.user?.role === 'ADMIN') updateData.campaignId = campaignId || null;
-    if (assignedToId !== undefined && req.user?.role === 'ADMIN') updateData.assignedToId = assignedToId || null;
+
+    if (followUpDate !== undefined) {
+      const parsed = followUpDate ? new Date(followUpDate) : null;
+      if (parsed && parsed < existing.createdAt) {
+        res.status(400).json({ success: false, error: 'Follow-up date cannot be before the lead creation date' });
+        return;
+      }
+      updateData.followUpDate = parsed;
+    }
+
+    if (req.user?.role === 'ADMIN') {
+      if (campaignId !== undefined) updateData.campaignId = campaignId || null;
+      if (assignedToId !== undefined) updateData.assignedToId = assignedToId || null;
+    }
 
     const lead = await prisma.lead.update({
       where: { id },
@@ -179,9 +209,13 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response): Prom
     const changes: string[] = [];
     if (status && status !== existing.status) changes.push(`Status: ${existing.status} → ${status}`);
     if (assignedToId && assignedToId !== existing.assignedToId) {
-      changes.push('Reassigned to new employee');
-      await createNotification(assignedToId, 'NEW_LEAD_ASSIGNED', 'Lead Assigned to You',
-        `Lead ${lead.name} has been assigned to you.`, id);
+      changes.push('Reassigned');
+      await createNotification(
+        assignedToId, 'NEW_LEAD_ASSIGNED',
+        'Lead Assigned to You',
+        `Lead "${lead.name}" has been assigned to you.`,
+        id,
+      );
     }
 
     if (changes.length > 0) {
@@ -193,24 +227,37 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response): Prom
     emitLeadUpdated(id);
     res.json({ success: true, data: lead });
   } catch (e) {
-    console.error(e);
+    console.error('[leads] updateLead error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
+// ─── Delete (soft) ────────────────────────────────────────────────────────────
+
 export const deleteLead = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    await prisma.lead.delete({ where: { id } });
-    res.json({ success: true, message: 'Lead deleted successfully' });
+
+    const existing = await prisma.lead.findFirst({ where: { id, deletedAt: null, ...orgFilter(req) } });
+    if (!existing) { res.status(404).json({ success: false, error: 'Lead not found' }); return; }
+
+    await prisma.lead.update({ where: { id }, data: { deletedAt: new Date() } });
+
+    await prisma.activityLog.create({
+      data: { action: 'Lead Deleted', details: `Deleted by ${req.user?.name}`, userId: req.user!.id, leadId: id },
+    });
+
+    res.json({ success: true, message: 'Lead deleted' });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
+// ─── Stats & Misc ─────────────────────────────────────────────────────────────
+
 export const getStats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const stats = await getLeadStats(req.user?.id, req.user?.role);
+    const stats = await getLeadStats(req.user?.id, req.user?.role, req.user?.organizationId);
     res.json({ success: true, data: stats });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -219,7 +266,13 @@ export const getStats = async (req: AuthenticatedRequest, res: Response): Promis
 
 export const getOverdueFollowUps = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const where: Record<string, unknown> = { status: 'FOLLOW_UP_SCHEDULED', followUpDone: false, followUpDate: { lt: new Date() } };
+    const where: Record<string, unknown> = {
+      ...orgFilter(req),
+      deletedAt: null,
+      status: 'FOLLOW_UP_SCHEDULED',
+      followUpDone: false,
+      followUpDate: { lt: new Date() },
+    };
     if (req.user?.role === 'EMPLOYEE') where.assignedToId = req.user.id;
 
     const leads = await prisma.lead.findMany({
@@ -230,6 +283,7 @@ export const getOverdueFollowUps = async (req: AuthenticatedRequest, res: Respon
       },
       orderBy: { followUpDate: 'asc' },
     });
+
     res.json({ success: true, data: leads });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -238,7 +292,9 @@ export const getOverdueFollowUps = async (req: AuthenticatedRequest, res: Respon
 
 export const getRecentActivity = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const where: Record<string, unknown> = req.user?.role === 'EMPLOYEE' ? { userId: req.user.id } : {};
+    const where: Record<string, unknown> =
+      req.user?.role === 'EMPLOYEE' ? { userId: req.user.id } : {};
+
     const logs = await prisma.activityLog.findMany({
       where,
       include: {
@@ -248,6 +304,7 @@ export const getRecentActivity = async (req: AuthenticatedRequest, res: Response
       orderBy: { createdAt: 'desc' },
       take: 30,
     });
+
     res.json({ success: true, data: logs });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
