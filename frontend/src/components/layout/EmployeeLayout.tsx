@@ -7,6 +7,7 @@ import {
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead } from '../../hooks/useNotifications';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import { useFollowUpNotifications } from '../../hooks/useFollowUpNotifications';
 import Avatar from '../ui/Avatar';
 import FeedbackButton from '../feedback/FeedbackButton';
 import { formatRelativeTime, cn } from '../../utils/helpers';
@@ -30,6 +31,7 @@ export default function EmployeeLayout() {
   const { data: notifData } = useNotifications(1, 10);
   const markAllRead = useMarkAllAsRead();
   useRealtimeSync();
+  useFollowUpNotifications();
 
   const notifications = notifData?.data ?? [];
   const unreadCount = notifData?.meta?.unreadCount ?? 0;

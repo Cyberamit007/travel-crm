@@ -2,6 +2,12 @@ import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 
+// keywords is stored as JSON string in DB; parse before sending to client
+function parseCampaign(c: any) {
+  try { return { ...c, keywords: JSON.parse(c.keywords || '[]') }; }
+  catch { return { ...c, keywords: [] }; }
+}
+
 export const getCampaigns = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { status, search, page = 1, limit = 20 } = req.query;
@@ -27,7 +33,7 @@ export const getCampaigns = async (req: AuthenticatedRequest, res: Response): Pr
         take: Number(limit),
         include: {
           employees: { include: { user: { select: { id: true, name: true, email: true } } } },
-          _count: { select: { leads: true } },
+          _count: { select: { leads: { where: { deletedAt: null } } } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -36,7 +42,7 @@ export const getCampaigns = async (req: AuthenticatedRequest, res: Response): Pr
 
     res.json({
       success: true,
-      data: campaigns,
+      data: campaigns.map(parseCampaign),
       meta: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) },
     });
   } catch {
@@ -52,11 +58,12 @@ export const getCampaignById = async (req: AuthenticatedRequest, res: Response):
       include: {
         employees: { include: { user: { select: { id: true, name: true, email: true } } } },
         leads: {
+          where: { deletedAt: null },
           include: { assignedTo: { select: { id: true, name: true } } },
           orderBy: { createdAt: 'desc' },
-          take: 20,
+          take: 50,
         },
-        _count: { select: { leads: true } },
+        _count: { select: { leads: { where: { deletedAt: null } } } },
       },
     });
 
@@ -64,7 +71,7 @@ export const getCampaignById = async (req: AuthenticatedRequest, res: Response):
       res.status(404).json({ success: false, error: 'Campaign not found' });
       return;
     }
-    res.json({ success: true, data: campaign });
+    res.json({ success: true, data: parseCampaign(campaign) });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
@@ -87,17 +94,18 @@ export const createCampaign = async (req: AuthenticatedRequest, res: Response): 
         targetLeads: targetLeads ? Number(targetLeads) : undefined,
         budget: budget ? Number(budget) : undefined,
         whatsappNumber, instagramAdId, utmSource, utmCampaign,
-        keywords: JSON.stringify(keywords || []),
+        keywords: JSON.stringify(Array.isArray(keywords) ? keywords : []),
         employees: employeeIds?.length
           ? { create: employeeIds.map((uid: string) => ({ userId: uid })) }
           : undefined,
       },
       include: {
         employees: { include: { user: { select: { id: true, name: true, email: true } } } },
+        _count: { select: { leads: { where: { deletedAt: null } } } },
       },
     });
 
-    res.status(201).json({ success: true, data: campaign });
+    res.status(201).json({ success: true, data: parseCampaign(campaign) });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
@@ -106,12 +114,13 @@ export const createCampaign = async (req: AuthenticatedRequest, res: Response): 
 export const updateCampaign = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { employeeIds, ...rest } = req.body;
+    const { employeeIds, keywords, ...rest } = req.body;
 
-    const campaign = await prisma.campaign.update({
+    await prisma.campaign.update({
       where: { id },
       data: {
         ...rest,
+        keywords: JSON.stringify(Array.isArray(keywords) ? keywords : []),
         startDate: rest.startDate ? new Date(rest.startDate) : undefined,
         endDate: rest.endDate ? new Date(rest.endDate) : undefined,
         targetLeads: rest.targetLeads ? Number(rest.targetLeads) : undefined,
@@ -133,11 +142,11 @@ export const updateCampaign = async (req: AuthenticatedRequest, res: Response): 
       where: { id },
       include: {
         employees: { include: { user: { select: { id: true, name: true, email: true } } } },
-        _count: { select: { leads: true } },
+        _count: { select: { leads: { where: { deletedAt: null } } } },
       },
     });
 
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: parseCampaign(updated) });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
@@ -157,8 +166,11 @@ export const getCampaignStats = async (_req: AuthenticatedRequest, res: Response
   try {
     const campaigns = await prisma.campaign.findMany({
       include: {
-        leads: { select: { status: true } },
-        _count: { select: { leads: true } },
+        leads: {
+          where: { deletedAt: null },
+          select: { status: true },
+        },
+        _count: { select: { leads: { where: { deletedAt: null } } } },
       },
     });
 

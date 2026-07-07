@@ -11,7 +11,9 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       staleTime: 30 * 1000,
+      gcTime: 10 * 60 * 1000, // keep cache 10 min after unmount — prevents blank-on-back
       refetchOnWindowFocus: false,
+      refetchOnMount: true,
     },
   },
 });

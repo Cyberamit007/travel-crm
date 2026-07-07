@@ -8,9 +8,10 @@ interface CampaignCardProps {
   campaign: Campaign;
   onEdit?: (campaign: Campaign) => void;
   onDelete?: (campaign: Campaign) => void;
+  onView?: (campaign: Campaign) => void;
 }
 
-export default function CampaignCard({ campaign, onEdit, onDelete }: CampaignCardProps) {
+export default function CampaignCard({ campaign, onEdit, onDelete, onView }: CampaignCardProps) {
   const leadCount = campaign._count?.leads ?? 0;
   const target = campaign.targetLeads ?? 0;
   const progress = target > 0 ? Math.min((leadCount / target) * 100, 100) : 0;
@@ -29,7 +30,12 @@ export default function CampaignCard({ campaign, onEdit, onDelete }: CampaignCar
           <div className="flex items-center gap-2 mb-1">
             <Badge campaignStatus={campaign.status} />
           </div>
-          <h3 className="font-bold text-slate-900 text-base truncate">{campaign.name}</h3>
+          <button
+            onClick={() => onView?.(campaign)}
+            className="text-left font-bold text-slate-900 text-base truncate hover:text-primary-600 transition-colors w-full"
+          >
+            {campaign.name}
+          </button>
           <div className="flex items-center gap-1 text-slate-500 text-xs mt-1">
             <MapPin className="w-3 h-3" />
             <span>{campaign.destination}</span>

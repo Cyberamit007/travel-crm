@@ -4,6 +4,7 @@ import { Lead, LeadStatus, LeadSource } from '../../types/index';
 import { useCampaigns } from '../../hooks/useCampaigns';
 import { useUsers } from '../../hooks/useUsers';
 import { useAuthStore } from '../../store/authStore';
+import { cn } from '../../utils/helpers';
 
 interface LeadFormData {
   name: string;
@@ -30,6 +31,14 @@ interface LeadFormProps {
   onCancel: () => void;
 }
 
+// Convert ISO datetime to local datetime-input value (YYYY-MM-DDTHH:mm)
+function toLocalDatetimeInput(iso: string | undefined | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel }: LeadFormProps) {
   const { user } = useAuthStore();
   const isAdmin = user?.role === 'ADMIN';
@@ -41,6 +50,7 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<LeadFormData>({
     defaultValues: {
@@ -70,7 +80,8 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
         groupSize: defaultValues.groupSize,
         budget: defaultValues.budget,
         preferredDate: defaultValues.preferredDate?.slice(0, 10) ?? '',
-        followUpDate: defaultValues.followUpDate?.slice(0, 16) ?? '',
+        // Convert stored ISO (UTC) back to local time for display in the input
+        followUpDate: toLocalDatetimeInput(defaultValues.followUpDate),
         followUpNotes: defaultValues.followUpNotes ?? '',
       });
     }
@@ -79,23 +90,53 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
   const campaigns = campaignsData?.data ?? [];
   const employees = usersData?.data ?? [];
 
+  const messageText = watch('message') ?? '';
+  const wordCount = messageText.trim() ? messageText.trim().split(/\s+/).length : 0;
+
+  const nowLocal = toLocalDatetimeInput(new Date().toISOString());
+  const minDatetime = defaultValues?.createdAt
+    ? toLocalDatetimeInput(defaultValues.createdAt)
+    : nowLocal;
+
+  // Wrapper: convert followUpDate from local datetime-input to ISO before submitting
+  const handleFormSubmit = (data: LeadFormData) => {
+    onSubmit({
+      ...data,
+      followUpDate: data.followUpDate ? new Date(data.followUpDate).toISOString() : undefined,
+    });
+  };
+
+  const inputClass = (hasError: boolean) =>
+    cn('input', hasError && 'border-red-500 focus:ring-red-500 focus:border-red-500');
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="label">Full Name *</label>
+          <label className="label">
+            Full Name <span className="text-red-500">*</span>
+          </label>
           <input
-            {...register('name', { required: 'Name is required' })}
-            className="input"
+            {...register('name', { required: 'Name is required', minLength: { value: 2, message: 'Name is too short' } })}
+            className={inputClass(!!errors.name)}
             placeholder="Customer name"
           />
           {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
         </div>
         <div>
-          <label className="label">Phone *</label>
+          <label className="label">
+            Phone <span className="text-red-500">*</span>
+          </label>
           <input
-            {...register('phone', { required: 'Phone is required' })}
-            className="input"
+            {...register('phone', {
+              required: 'Phone is required',
+              pattern: {
+                value: /^[+]?[0-9][\d\s\-()]{5,13}[0-9]$/,
+                message: 'Enter a valid phone number (7–15 digits)',
+              },
+              maxLength: { value: 20, message: 'Phone number is too long' },
+            })}
+            className={inputClass(!!errors.phone)}
             placeholder="+91 98765 43210"
           />
           {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone.message}</p>}
@@ -105,16 +146,21 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
       <div>
         <label className="label">Email</label>
         <input
-          {...register('email')}
+          {...register('email', {
+            pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Enter a valid email address' },
+          })}
           type="email"
-          className="input"
+          className={inputClass(!!errors.email)}
           placeholder="customer@example.com"
         />
+        {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="label">Source *</label>
+          <label className="label">
+            Source <span className="text-red-500">*</span>
+          </label>
           <select {...register('source', { required: true })} className="input">
             <option value="MANUAL">Manual</option>
             <option value="WHATSAPP">WhatsApp</option>
@@ -123,7 +169,9 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
           </select>
         </div>
         <div>
-          <label className="label">Status *</label>
+          <label className="label">
+            Status <span className="text-red-500">*</span>
+          </label>
           <select {...register('status', { required: true })} className="input">
             <option value="NEW">New</option>
             <option value="CONTACTED">Contacted</option>
@@ -175,12 +223,18 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
         <div>
           <label className="label">Group Size</label>
           <input
-            {...register('groupSize', { valueAsNumber: true, min: 1 })}
+            {...register('groupSize', {
+              valueAsNumber: true,
+              min: { value: 1, message: 'At least 1 person' },
+              max: { value: 100, message: 'Max 100 people' },
+            })}
             type="number"
-            className="input"
+            className={inputClass(!!errors.groupSize)}
             placeholder="Number of people"
             min={1}
+            max={100}
           />
+          {errors.groupSize && <p className="text-red-500 text-xs mt-1">{errors.groupSize.message}</p>}
         </div>
         <div>
           <label className="label">Budget (INR)</label>
@@ -203,10 +257,15 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
         <label className="label">Message / Inquiry</label>
         <textarea
           {...register('message')}
-          rows={3}
+          rows={4}
           className="input resize-none"
           placeholder="Customer's original inquiry message..."
         />
+        <div className="flex justify-end mt-1">
+          <span className={cn('text-xs', wordCount > 200 ? 'text-amber-500' : 'text-slate-400')}>
+            {wordCount} word{wordCount !== 1 ? 's' : ''}
+          </span>
+        </div>
       </div>
 
       <div>
@@ -228,15 +287,18 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
               {...register('followUpDate', {
                 validate: (val) => {
                   if (!val) return true;
-                  const minDate = defaultValues?.createdAt ?? new Date().toISOString();
-                  return new Date(val) >= new Date(minDate) || 'Follow-up date cannot be before the lead was created';
+                  const selected = new Date(val);
+                  const minDate = defaultValues?.createdAt ? new Date(defaultValues.createdAt) : new Date();
+                  return selected >= minDate || 'Follow-up date cannot be before the lead was created';
                 },
               })}
               type="datetime-local"
-              className="input"
-              min={defaultValues?.createdAt ? defaultValues.createdAt.slice(0, 16) : new Date().toISOString().slice(0, 16)}
+              className={inputClass(!!errors.followUpDate)}
+              min={minDatetime}
             />
-            {errors.followUpDate && <p className="text-red-500 text-xs mt-1">{errors.followUpDate.message}</p>}
+            {errors.followUpDate && (
+              <p className="text-red-500 text-xs mt-1">{errors.followUpDate.message}</p>
+            )}
           </div>
           <div>
             <label className="label">Follow-up Notes</label>

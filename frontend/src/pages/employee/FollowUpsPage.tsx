@@ -14,6 +14,14 @@ interface RescheduleForm {
   followUpNotes?: string;
 }
 
+// Convert ISO (UTC) to the value format expected by datetime-local input (local time)
+function toLocalDatetimeInput(iso: string | undefined | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function RescheduleModal({
   open,
   onClose,
@@ -28,11 +36,15 @@ function RescheduleModal({
 
   const onSubmit = (data: RescheduleForm) => {
     if (!lead) return;
+    // Convert local datetime-input value to ISO so server (UTC) stores the correct time
+    const followUpISO = data.followUpDate ? new Date(data.followUpDate).toISOString() : undefined;
     updateLead.mutate(
-      { id: lead.id, followUpDate: data.followUpDate, followUpNotes: data.followUpNotes, followUpDone: false },
+      { id: lead.id, followUpDate: followUpISO, followUpNotes: data.followUpNotes, followUpDone: false },
       { onSuccess: () => { onClose(); reset(); } }
     );
   };
+
+  const minDatetime = toLocalDatetimeInput(lead?.createdAt ?? new Date().toISOString());
 
   return (
     <Modal open={open} onClose={onClose} title="Reschedule Follow-up" size="sm">
@@ -54,7 +66,7 @@ function RescheduleModal({
               })}
               type="datetime-local"
               className="input"
-              min={lead?.createdAt ? lead.createdAt.slice(0, 16) : new Date().toISOString().slice(0, 16)}
+              min={minDatetime}
             />
             {errors.followUpDate && <p className="text-red-500 text-xs mt-1">{errors.followUpDate.message}</p>}
           </div>
