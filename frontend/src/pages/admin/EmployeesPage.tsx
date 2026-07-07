@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit, Trash2, ToggleLeft, ToggleRight, TrendingUp, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, ToggleLeft, ToggleRight, TrendingUp, Search, Copy, Check } from 'lucide-react';
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, useEmployeePerformance } from '../../hooks/useUsers';
 import { User } from '../../types/index';
 import { useForm } from 'react-hook-form';
@@ -102,6 +102,69 @@ function EmployeeFormModal({
   );
 }
 
+function CredentialsModal({ open, onClose, email, password }: { open: boolean; onClose: () => void; email: string; password: string }) {
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [copiedPass, setCopiedPass] = useState(false);
+
+  const copy = (text: string, setter: (v: boolean) => void) => {
+    navigator.clipboard.writeText(text);
+    setter(true);
+    setTimeout(() => setter(false), 2000);
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Account Created" size="sm">
+      <div className="space-y-4">
+        <div className="p-3 bg-green-50 border border-green-200 rounded-xl">
+          <p className="text-sm font-semibold text-green-800">Employee account created successfully.</p>
+          <p className="text-xs text-green-700 mt-0.5">Share these login credentials with the employee.</p>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="label">Login URL</label>
+            <div className="flex items-center gap-2">
+              <input readOnly value={window.location.origin + '/login'} className="input text-sm bg-slate-50" />
+            </div>
+          </div>
+          <div>
+            <label className="label">Email</label>
+            <div className="flex items-center gap-2">
+              <input readOnly value={email} className="input text-sm bg-slate-50 flex-1" />
+              <button
+                onClick={() => copy(email, setCopiedEmail)}
+                className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 flex-shrink-0 transition-colors"
+                title="Copy email"
+              >
+                {copiedEmail ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="label">Password</label>
+            <div className="flex items-center gap-2">
+              <input readOnly value={password} className="input text-sm bg-slate-50 flex-1 font-mono" />
+              <button
+                onClick={() => copy(password, setCopiedPass)}
+                className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 flex-shrink-0 transition-colors"
+                title="Copy password"
+              >
+                {copiedPass ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-400">This is the only time the password will be shown. The employee can change it from their settings.</p>
+
+        <div className="flex justify-end">
+          <button onClick={onClose} className="btn-primary">Done</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function PerformanceModal({ open, onClose, employee }: { open: boolean; onClose: () => void; employee: EmployeePerformance | null }) {
   if (!employee) return null;
   return (
@@ -140,6 +203,7 @@ export default function AdminEmployeesPage() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [perfEmployee, setPerfEmployee] = useState<EmployeePerformance | null>(null);
+  const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string } | null>(null);
 
   const { data, isLoading } = useUsers({ search: search || undefined, limit: 100 });
   const { data: perfData } = useEmployeePerformance();
@@ -153,7 +217,12 @@ export default function AdminEmployeesPage() {
   const getPerf = (id: string) => performance.find((p) => p.id === id);
 
   const handleCreate = (formData: UserForm) => {
-    createUser.mutate(formData as any, { onSuccess: () => setCreateOpen(false) });
+    createUser.mutate(formData as any, {
+      onSuccess: () => {
+        setCreateOpen(false);
+        setCreatedCreds({ email: formData.email, password: formData.password! });
+      },
+    });
   };
 
   const handleEdit = (formData: UserForm) => {
@@ -341,6 +410,13 @@ export default function AdminEmployeesPage() {
         open={!!perfEmployee}
         onClose={() => setPerfEmployee(null)}
         employee={perfEmployee}
+      />
+
+      <CredentialsModal
+        open={!!createdCreds}
+        onClose={() => setCreatedCreds(null)}
+        email={createdCreds?.email ?? ''}
+        password={createdCreds?.password ?? ''}
       />
     </div>
   );

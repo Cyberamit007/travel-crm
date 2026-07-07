@@ -1,5 +1,6 @@
 import { Users, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 import { useLeads, useOverdueFollowUps } from '../../hooks/useLeads';
 import { useAuthStore } from '../../store/authStore';
 import StatsCard from '../ui/StatsCard';
@@ -21,6 +22,7 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
 
 export default function EmployeeDashboard() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const today = new Date().toISOString().slice(0, 10);
 
@@ -70,6 +72,7 @@ export default function EmployeeDashboard() {
           icon={Users}
           iconBg="bg-primary-100"
           iconColor="text-primary-600"
+          onClick={() => navigate('/employee/leads')}
         />
         <StatsCard
           label="Follow-ups Today"
@@ -77,6 +80,7 @@ export default function EmployeeDashboard() {
           icon={Calendar}
           iconBg="bg-orange-100"
           iconColor="text-orange-600"
+          onClick={() => navigate('/employee/follow-ups')}
         />
         <StatsCard
           label="Confirmed"
@@ -84,6 +88,7 @@ export default function EmployeeDashboard() {
           icon={CheckCircle}
           iconBg="bg-green-100"
           iconColor="text-green-600"
+          onClick={() => navigate('/employee/leads?status=CONFIRMED')}
         />
         <StatsCard
           label="Overdue"
@@ -91,6 +96,7 @@ export default function EmployeeDashboard() {
           icon={AlertCircle}
           iconBg="bg-red-100"
           iconColor="text-red-600"
+          onClick={() => navigate('/employee/follow-ups')}
         />
       </div>
 

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Plus, Eye, Edit, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useLeads, useCreateLead, useUpdateLead } from '../../hooks/useLeads';
 import { Lead } from '../../types/index';
 import { useAuthStore } from '../../store/authStore';
@@ -23,9 +24,16 @@ const STATUSES = [
 
 export default function EmployeeLeadsPage() {
   const { user } = useAuthStore();
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(searchParams.get('status') || '');
+
+  useEffect(() => {
+    const s = searchParams.get('status') || '';
+    setStatus(s);
+    setPage(1);
+  }, [searchParams]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editLead, setEditLead] = useState<Lead | null>(null);
   const [detailLeadId, setDetailLeadId] = useState<string | null>(null);

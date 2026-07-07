@@ -83,10 +83,56 @@ export const getLeadById = async (req: AuthenticatedRequest, res: Response): Pro
 
 export const createLeadManual = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const lead = await createLead({ ...req.body, source: req.body.source || 'MANUAL' });
+    const {
+      name, phone, email, source, message, destination, notes,
+      followUpDate, followUpNotes, status, campaignId, assignedToId,
+      groupSize, budget, preferredDate,
+    } = req.body;
+
+    if (!name || !phone) {
+      res.status(400).json({ success: false, error: 'Name and phone are required' });
+      return;
+    }
+
+    const lead = await prisma.lead.create({
+      data: {
+        name,
+        phone,
+        email: email || null,
+        source: source || 'MANUAL',
+        message: message || null,
+        destination: destination || null,
+        notes: notes || null,
+        status: status || 'NEW',
+        campaignId: campaignId || null,
+        assignedToId: assignedToId || null,
+        groupSize: groupSize && !isNaN(Number(groupSize)) ? Number(groupSize) : null,
+        budget: budget && !isNaN(Number(budget)) ? Number(budget) : null,
+        preferredDate: preferredDate || null,
+        followUpDate: followUpDate ? new Date(followUpDate) : null,
+        followUpNotes: followUpNotes || null,
+      },
+      include: {
+        campaign: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
+      },
+    });
+
     await prisma.activityLog.create({
       data: { action: 'Lead Created', details: `Lead created manually by ${req.user?.name}`, userId: req.user!.id, leadId: lead.id },
     });
+
+    if (lead.assignedToId) {
+      await createNotification(
+        lead.assignedToId,
+        'NEW_LEAD_ASSIGNED',
+        'New Lead Assigned',
+        `New lead: ${lead.name} has been assigned to you.`,
+        lead.id
+      );
+    }
+
+    emitLeadUpdated(lead.id);
     res.status(201).json({ success: true, data: lead });
   } catch (e) {
     console.error(e);

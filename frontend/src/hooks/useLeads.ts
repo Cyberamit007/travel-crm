@@ -87,7 +87,7 @@ export function useCreateLead() {
       toast.success('Lead created successfully');
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.message || 'Failed to create lead');
+      toast.error(err?.response?.data?.error || 'Failed to create lead');
     },
   });
 }

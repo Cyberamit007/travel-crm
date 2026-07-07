@@ -3,6 +3,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 import { useLeadStats, useRecentActivity } from '../../hooks/useLeads';
 import { useCampaignStats } from '../../hooks/useCampaigns';
 import { useEmployeePerformance } from '../../hooks/useUsers';
@@ -23,6 +24,7 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
 };
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const { data: statsData, isLoading: statsLoading } = useLeadStats();
   const { data: campaignStatsData, isLoading: campLoading } = useCampaignStats();
   const { data: perfData, isLoading: perfLoading } = useEmployeePerformance();
@@ -62,6 +64,7 @@ export default function AdminDashboard() {
           icon={Users}
           iconBg="bg-primary-100"
           iconColor="text-primary-600"
+          onClick={() => navigate('/admin/leads')}
         />
         <StatsCard
           label="Active Campaigns"
@@ -69,6 +72,7 @@ export default function AdminDashboard() {
           icon={Megaphone}
           iconBg="bg-mountain-100"
           iconColor="text-mountain-600"
+          onClick={() => navigate('/admin/campaigns')}
         />
         <StatsCard
           label="Confirmed Bookings"
@@ -76,6 +80,7 @@ export default function AdminDashboard() {
           icon={CheckCircle}
           iconBg="bg-green-100"
           iconColor="text-green-600"
+          onClick={() => navigate('/admin/leads?status=CONFIRMED')}
         />
         <StatsCard
           label="Overdue Follow-ups"
@@ -83,6 +88,7 @@ export default function AdminDashboard() {
           icon={AlertCircle}
           iconBg="bg-red-100"
           iconColor="text-red-600"
+          onClick={() => navigate('/admin/leads?status=FOLLOW_UP_SCHEDULED')}
         />
       </div>
 

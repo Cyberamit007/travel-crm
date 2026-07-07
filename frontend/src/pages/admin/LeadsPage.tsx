@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Search, Trash2, Eye, Edit, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead } from '../../hooks/useLeads';
 import { useCampaigns } from '../../hooks/useCampaigns';
 import { useUsers } from '../../hooks/useUsers';
@@ -33,10 +34,17 @@ const SOURCES: { value: string; label: string }[] = [
 ];
 
 export default function AdminLeadsPage() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(searchParams.get('status') || '');
   const [source, setSource] = useState('');
+
+  useEffect(() => {
+    const s = searchParams.get('status') || '';
+    setStatus(s);
+    setPage(1);
+  }, [searchParams]);
   const [campaignId, setCampaignId] = useState('');
   const [assignedToId, setAssignedToId] = useState('');
   const [createOpen, setCreateOpen] = useState(false);

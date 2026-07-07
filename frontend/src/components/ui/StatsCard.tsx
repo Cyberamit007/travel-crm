@@ -10,6 +10,7 @@ interface StatsCardProps {
   trend?: number;
   trendLabel?: string;
   className?: string;
+  onClick?: () => void;
 }
 
 export default function StatsCard({
@@ -21,11 +22,15 @@ export default function StatsCard({
   trend,
   trendLabel,
   className,
+  onClick,
 }: StatsCardProps) {
   const isPositive = trend !== undefined && trend >= 0;
 
   return (
-    <div className={cn('stat-card', className)}>
+    <div
+      className={cn('stat-card', onClick && 'cursor-pointer hover:shadow-md transition-shadow', className)}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between">
         <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0', iconBg)}>
           <Icon className={cn('w-6 h-6', iconColor)} />
