@@ -30,8 +30,13 @@ export const sendFollowUpReminders = async () => {
 
   for (const lead of dueLeads) {
     if (!lead.assignedToId) continue;
-    await createNotification(lead.assignedToId, 'FOLLOW_UP_DUE', 'Follow-up Due Soon',
-      `Follow-up with ${lead.name} is due within the hour.${lead.followUpNotes ? ' Note: ' + lead.followUpNotes : ''}`, lead.id);
+    const alreadyNotified = await prisma.notification.findFirst({
+      where: { leadId: lead.id, type: 'FOLLOW_UP_DUE', createdAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) } },
+    });
+    if (!alreadyNotified) {
+      await createNotification(lead.assignedToId, 'FOLLOW_UP_DUE', 'Follow-up Due Soon',
+        `Follow-up with ${lead.name} is due within the hour.${lead.followUpNotes ? ' Note: ' + lead.followUpNotes : ''}`, lead.id);
+    }
   }
 
   const overdueLeads = await prisma.lead.findMany({
@@ -48,4 +53,8 @@ export const sendFollowUpReminders = async () => {
         `Follow-up with ${lead.name} is overdue! Please take action immediately.`, lead.id);
     }
   }
+};
+
+export const emitLeadUpdated = (leadId: string) => {
+  if (io) io.emit('lead_updated', { leadId });
 };

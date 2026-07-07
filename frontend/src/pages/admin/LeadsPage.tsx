@@ -148,11 +148,21 @@ export default function AdminLeadsPage() {
     {
       key: 'followUpDate',
       header: 'Follow-up',
-      render: (row) => row.followUpDate ? (
-        <span className={cn('text-xs font-medium', isOverdue(row.followUpDate) && !row.followUpDone ? 'text-red-600' : 'text-orange-600')}>
-          {isOverdue(row.followUpDate) && !row.followUpDone ? '⚠ ' : ''}{formatDate(row.followUpDate)}
-        </span>
-      ) : <span className="text-slate-400">—</span>,
+      render: (row) => {
+        if (!row.followUpDate) return <span className="text-slate-400">—</span>;
+        if (row.followUpDone) return (
+          <div className="flex flex-col gap-0.5">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 w-fit">
+              ✓ Done
+            </span>
+            <span className="text-xs text-slate-400">{formatDate(row.followUpDate)}</span>
+          </div>
+        );
+        if (isOverdue(row.followUpDate)) return (
+          <span className="text-xs font-medium text-red-600">⚠ {formatDate(row.followUpDate)}</span>
+        );
+        return <span className="text-xs font-medium text-orange-600">{formatDate(row.followUpDate)}</span>;
+      },
     },
     {
       key: 'createdAt',

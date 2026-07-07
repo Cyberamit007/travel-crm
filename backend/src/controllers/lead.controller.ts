@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthenticatedRequest } from '../types/index.js';
 import { createLead, getLeadStats } from '../services/lead.service.js';
-import { createNotification } from '../services/notification.service.js';
+import { createNotification, emitLeadUpdated } from '../services/notification.service.js';
 
 const prisma = new PrismaClient();
 
@@ -108,7 +108,14 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response): Prom
     const updateData: Record<string, unknown> = { ...rest };
     if (status !== undefined) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
-    if (followUpDate !== undefined) updateData.followUpDate = followUpDate ? new Date(followUpDate) : null;
+    if (followUpDate !== undefined) {
+      const parsedDate = followUpDate ? new Date(followUpDate) : null;
+      if (parsedDate && parsedDate < existing.createdAt) {
+        res.status(400).json({ success: false, error: 'Follow-up date cannot be earlier than the lead\'s creation date' });
+        return;
+      }
+      updateData.followUpDate = parsedDate;
+    }
     if (followUpNotes !== undefined) updateData.followUpNotes = followUpNotes;
     if (followUpDone !== undefined) updateData.followUpDone = followUpDone;
     if (campaignId !== undefined && req.user?.role === 'ADMIN') updateData.campaignId = campaignId || null;
@@ -137,6 +144,7 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response): Prom
       });
     }
 
+    emitLeadUpdated(id);
     res.json({ success: true, data: lead });
   } catch (e) {
     console.error(e);

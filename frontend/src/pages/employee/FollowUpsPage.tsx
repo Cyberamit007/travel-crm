@@ -45,10 +45,16 @@ function RescheduleModal({
           <div>
             <label className="label">New Follow-up Date & Time *</label>
             <input
-              {...register('followUpDate', { required: 'Please select a date and time' })}
+              {...register('followUpDate', {
+                required: 'Please select a date and time',
+                validate: (val) => {
+                  if (!val || !lead?.createdAt) return true;
+                  return new Date(val) >= new Date(lead.createdAt) || 'Follow-up date cannot be before the lead was created';
+                },
+              })}
               type="datetime-local"
               className="input"
-              min={new Date().toISOString().slice(0, 16)}
+              min={lead?.createdAt ? lead.createdAt.slice(0, 16) : new Date().toISOString().slice(0, 16)}
             />
             {errors.followUpDate && <p className="text-red-500 text-xs mt-1">{errors.followUpDate.message}</p>}
           </div>

@@ -225,10 +225,18 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
           <div>
             <label className="label">Follow-up Date & Time</label>
             <input
-              {...register('followUpDate')}
+              {...register('followUpDate', {
+                validate: (val) => {
+                  if (!val) return true;
+                  const minDate = defaultValues?.createdAt ?? new Date().toISOString();
+                  return new Date(val) >= new Date(minDate) || 'Follow-up date cannot be before the lead was created';
+                },
+              })}
               type="datetime-local"
               className="input"
+              min={defaultValues?.createdAt ? defaultValues.createdAt.slice(0, 16) : new Date().toISOString().slice(0, 16)}
             />
+            {errors.followUpDate && <p className="text-red-500 text-xs mt-1">{errors.followUpDate.message}</p>}
           </div>
           <div>
             <label className="label">Follow-up Notes</label>
