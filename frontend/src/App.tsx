@@ -12,6 +12,7 @@ import AdminSettingsPage from './pages/admin/SettingsPage';
 import AdminFeedbackPage from './pages/admin/FeedbackPage';
 import EmployeeLeadsPage from './pages/employee/LeadsPage';
 import EmployeeFollowUpsPage from './pages/employee/FollowUpsPage';
+import EmployeeSettingsPage from './pages/employee/SettingsPage';
 
 function RoleRedirect() {
   const { user, isAuthenticated } = useAuthStore();
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="dashboard" element={<EmployeeDashboard />} />
         <Route path="leads" element={<EmployeeLeadsPage />} />
         <Route path="follow-ups" element={<EmployeeFollowUpsPage />} />
+        <Route path="settings" element={<EmployeeSettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Send, Lock, Globe, Smartphone, Instagram } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
@@ -23,6 +24,8 @@ interface WebhookSimForm {
 function ChangePasswordSection() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
+  const navigate = useNavigate();
+  const { logout } = useAuthStore();
 
   const {
     register,
@@ -40,10 +43,12 @@ function ChangePasswordSection() {
         currentPassword: data.currentPassword,
         newPassword: data.newPassword,
       });
-      toast.success('Password changed successfully');
+      toast.success('Password changed. Please log in again.');
       reset();
+      await logout();
+      navigate('/login');
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to change password');
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || 'Failed to change password');
     }
   };
 
@@ -80,10 +85,10 @@ function ChangePasswordSection() {
           <label className="label">New Password</label>
           <div className="relative">
             <input
-              {...register('newPassword', { required: 'Required', minLength: { value: 6, message: 'Minimum 6 characters' } })}
+              {...register('newPassword', { required: 'Required', minLength: { value: 8, message: 'Minimum 8 characters' } })}
               type={showNew ? 'text' : 'password'}
               className="input pr-10"
-              placeholder="Minimum 6 characters"
+              placeholder="Minimum 8 characters"
             />
             <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
               {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

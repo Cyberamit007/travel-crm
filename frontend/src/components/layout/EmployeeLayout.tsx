@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Mountain, LayoutDashboard, Users, Calendar, Bell,
-  LogOut, ChevronDown, Menu, X
+  LogOut, ChevronDown, Menu, X, Settings, UserCircle
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -16,6 +16,7 @@ const navLinks = [
   { to: '/employee/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/employee/leads', label: 'My Leads', icon: Users },
   { to: '/employee/follow-ups', label: 'Follow-ups', icon: Calendar },
+  { to: '/employee/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function EmployeeLayout() {
@@ -197,6 +198,13 @@ export default function EmployeeLayout() {
                       <p className="text-xs text-slate-400">{user.email}</p>
                       <p className="text-xs text-mountain-600 font-medium mt-0.5">Employee</p>
                     </div>
+                    <button
+                      onClick={() => { setUserMenuOpen(false); navigate('/employee/settings'); }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <UserCircle className="w-4 h-4" />
+                      Profile & Settings
+                    </button>
                     <button
                       onClick={handleLogout}
                       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
