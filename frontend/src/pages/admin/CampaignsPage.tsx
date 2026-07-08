@@ -309,6 +309,7 @@ export default function AdminCampaignsPage() {
       <Modal open={!!editCampaign} onClose={() => setEditCampaign(null)} title="Edit Campaign" size="2xl">
         {editCampaign && (
           <CampaignForm
+            key={editCampaign.id}
             defaultValues={editCampaign}
             onSubmit={handleEdit}
             isLoading={updateCampaign.isPending}

@@ -4,6 +4,14 @@ import { X, Plus } from 'lucide-react';
 import { Campaign, CampaignStatus } from '../../types/index';
 import { useUsers } from '../../hooks/useUsers';
 
+function parseKeywords(value: unknown): string[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value) {
+    try { return JSON.parse(value); } catch { return []; }
+  }
+  return [];
+}
+
 interface CampaignFormData {
   name: string;
   destination: string;
@@ -37,7 +45,7 @@ export default function CampaignForm({
   const { data: usersData } = useUsers({ role: 'EMPLOYEE', limit: 100, isActive: true });
   const employees = usersData?.data ?? [];
 
-  const [keywords, setKeywords] = useState<string[]>(defaultValues?.keywords ?? []);
+  const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(defaultValues?.keywords));
   const [keywordInput, setKeywordInput] = useState('');
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>(
     defaultValues?.employees?.map((e) => e.userId) ?? []
@@ -81,7 +89,7 @@ export default function CampaignForm({
         utmSource: defaultValues.utmSource ?? '',
         utmCampaign: defaultValues.utmCampaign ?? '',
       });
-      setKeywords(defaultValues.keywords ?? []);
+      setKeywords(parseKeywords(defaultValues.keywords));
       setSelectedEmployees(defaultValues.employees?.map((e) => e.userId) ?? []);
     }
   }, [defaultValues, reset]);
