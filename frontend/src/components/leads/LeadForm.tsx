@@ -31,6 +31,11 @@ interface LeadFormProps {
   onCancel: () => void;
 }
 
+function extractDigits(phone: string | undefined | null): string {
+  if (!phone) return '';
+  return phone.replace(/^\+91\s?/, '').replace(/\D/g, '').slice(0, 10);
+}
+
 // Convert ISO datetime to local datetime-input value (YYYY-MM-DDTHH:mm)
 function toLocalDatetimeInput(iso: string | undefined | null): string {
   if (!iso) return '';
@@ -55,7 +60,7 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
   } = useForm<LeadFormData>({
     defaultValues: {
       name: '',
-      phone: '',
+      phone: extractDigits(defaultValues?.phone),
       source: 'MANUAL',
       status: 'NEW',
       ...defaultValues,
@@ -68,7 +73,7 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
     if (defaultValues) {
       reset({
         name: defaultValues.name ?? '',
-        phone: defaultValues.phone ?? '',
+        phone: extractDigits(defaultValues.phone),
         email: defaultValues.email ?? '',
         source: defaultValues.source ?? 'MANUAL',
         status: defaultValues.status ?? 'NEW',
@@ -102,6 +107,7 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
   const handleFormSubmit = (data: LeadFormData) => {
     onSubmit({
       ...data,
+      phone: `+91${data.phone.replace(/\D/g, '')}`,
       followUpDate: data.followUpDate ? new Date(data.followUpDate).toISOString() : undefined,
     });
   };
@@ -127,18 +133,25 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
           <label className="label">
             Phone <span className="text-red-500">*</span>
           </label>
-          <input
-            {...register('phone', {
-              required: 'Phone is required',
-              pattern: {
-                value: /^[+]?[0-9][\d\s\-()]{5,13}[0-9]$/,
-                message: 'Enter a valid phone number (7–15 digits)',
-              },
-              maxLength: { value: 20, message: 'Phone number is too long' },
-            })}
-            className={inputClass(!!errors.phone)}
-            placeholder="+91 98765 43210"
-          />
+          <div className="flex">
+            <span className="flex items-center px-3 bg-slate-100 border border-r-0 border-slate-300 rounded-l-lg text-sm text-slate-600 font-medium select-none">
+              +91
+            </span>
+            <input
+              {...register('phone', {
+                required: 'Phone is required',
+                pattern: { value: /^[0-9]{10}$/, message: 'Enter exactly 10 digits' },
+              })}
+              className={cn(inputClass(!!errors.phone), 'rounded-l-none')}
+              placeholder="98765 43210"
+              inputMode="numeric"
+              maxLength={10}
+              onInput={(e) => {
+                const t = e.currentTarget;
+                t.value = t.value.replace(/\D/g, '').slice(0, 10);
+              }}
+            />
+          </div>
           {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone.message}</p>}
         </div>
       </div>

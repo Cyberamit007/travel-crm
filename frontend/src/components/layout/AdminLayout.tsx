@@ -166,7 +166,7 @@ export default function AdminLayout() {
               </button>
 
               {notifOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50">
+                <div className="fixed inset-x-2 top-[4.5rem] sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
                     <p className="font-semibold text-slate-900 text-sm">Notifications</p>
                     {unreadCount > 0 && (
@@ -178,7 +178,7 @@ export default function AdminLayout() {
                       </button>
                     )}
                   </div>
-                  <div className="max-h-80 overflow-y-auto scrollbar-thin">
+                  <div className="max-h-[60vh] sm:max-h-80 overflow-y-auto scrollbar-thin">
                     {notifications.length === 0 ? (
                       <div className="px-4 py-8 text-center text-slate-400 text-sm">
                         No notifications

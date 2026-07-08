@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getLeads, getLeadById, createLeadManual, updateLead, deleteLead, getStats, getOverdueFollowUps, getRecentActivity } from '../controllers/lead.controller.js';
+import { getLeads, getLeadById, createLeadManual, updateLead, transferLead, deleteLead, getStats, getOverdueFollowUps, getRecentActivity } from '../controllers/lead.controller.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
@@ -12,6 +12,7 @@ router.get('/activity', getRecentActivity);
 router.get('/:id', getLeadById);
 router.post('/', createLeadManual);
 router.put('/:id', updateLead);
+router.post('/:id/transfer', transferLead);
 router.delete('/:id', requireAdmin, deleteLead);
 
 export default router;

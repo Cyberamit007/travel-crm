@@ -112,6 +112,25 @@ export function useUpdateLead() {
   });
 }
 
+export function useTransferLead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, assignedToId, reason }: { id: string; assignedToId: string; reason?: string }) => {
+      const { data } = await api.post(`/leads/${id}/transfer`, { assignedToId, reason });
+      return data;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['leads'] });
+      qc.invalidateQueries({ queryKey: ['lead', vars.id] });
+      qc.invalidateQueries({ queryKey: ['lead-stats'] });
+      toast.success('Lead transferred successfully');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Failed to transfer lead');
+    },
+  });
+}
+
 export function useDeleteLead() {
   const qc = useQueryClient();
   return useMutation({

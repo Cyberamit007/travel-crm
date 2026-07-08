@@ -31,20 +31,22 @@ export function useFollowUpNotifications() {
       if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
       const now = Date.now();
-      const NOTIFY_WINDOW_MS = 60_000; // trigger if due within next 60s
-      const GRACE_MS = 5 * 60_000;     // also catch overdue within last 5 min
+      const ADVANCE_MS = 10 * 60_000; // notify up to 10 min before due
+      const GRACE_MS   =  2 * 60_000; // also catch overdue within last 2 min
 
       leads.forEach((lead) => {
         if (!lead.followUpDate || notifiedIds.current.has(lead.id)) return;
         const due = new Date(lead.followUpDate).getTime();
 
-        if (due >= now - GRACE_MS && due <= now + NOTIFY_WINDOW_MS) {
+        if (due >= now - GRACE_MS && due <= now + ADVANCE_MS) {
           notifiedIds.current.add(lead.id);
+          const minsLeft = Math.round((due - now) / 60_000);
+          const timeLabel = minsLeft > 1 ? `in ${minsLeft} min` : minsLeft === 1 ? 'in 1 min' : 'now';
           try {
             const n = new Notification(`Follow-up: ${lead.name}`, {
               body: lead.followUpNotes
-                ? `${lead.followUpNotes}\n${lead.phone}`
-                : `Time to follow up with ${lead.name} — ${lead.phone}`,
+                ? `${timeLabel} — ${lead.followUpNotes} · ${lead.phone}`
+                : `Follow up with ${lead.name} ${timeLabel} — ${lead.phone}`,
               icon: '/favicon.ico',
               tag: `followup-${lead.id}`,
               requireInteraction: true,

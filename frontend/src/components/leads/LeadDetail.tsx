@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import {
   Phone, Mail, Calendar, User, Megaphone, DollarSign,
-  Users, MapPin, MessageSquare, Clock, CheckCircle, Edit
+  Users, MapPin, MessageSquare, Clock, CheckCircle, Edit, ArrowRightLeft
 } from 'lucide-react';
 import { Lead, LeadStatus } from '../../types/index';
-import { useLead, useUpdateLead } from '../../hooks/useLeads';
+import { useLead, useUpdateLead, useTransferLead } from '../../hooks/useLeads';
+import { useUsers } from '../../hooks/useUsers';
 import Badge from '../ui/Badge';
 import Avatar from '../ui/Avatar';
 import Modal from '../ui/Modal';
@@ -24,10 +25,18 @@ const statusOrder: LeadStatus[] = ['NEW', 'CONTACTED', 'INTERESTED', 'FOLLOW_UP_
 export default function LeadDetail({ leadId, open, onClose }: LeadDetailProps) {
   const { user } = useAuthStore();
   const [editOpen, setEditOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferToId, setTransferToId] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+
   const { data, isLoading } = useLead(leadId);
   const updateLead = useUpdateLead();
+  const transferLead = useTransferLead();
+  const { data: usersData } = useUsers({ role: 'EMPLOYEE', limit: 100, isActive: true });
+  const employees = usersData?.data ?? [];
 
   const lead = data?.data;
+  const canActOnLead = user?.role === 'ADMIN' || lead?.assignedToId === user?.id;
 
   const handleStatusChange = (status: LeadStatus) => {
     if (!lead) return;
@@ -36,9 +45,20 @@ export default function LeadDetail({ leadId, open, onClose }: LeadDetailProps) {
 
   const handleEdit = (formData: any) => {
     if (!lead) return;
-    updateLead.mutate(
-      { id: lead.id, ...formData },
-      { onSuccess: () => setEditOpen(false) }
+    updateLead.mutate({ id: lead.id, ...formData }, { onSuccess: () => setEditOpen(false) });
+  };
+
+  const handleTransfer = () => {
+    if (!lead || !transferToId) return;
+    transferLead.mutate(
+      { id: lead.id, assignedToId: transferToId, reason: transferReason || undefined },
+      {
+        onSuccess: () => {
+          setTransferOpen(false);
+          setTransferToId('');
+          setTransferReason('');
+        },
+      }
     );
   };
 
@@ -60,14 +80,23 @@ export default function LeadDetail({ leadId, open, onClose }: LeadDetailProps) {
                 </div>
               </div>
             </div>
-            {(user?.role === 'ADMIN' || lead.assignedToId === user?.id) && (
-              <button
-                onClick={() => setEditOpen(true)}
-                className="btn-secondary flex items-center gap-2"
-              >
-                <Edit className="w-4 h-4" />
-                Edit
-              </button>
+            {canActOnLead && (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setTransferOpen(true)}
+                  className="btn-secondary flex items-center gap-2 text-sm"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  Transfer
+                </button>
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="btn-secondary flex items-center gap-2 text-sm"
+                >
+                  <Edit className="w-4 h-4" />
+                  Edit
+                </button>
+              </div>
             )}
           </div>
 
@@ -102,11 +131,7 @@ export default function LeadDetail({ leadId, open, onClose }: LeadDetailProps) {
             <InfoRow icon={Phone} label="Phone" value={lead.phone} />
             <InfoRow icon={Mail} label="Email" value={lead.email} />
             <InfoRow icon={MapPin} label="Destination" value={lead.destination} />
-            <InfoRow
-              icon={Megaphone}
-              label="Campaign"
-              value={lead.campaign?.name}
-            />
+            <InfoRow icon={Megaphone} label="Campaign" value={lead.campaign?.name} />
             <InfoRow icon={User} label="Assigned To" value={lead.assignedTo?.name} />
             <InfoRow icon={Users} label="Group Size" value={lead.groupSize ? `${lead.groupSize} people` : undefined} />
             <InfoRow icon={DollarSign} label="Budget" value={formatCurrency(lead.budget)} />
@@ -202,6 +227,49 @@ export default function LeadDetail({ leadId, open, onClose }: LeadDetailProps) {
             onCancel={() => setEditOpen(false)}
           />
         )}
+      </Modal>
+
+      {/* Transfer modal */}
+      <Modal open={transferOpen} onClose={() => setTransferOpen(false)} title="Transfer Lead" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">
+            Transfer <strong className="text-slate-800">{lead?.name}</strong> to another team member.
+          </p>
+          <div>
+            <label className="label">Assign To <span className="text-red-500">*</span></label>
+            <select
+              value={transferToId}
+              onChange={(e) => setTransferToId(e.target.value)}
+              className="input"
+            >
+              <option value="">Select employee...</option>
+              {employees
+                .filter((e) => e.id !== lead?.assignedToId)
+                .map((e) => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Reason (optional)</label>
+            <input
+              value={transferReason}
+              onChange={(e) => setTransferReason(e.target.value)}
+              className="input"
+              placeholder="e.g. Out of office, specialisation match..."
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-1">
+            <button onClick={() => setTransferOpen(false)} className="btn-secondary">Cancel</button>
+            <button
+              onClick={handleTransfer}
+              disabled={!transferToId || transferLead.isPending}
+              className="btn-primary"
+            >
+              {transferLead.isPending ? 'Transferring...' : 'Transfer Lead'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </Modal>
   );

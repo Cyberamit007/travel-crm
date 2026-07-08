@@ -232,6 +232,68 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response): Prom
   }
 };
 
+// ─── Transfer ─────────────────────────────────────────────────────────────────
+
+export const transferLead = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { assignedToId, reason } = req.body;
+
+    if (!assignedToId) {
+      res.status(400).json({ success: false, error: 'assignedToId is required' });
+      return;
+    }
+
+    const existing = await prisma.lead.findFirst({
+      where: { id, deletedAt: null, ...orgFilter(req) },
+      include: { assignedTo: { select: { name: true } } },
+    });
+    if (!existing) { res.status(404).json({ success: false, error: 'Lead not found' }); return; }
+
+    if (req.user?.role === 'EMPLOYEE' && existing.assignedToId !== req.user.id) {
+      res.status(403).json({ success: false, error: 'You can only transfer leads assigned to you' });
+      return;
+    }
+
+    const targetUser = await prisma.user.findFirst({
+      where: { id: assignedToId, organizationId: req.user?.organizationId ?? null, isActive: true },
+      select: { id: true, name: true },
+    });
+    if (!targetUser) { res.status(404).json({ success: false, error: 'Target employee not found' }); return; }
+
+    const lead = await prisma.lead.update({
+      where: { id },
+      data: { assignedToId },
+      include: {
+        campaign: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
+      },
+    });
+
+    const fromName = existing.assignedTo?.name ?? 'Unassigned';
+    const details = reason
+      ? `Transferred from ${fromName} to ${targetUser.name} — ${reason}`
+      : `Transferred from ${fromName} to ${targetUser.name}`;
+
+    await prisma.activityLog.create({
+      data: { action: 'Lead Transferred', details, userId: req.user!.id, leadId: id },
+    });
+
+    await createNotification(
+      assignedToId, 'NEW_LEAD_ASSIGNED',
+      'Lead Transferred to You',
+      `"${lead.name}" was transferred to you by ${req.user?.name}.`,
+      id,
+    );
+
+    emitLeadUpdated(id);
+    res.json({ success: true, data: lead });
+  } catch (e) {
+    console.error('[leads] transferLead error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 // ─── Delete (soft) ────────────────────────────────────────────────────────────
 
 export const deleteLead = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
