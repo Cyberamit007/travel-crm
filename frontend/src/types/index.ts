@@ -123,6 +123,7 @@ export interface CampaignStat {
   total: number;
   confirmed: number;
   lost: number;
+  pending: number;
   active: number;
   conversionRate: string;
   targetLeads?: number;

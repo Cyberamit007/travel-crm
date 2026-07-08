@@ -372,3 +372,191 @@ export const getRecentActivity = async (req: AuthenticatedRequest, res: Response
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
+
+export const getDashboardStats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const org = orgFilter(req);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 86400000);
+
+    const baseWhere = { ...org, deletedAt: null };
+
+    // Run all queries in parallel
+    const [
+      allActiveLeads,
+      todayCreated,
+      todayConfirmed,
+      todayLost,
+      todayUpdatedLogs,
+      todayTransferredLogs,
+      followUpToday,
+      followUpDone,
+      followUpPending,
+      followUpOverdue,
+      recentConfirmed,
+      employees,
+      campaignLeads,
+    ] = await Promise.all([
+      // All active leads (for age distribution)
+      prisma.lead.findMany({
+        where: { ...baseWhere, status: { notIn: ['CONFIRMED', 'LOST'] } },
+        select: { createdAt: true },
+      }),
+      // Today created
+      prisma.lead.count({ where: { ...baseWhere, createdAt: { gte: todayStart, lt: todayEnd } } }),
+      // Today confirmed
+      prisma.lead.count({ where: { ...baseWhere, status: 'CONFIRMED', updatedAt: { gte: todayStart, lt: todayEnd } } }),
+      // Today lost
+      prisma.lead.count({ where: { ...baseWhere, status: 'LOST', updatedAt: { gte: todayStart, lt: todayEnd } } }),
+      // Today updated (activity logs)
+      prisma.activityLog.count({
+        where: { action: 'Lead Updated', createdAt: { gte: todayStart, lt: todayEnd } },
+      }),
+      // Today transferred
+      prisma.activityLog.count({
+        where: { action: 'Lead Transferred', createdAt: { gte: todayStart, lt: todayEnd } },
+      }),
+      // Follow-ups today (scheduled for today)
+      prisma.lead.count({
+        where: { ...baseWhere, followUpDate: { gte: todayStart, lt: todayEnd }, followUpDone: false },
+      }),
+      // Follow-ups done (all time)
+      prisma.lead.count({ where: { ...baseWhere, followUpDone: true } }),
+      // Follow-ups pending (future, not done)
+      prisma.lead.count({
+        where: { ...baseWhere, followUpDate: { gte: todayEnd }, followUpDone: false },
+      }),
+      // Follow-ups overdue
+      prisma.lead.count({
+        where: { ...baseWhere, status: 'FOLLOW_UP_SCHEDULED', followUpDone: false, followUpDate: { lt: now } },
+      }),
+      // Recent confirmed bookings
+      prisma.lead.findMany({
+        where: { ...baseWhere, status: 'CONFIRMED' },
+        orderBy: { updatedAt: 'desc' },
+        take: 8,
+        select: {
+          id: true, name: true, phone: true, destination: true,
+          budget: true, groupSize: true, updatedAt: true, createdAt: true,
+          assignedTo: { select: { id: true, name: true } },
+          campaign: { select: { id: true, name: true } },
+        },
+      }),
+      // Employee workload
+      prisma.user.findMany({
+        where: { ...org, role: 'EMPLOYEE', isActive: true },
+        select: {
+          id: true, name: true,
+          assignedLeads: {
+            where: { deletedAt: null, status: { notIn: ['CONFIRMED', 'LOST'] } },
+            select: { id: true },
+          },
+        },
+      }),
+      // Campaign leads for performance breakdown
+      prisma.lead.groupBy({
+        by: ['campaignId', 'status'],
+        where: { ...baseWhere, campaignId: { not: null } },
+        _count: true,
+      }),
+    ]);
+
+    // Lead age distribution (active leads only)
+    const ageDistribution = { fresh: 0, recent: 0, aging: 0, old: 0, stale: 0 };
+    for (const lead of allActiveLeads) {
+      const ageDays = (now.getTime() - new Date(lead.createdAt).getTime()) / 86400000;
+      if (ageDays < 1) ageDistribution.fresh++;
+      else if (ageDays < 3) ageDistribution.recent++;
+      else if (ageDays < 7) ageDistribution.aging++;
+      else if (ageDays < 14) ageDistribution.old++;
+      else ageDistribution.stale++;
+    }
+
+    // Employee workload map
+    const workload = employees.map((e) => ({
+      id: e.id,
+      name: e.name,
+      activeLeads: e.assignedLeads.length,
+    })).sort((a, b) => b.activeLeads - a.activeLeads);
+
+    // Campaign performance breakdown (pending / confirmed / lost per campaign)
+    const campaignBreakdown: Record<string, { pending: number; confirmed: number; lost: number }> = {};
+    for (const row of campaignLeads) {
+      const cid = row.campaignId!;
+      if (!campaignBreakdown[cid]) campaignBreakdown[cid] = { pending: 0, confirmed: 0, lost: 0 };
+      if (row.status === 'CONFIRMED') campaignBreakdown[cid].confirmed += row._count;
+      else if (row.status === 'LOST') campaignBreakdown[cid].lost += row._count;
+      else campaignBreakdown[cid].pending += row._count;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        leadAge: ageDistribution,
+        workload,
+        daily: {
+          created: todayCreated,
+          updated: todayUpdatedLogs,
+          transferred: todayTransferredLogs,
+          confirmed: todayConfirmed,
+          lost: todayLost,
+        },
+        followUpHealth: {
+          today: followUpToday,
+          done: followUpDone,
+          pending: followUpPending,
+          overdue: followUpOverdue,
+        },
+        recentConfirmed,
+        campaignBreakdown,
+      },
+    });
+  } catch (e) {
+    console.error('[leads] getDashboardStats error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const exportLeads = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { status, source, campaignId, assignedToId } = req.query;
+    const where: Record<string, unknown> = { ...orgFilter(req), deletedAt: null };
+    if (status) where.status = status;
+    if (source) where.source = source;
+    if (campaignId) where.campaignId = campaignId;
+    if (assignedToId) where.assignedToId = assignedToId;
+
+    const leads = await prisma.lead.findMany({
+      where,
+      include: {
+        campaign: { select: { name: true } },
+        assignedTo: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
+    });
+
+    const rows = leads.map((l) => ({
+      Name: l.name,
+      Phone: l.phone,
+      Email: l.email ?? '',
+      Status: l.status,
+      Source: l.source,
+      Destination: l.destination ?? '',
+      Campaign: l.campaign?.name ?? '',
+      'Assigned To': l.assignedTo?.name ?? '',
+      'Group Size': l.groupSize ?? '',
+      Budget: l.budget ?? '',
+      'Follow-up Date': l.followUpDate ? l.followUpDate.toISOString().slice(0, 16) : '',
+      'Follow-up Done': l.followUpDone ? 'Yes' : 'No',
+      Notes: l.notes ?? '',
+      'Created At': l.createdAt.toISOString().slice(0, 10),
+    }));
+
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    console.error('[leads] exportLeads error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};

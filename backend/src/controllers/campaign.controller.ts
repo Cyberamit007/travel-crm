@@ -162,31 +162,81 @@ export const deleteCampaign = async (req: AuthenticatedRequest, res: Response): 
   }
 };
 
-export const getCampaignStats = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const getCampaignStats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const campaigns = await prisma.campaign.findMany({
+    const orgId = req.user?.organizationId;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orgWhere: any = orgId ? { organizationId: orgId } : {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const campaigns: any[] = await prisma.campaign.findMany({
+      where: orgWhere,
       include: {
         leads: {
-          where: { deletedAt: null },
+          where: { deletedAt: null } as any,
           select: { status: true },
         },
-        _count: { select: { leads: { where: { deletedAt: null } } } },
+        _count: { select: { leads: { where: { deletedAt: null } as any } } },
       },
     });
 
-    const stats = campaigns.map((c) => {
-      const total = c.leads.length;
-      const confirmed = c.leads.filter((l) => l.status === 'CONFIRMED').length;
-      const lost = c.leads.filter((l) => l.status === 'LOST').length;
+    const stats = campaigns.map((c: any) => {
+      const total: number = c.leads.length;
+      const confirmed: number = c.leads.filter((l: any) => l.status === 'CONFIRMED').length;
+      const lost: number = c.leads.filter((l: any) => l.status === 'LOST').length;
+      const pending: number = c.leads.filter((l: any) => !['CONFIRMED', 'LOST'].includes(l.status)).length;
       const conversionRate = total > 0 ? ((confirmed / total) * 100).toFixed(1) : '0';
       return {
         id: c.id, name: c.name, destination: c.destination, status: c.status,
-        total, confirmed, lost, active: total - confirmed - lost,
+        total, confirmed, lost, pending,
+        active: total - confirmed - lost,
         conversionRate, targetLeads: c.targetLeads,
       };
     });
 
     res.json({ success: true, data: stats });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const exportCampaigns = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const orgId = req.user?.organizationId;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orgWhere: any = orgId ? { organizationId: orgId } : {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const campaigns: any[] = await prisma.campaign.findMany({
+      where: orgWhere,
+      include: {
+        leads: { where: { deletedAt: null } as any, select: { status: true } },
+        employees: { include: { user: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const rows = campaigns.map((c: any) => {
+      const total: number = c.leads.length;
+      const confirmed: number = c.leads.filter((l: any) => l.status === 'CONFIRMED').length;
+      const lost: number = c.leads.filter((l: any) => l.status === 'LOST').length;
+      return {
+        Name: c.name,
+        Destination: c.destination,
+        Status: c.status,
+        'Total Leads': total,
+        Confirmed: confirmed,
+        Lost: lost,
+        Pending: total - confirmed - lost,
+        'Conversion %': total > 0 ? ((confirmed / total) * 100).toFixed(1) : '0',
+        Budget: c.budget ?? '',
+        'Target Leads': c.targetLeads ?? '',
+        Employees: c.employees.map((e: any) => e.user.name).join(', '),
+        'Start Date': c.startDate ? c.startDate.toISOString().slice(0, 10) : '',
+        'End Date': c.endDate ? c.endDate.toISOString().slice(0, 10) : '',
+        'Created At': c.createdAt.toISOString().slice(0, 10),
+      };
+    });
+
+    res.json({ success: true, data: rows });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }

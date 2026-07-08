@@ -4,6 +4,8 @@ import { useLeads, useUpdateLead } from '../../hooks/useLeads';
 import { useAuthStore } from '../../store/authStore';
 import { Lead } from '../../types/index';
 import LeadDetail from '../../components/leads/LeadDetail';
+import { useStarredLeads } from '../../hooks/useStarredLeads';
+import { useRecentViews } from '../../hooks/useRecentViews';
 import Modal from '../../components/ui/Modal';
 import Badge from '../../components/ui/Badge';
 import { formatDate, formatDateTime, isOverdue, cn } from '../../utils/helpers';
@@ -181,6 +183,10 @@ export default function EmployeeFollowUpsPage() {
   const { user } = useAuthStore();
   const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
   const [rescheduleLeadId, setRescheduleLeadId] = useState<Lead | null>(null);
+  const { isStarred, toggle: toggleStar } = useStarredLeads();
+  const { trackView } = useRecentViews();
+
+  const openDetail = (id: string) => { setDetailLeadId(id); trackView(id); };
 
   const { data, isLoading, refetch } = useLeads({
     assignedToId: user?.id,
@@ -236,7 +242,7 @@ export default function EmployeeFollowUpsPage() {
                 key={lead.id}
                 lead={lead}
                 variant="overdue"
-                onView={(l) => setDetailLeadId(l.id)}
+                onView={(l) => openDetail(l.id)}
                 onMarkDone={handleMarkDone}
                 onReschedule={setRescheduleLeadId}
               />
@@ -265,7 +271,7 @@ export default function EmployeeFollowUpsPage() {
                 key={lead.id}
                 lead={lead}
                 variant="today"
-                onView={(l) => setDetailLeadId(l.id)}
+                onView={(l) => openDetail(l.id)}
                 onMarkDone={handleMarkDone}
                 onReschedule={setRescheduleLeadId}
               />
@@ -294,7 +300,7 @@ export default function EmployeeFollowUpsPage() {
                 key={lead.id}
                 lead={lead}
                 variant="upcoming"
-                onView={(l) => setDetailLeadId(l.id)}
+                onView={(l) => openDetail(l.id)}
                 onMarkDone={handleMarkDone}
                 onReschedule={setRescheduleLeadId}
               />
@@ -315,6 +321,8 @@ export default function EmployeeFollowUpsPage() {
         leadId={detailLeadId}
         open={!!detailLeadId}
         onClose={() => setDetailLeadId(null)}
+        isStarred={detailLeadId ? isStarred(detailLeadId) : false}
+        onToggleStar={detailLeadId ? () => toggleStar(detailLeadId) : undefined}
       />
 
       <RescheduleModal

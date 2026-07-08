@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Eye, Edit, RefreshCw } from 'lucide-react';
+import { Search, Plus, Eye, Edit, RefreshCw, Star } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useLeads, useCreateLead, useUpdateLead } from '../../hooks/useLeads';
 import { Lead } from '../../types/index';
 import { useAuthStore } from '../../store/authStore';
+import { useStarredLeads } from '../../hooks/useStarredLeads';
+import { useRecentViews } from '../../hooks/useRecentViews';
 import Table, { Column } from '../../components/ui/Table';
 import Modal from '../../components/ui/Modal';
 import Pagination from '../../components/ui/Pagination';
@@ -49,6 +51,13 @@ export default function EmployeeLeadsPage() {
   const { data, isLoading, refetch } = useLeads(filters);
   const createLead = useCreateLead();
   const updateLead = useUpdateLead();
+  const { isStarred, toggle: toggleStar } = useStarredLeads();
+  const { trackView } = useRecentViews();
+
+  const openDetail = (id: string) => {
+    setDetailLeadId(id);
+    trackView(id);
+  };
 
   const leads = data?.data ?? [];
   const meta = data?.meta;
@@ -130,7 +139,14 @@ export default function EmployeeLeadsPage() {
       render: (row) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => setDetailLeadId(row.id)}
+            onClick={() => toggleStar(row.id)}
+            className="p-1.5 rounded-lg hover:bg-yellow-50 transition-colors"
+            title={isStarred(row.id) ? 'Unstar' : 'Star'}
+          >
+            <Star className={cn('w-4 h-4', isStarred(row.id) ? 'text-yellow-500 fill-yellow-500' : 'text-slate-300 hover:text-yellow-400')} />
+          </button>
+          <button
+            onClick={() => openDetail(row.id)}
             className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-primary-600 transition-colors"
             title="View"
           >
@@ -196,7 +212,7 @@ export default function EmployeeLeadsPage() {
           data={leads}
           loading={isLoading}
           emptyMessage="No leads assigned to you yet"
-          onRowClick={(row) => setDetailLeadId(row.id)}
+          onRowClick={(row) => openDetail(row.id)}
         />
       </div>
 
@@ -230,6 +246,8 @@ export default function EmployeeLeadsPage() {
         leadId={detailLeadId}
         open={!!detailLeadId}
         onClose={() => setDetailLeadId(null)}
+        isStarred={detailLeadId ? isStarred(detailLeadId) : false}
+        onToggleStar={detailLeadId ? () => toggleStar(detailLeadId) : undefined}
       />
     </div>
   );

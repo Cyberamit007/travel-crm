@@ -151,6 +151,45 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response): Prom
   }
 };
 
+export const exportUsers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { organizationId: req.user?.organizationId ?? null },
+      include: {
+        _count: { select: { assignedLeads: { where: { deletedAt: null } } } },
+        assignedLeads: {
+          where: { deletedAt: null },
+          select: { status: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const rows = users.map((u) => {
+      const confirmed = u.assignedLeads.filter((l) => l.status === 'CONFIRMED').length;
+      const lost = u.assignedLeads.filter((l) => l.status === 'LOST').length;
+      const total = u.assignedLeads.length;
+      return {
+        Name: u.name,
+        Email: u.email,
+        Phone: u.phone ?? '',
+        Role: u.role,
+        Status: u.isActive ? 'Active' : 'Inactive',
+        'Total Leads': total,
+        Confirmed: confirmed,
+        Lost: lost,
+        Active: total - confirmed - lost,
+        'Conversion %': total > 0 ? ((confirmed / total) * 100).toFixed(1) : '0',
+        'Joined At': u.createdAt.toISOString().slice(0, 10),
+      };
+    });
+
+    res.json({ success: true, data: rows });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 export const getEmployeePerformance = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const employees = await prisma.user.findMany({
