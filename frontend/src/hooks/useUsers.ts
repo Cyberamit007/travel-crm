@@ -94,3 +94,18 @@ export function useDeleteUser() {
     },
   });
 }
+
+export function useResetEmployeePassword() {
+  return useMutation({
+    mutationFn: async ({ id, newPassword }: { id: string; newPassword: string }) => {
+      const { data } = await api.put(`/users/${id}/reset-password`, { newPassword });
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Password reset successfully');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Failed to reset password');
+    },
+  });
+}

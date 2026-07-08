@@ -5,16 +5,27 @@ import { AuthenticatedRequest } from '../types/index.js';
 
 export const getUsers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { role, search, page = 1, limit = 20 } = req.query;
+    const isAdmin = req.user?.role === 'ADMIN';
+    const { role, search, page = 1, limit = 20, isActive } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const where: Record<string, unknown> = {};
-    if (role) where.role = role;
-    if (search) {
-      where.OR = [
-        { name: { contains: search as string } },
-        { email: { contains: search as string } },
-      ];
+    const where: Record<string, unknown> = {
+      organizationId: req.user?.organizationId ?? null,
+    };
+
+    if (isAdmin) {
+      if (role) where.role = role;
+      if (isActive !== undefined) where.isActive = isActive === 'true';
+      if (search) {
+        where.OR = [
+          { name: { contains: search as string } },
+          { email: { contains: search as string } },
+        ];
+      }
+    } else {
+      // Non-admins: only see active employees (for lead transfer dropdown)
+      where.role = 'EMPLOYEE';
+      where.isActive = true;
     }
 
     const [users, total] = await Promise.all([
@@ -90,6 +101,37 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
       select: { id: true, name: true, email: true, role: true, phone: true, isActive: true },
     });
     res.json({ success: true, data: user });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const resetUserPassword = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 8) {
+      res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+      return;
+    }
+
+    const target = await prisma.user.findUnique({ where: { id } });
+    if (!target || target.organizationId !== req.user?.organizationId) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id }, data: { password: hashed } });
+
+    // Revoke all existing sessions for this user
+    await prisma.refreshToken.updateMany({
+      where: { userId: id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    res.json({ success: true, message: 'Password reset successfully' });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }

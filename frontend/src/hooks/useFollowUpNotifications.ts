@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useLeads } from './useLeads';
 
@@ -28,11 +29,10 @@ export function useFollowUpNotifications() {
     );
 
     const check = () => {
-      if (!('Notification' in window) || Notification.permission !== 'granted') return;
-
       const now = Date.now();
       const ADVANCE_MS = 10 * 60_000; // notify up to 10 min before due
       const GRACE_MS   =  2 * 60_000; // also catch overdue within last 2 min
+      const canBrowserNotif = 'Notification' in window && Notification.permission === 'granted';
 
       leads.forEach((lead) => {
         if (!lead.followUpDate || notifiedIds.current.has(lead.id)) return;
@@ -42,21 +42,36 @@ export function useFollowUpNotifications() {
           notifiedIds.current.add(lead.id);
           const minsLeft = Math.round((due - now) / 60_000);
           const timeLabel = minsLeft > 1 ? `in ${minsLeft} min` : minsLeft === 1 ? 'in 1 min' : 'now';
-          try {
-            const n = new Notification(`Follow-up: ${lead.name}`, {
-              body: lead.followUpNotes
-                ? `${timeLabel} — ${lead.followUpNotes} · ${lead.phone}`
-                : `Follow up with ${lead.name} ${timeLabel} — ${lead.phone}`,
-              icon: '/favicon.ico',
-              tag: `followup-${lead.id}`,
-              requireInteraction: true,
+          const body = lead.followUpNotes
+            ? `${timeLabel} — ${lead.followUpNotes} · ${lead.phone}`
+            : `Follow up with ${lead.name} ${timeLabel} — ${lead.phone}`;
+
+          if (canBrowserNotif) {
+            try {
+              const n = new Notification(`Follow-up: ${lead.name}`, {
+                body,
+                icon: '/favicon.ico',
+                tag: `followup-${lead.id}`,
+                requireInteraction: true,
+              });
+              n.onclick = () => { window.focus(); n.close(); };
+            } catch {
+              // fall through to toast
+            }
+          }
+
+          // In-app toast fallback — works on all devices including iOS
+          if (!canBrowserNotif) {
+            toast(`⏰ Follow-up ${timeLabel}: ${lead.name}\n${lead.phone}${lead.followUpNotes ? `\n${lead.followUpNotes}` : ''}`, {
+              duration: 15000,
+              style: {
+                background: '#fff7ed',
+                border: '1px solid #fb923c',
+                color: '#9a3412',
+                maxWidth: '340px',
+                whiteSpace: 'pre-line',
+              },
             });
-            n.onclick = () => {
-              window.focus();
-              n.close();
-            };
-          } catch {
-            // Notification API not available in this context
           }
         }
       });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Plus, Edit, Trash2, ToggleLeft, ToggleRight, TrendingUp, Search, Copy, Check } from 'lucide-react';
-import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, useEmployeePerformance } from '../../hooks/useUsers';
+import { Plus, Edit, Trash2, ToggleLeft, ToggleRight, TrendingUp, Search, Copy, Check, KeyRound } from 'lucide-react';
+import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, useEmployeePerformance, useResetEmployeePassword } from '../../hooks/useUsers';
 import { User } from '../../types/index';
 import { useForm } from 'react-hook-form';
 import Table, { Column } from '../../components/ui/Table';
@@ -98,6 +98,60 @@ function EmployeeFormModal({
           </button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+function ResetPasswordModal({ open, onClose, user }: { open: boolean; onClose: () => void; user: User | null }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [show, setShow] = useState(false);
+  const resetPassword = useResetEmployeePassword();
+
+  const handleSubmit = () => {
+    if (!user || newPassword.length < 8) return;
+    resetPassword.mutate({ id: user.id, newPassword }, { onSuccess: () => { onClose(); setNewPassword(''); setShow(false); } });
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Reset Employee Password" size="sm">
+      {user && (
+        <div className="space-y-4">
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <p className="text-sm font-medium text-slate-700">{user.name}</p>
+            <p className="text-xs text-slate-500">{user.email}</p>
+          </div>
+          <div>
+            <label className="label">New Password <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <input
+                type={show ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="input pr-10"
+                placeholder="Minimum 8 characters"
+                minLength={8}
+              />
+              <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                {show ? '🙈' : '👁'}
+              </button>
+            </div>
+            {newPassword.length > 0 && newPassword.length < 8 && (
+              <p className="text-red-500 text-xs mt-1">Minimum 8 characters</p>
+            )}
+          </div>
+          <p className="text-xs text-slate-400">The employee's current sessions will be logged out immediately.</p>
+          <div className="flex justify-end gap-3 pt-1">
+            <button onClick={onClose} className="btn-secondary">Cancel</button>
+            <button
+              onClick={handleSubmit}
+              disabled={newPassword.length < 8 || resetPassword.isPending}
+              className="btn-primary"
+            >
+              {resetPassword.isPending ? 'Resetting...' : 'Reset Password'}
+            </button>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -204,6 +258,7 @@ export default function AdminEmployeesPage() {
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [perfEmployee, setPerfEmployee] = useState<EmployeePerformance | null>(null);
   const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string } | null>(null);
+  const [resetPassUser, setResetPassUser] = useState<User | null>(null);
 
   const { data, isLoading } = useUsers({ search: search || undefined, limit: 100 });
   const { data: perfData } = useEmployeePerformance();
@@ -324,6 +379,13 @@ export default function AdminEmployeesPage() {
               </button>
             )}
             <button
+              onClick={() => setResetPassUser(row)}
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-mountain-600 transition-colors"
+              title="Reset Password"
+            >
+              <KeyRound className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => setEditUser(row)}
               className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
               title="Edit"
@@ -417,6 +479,12 @@ export default function AdminEmployeesPage() {
         onClose={() => setCreatedCreds(null)}
         email={createdCreds?.email ?? ''}
         password={createdCreds?.password ?? ''}
+      />
+
+      <ResetPasswordModal
+        open={!!resetPassUser}
+        onClose={() => setResetPassUser(null)}
+        user={resetPassUser}
       />
     </div>
   );

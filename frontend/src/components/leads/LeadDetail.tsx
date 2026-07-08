@@ -103,7 +103,7 @@ export default function LeadDetail({ leadId, open, onClose }: LeadDetailProps) {
           {/* Status update */}
           <div>
             <p className="text-sm font-medium text-slate-700 mb-2">Update Status</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
               {statusOrder.map((s) => {
                 const cfg = leadStatusConfig[s];
                 const isCurrent = lead.status === s;
@@ -113,7 +113,7 @@ export default function LeadDetail({ leadId, open, onClose }: LeadDetailProps) {
                     onClick={() => handleStatusChange(s)}
                     disabled={isCurrent || updateLead.isPending}
                     className={cn(
-                      'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
+                      'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all whitespace-nowrap flex-shrink-0',
                       isCurrent
                         ? `${cfg.bg} ${cfg.color} border-transparent ring-2 ring-offset-1 ring-current`
                         : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'

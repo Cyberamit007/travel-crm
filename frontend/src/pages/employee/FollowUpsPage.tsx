@@ -44,7 +44,7 @@ function RescheduleModal({
     );
   };
 
-  const minDatetime = toLocalDatetimeInput(lead?.createdAt ?? new Date().toISOString());
+  const minDatetime = toLocalDatetimeInput(new Date().toISOString());
 
   return (
     <Modal open={open} onClose={onClose} title="Reschedule Follow-up" size="sm">
@@ -60,8 +60,8 @@ function RescheduleModal({
               {...register('followUpDate', {
                 required: 'Please select a date and time',
                 validate: (val) => {
-                  if (!val || !lead?.createdAt) return true;
-                  return new Date(val) >= new Date(lead.createdAt) || 'Follow-up date cannot be before the lead was created';
+                  if (!val) return true;
+                  return new Date(val) > new Date() || 'Follow-up date must be in the future';
                 },
               })}
               type="datetime-local"

@@ -36,7 +36,7 @@ function ChangePasswordSection() {
 
   const onSubmit = async (data: ChangePasswordForm) => {
     try {
-      await api.post('/auth/change-password', {
+      await api.put('/auth/change-password', {
         currentPassword: data.currentPassword,
         newPassword: data.newPassword,
       });

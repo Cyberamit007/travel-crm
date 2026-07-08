@@ -99,9 +99,9 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
   const wordCount = messageText.trim() ? messageText.trim().split(/\s+/).length : 0;
 
   const nowLocal = toLocalDatetimeInput(new Date().toISOString());
-  const minDatetime = defaultValues?.createdAt
-    ? toLocalDatetimeInput(defaultValues.createdAt)
-    : nowLocal;
+  const todayDate = new Date().toISOString().split('T')[0];
+  // Follow-up can only be set to future times, never past
+  const minDatetime = nowLocal;
 
   // Wrapper: convert followUpDate from local datetime-input to ISO before submitting
   const handleFormSubmit = (data: LeadFormData) => {
@@ -263,7 +263,7 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
 
       <div>
         <label className="label">Preferred Date</label>
-        <input {...register('preferredDate')} type="date" className="input" />
+        <input {...register('preferredDate')} type="date" className="input" min={todayDate} />
       </div>
 
       <div>
@@ -300,9 +300,7 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
               {...register('followUpDate', {
                 validate: (val) => {
                   if (!val) return true;
-                  const selected = new Date(val);
-                  const minDate = defaultValues?.createdAt ? new Date(defaultValues.createdAt) : new Date();
-                  return selected >= minDate || 'Follow-up date cannot be before the lead was created';
+                  return new Date(val) > new Date() || 'Follow-up date must be in the future';
                 },
               })}
               type="datetime-local"

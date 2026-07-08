@@ -5,7 +5,7 @@ import {
   LogOut, ChevronDown, Menu, X, UserCircle, Megaphone, MessageSquarePlus
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { useNotifications, useMarkAllAsRead } from '../../hooks/useNotifications';
+import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useFollowUpNotifications } from '../../hooks/useFollowUpNotifications';
 import Avatar from '../ui/Avatar';
@@ -33,6 +33,7 @@ export default function AdminLayout() {
 
   const { data: notifData } = useNotifications(1, 10);
   const markAllRead = useMarkAllAsRead();
+  const markOneRead = useMarkAsRead();
   useRealtimeSync();
   useFollowUpNotifications();
 
@@ -187,14 +188,20 @@ export default function AdminLayout() {
                       notifications.map((n) => (
                         <div
                           key={n.id}
+                          onClick={() => { if (!n.isRead) markOneRead.mutate(n.id); }}
                           className={cn(
-                            'px-4 py-3 border-b border-slate-100 last:border-0',
-                            !n.isRead && 'bg-primary-50'
+                            'px-4 py-3 border-b border-slate-100 last:border-0 transition-colors',
+                            !n.isRead ? 'bg-primary-50 hover:bg-primary-100 cursor-pointer' : 'hover:bg-slate-50'
                           )}
                         >
-                          <p className="text-sm font-medium text-slate-800">{n.title}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">{n.message}</p>
-                          <p className="text-xs text-slate-400 mt-1">{formatRelativeTime(n.createdAt)}</p>
+                          <div className="flex items-start gap-2">
+                            {!n.isRead && <span className="mt-1.5 w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-800">{n.title}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">{n.message}</p>
+                              <p className="text-xs text-slate-400 mt-1">{formatRelativeTime(n.createdAt)}</p>
+                            </div>
+                          </div>
                         </div>
                       ))
                     )}
