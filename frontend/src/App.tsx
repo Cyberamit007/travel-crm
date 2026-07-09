@@ -13,6 +13,7 @@ import AdminSettingsPage from './pages/admin/SettingsPage';
 import AdminFeedbackPage from './pages/admin/FeedbackPage';
 import AdminActivityFeedPage from './pages/admin/ActivityFeedPage';
 import AdminReportsPage from './pages/admin/ReportsPage';
+import MastersPage from './pages/admin/MastersPage';
 import EmployeeLeadsPage from './pages/employee/LeadsPage';
 import EmployeeFollowUpsPage from './pages/employee/FollowUpsPage';
 import EmployeeSettingsPage from './pages/employee/SettingsPage';
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="feedback" element={<AdminFeedbackPage />} />
         <Route path="activity" element={<AdminActivityFeedPage />} />
         <Route path="reports" element={<AdminReportsPage />} />
+        <Route path="masters" element={<MastersPage />} />
       </Route>
 
       <Route

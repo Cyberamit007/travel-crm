@@ -26,6 +26,8 @@ model Organization {
   tags          Tag[]
   leaveRequests LeaveRequest[]
   departments   Department[]
+  destinations  Destination[]
+  tourCategories TourCategory[]
 
   @@map("organizations")
 }
@@ -490,4 +492,46 @@ model Designation {
 
   @@index([departmentId])
   @@map("designations")
+}
+
+// ─── Masters ──────────────────────────────────────────────────────────────────
+
+model Destination {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  name        String
+  country     String
+  state       String?
+  city        String?
+  type        String   @default("DOMESTIC")  // DOMESTIC | INTERNATIONAL
+  description String?
+  isPopular   Boolean  @default(false)
+  status      String   @default("ACTIVE")    // ACTIVE | INACTIVE
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("destinations")
+}
+
+model TourCategory {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  name        String
+  description String?
+  icon        String?
+  sortOrder   Int      @default(0)
+  status      String   @default("ACTIVE")  // ACTIVE | INACTIVE
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@map("tour_categories")
 }

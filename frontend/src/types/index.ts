@@ -298,6 +298,35 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+// ─── Masters ──────────────────────────────────────────────────────────────────
+
+export interface Destination {
+  id: string;
+  organizationId?: string;
+  name: string;
+  country: string;
+  state?: string;
+  city?: string;
+  type: 'DOMESTIC' | 'INTERNATIONAL';
+  description?: string;
+  isPopular: boolean;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TourCategory {
+  id: string;
+  organizationId?: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  sortOrder: number;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type FeedbackType = 'BUG' | 'SUGGESTION' | 'OTHER';
 export type FeedbackPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type FeedbackStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';

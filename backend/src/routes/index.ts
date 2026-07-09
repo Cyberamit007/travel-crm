@@ -14,6 +14,7 @@ import reportRoutes from './report.routes.js';
 import metaConnectionRoutes from './metaConnection.routes.js';
 import departmentRoutes from './department.routes.js';
 import designationRoutes from './designation.routes.js';
+import mastersRoutes from './masters.routes.js';
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use('/reports', reportRoutes);
 router.use('/settings/meta-connection', metaConnectionRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/designations', designationRoutes);
+router.use('/masters', mastersRoutes);
 
 export default router;
