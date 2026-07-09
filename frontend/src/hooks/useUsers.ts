@@ -9,6 +9,8 @@ export interface UserFilters {
   search?: string;
   role?: string;
   isActive?: boolean;
+  departmentId?: string;
+  designationId?: string;
 }
 
 export function useUsers(filters: UserFilters = {}) {

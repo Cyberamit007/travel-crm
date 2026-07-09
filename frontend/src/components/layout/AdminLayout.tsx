@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Mountain, LayoutDashboard, Users, Briefcase, Bell, Settings,
+  Mountain, LayoutDashboard, Users, Building2, Bell, Settings,
   LogOut, ChevronDown, Menu, X, UserCircle, Megaphone, MessageSquarePlus,
   Activity, BarChart2
 } from 'lucide-react';
@@ -17,7 +17,7 @@ const navLinks = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/leads', label: 'Leads', icon: Users },
   { to: '/admin/campaigns', label: 'Campaigns', icon: Megaphone },
-  { to: '/admin/employees', label: 'Employees', icon: Briefcase },
+  { to: '/admin/organization', label: 'Organization', icon: Building2 },
   { to: '/admin/reports', label: 'Reports', icon: BarChart2 },
   { to: '/admin/activity', label: 'Activity', icon: Activity },
   { to: '/admin/feedback', label: 'Feedback', icon: MessageSquarePlus },

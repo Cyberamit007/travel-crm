@@ -8,6 +8,7 @@ import EmployeeDashboard from './components/dashboard/EmployeeDashboard';
 import AdminLeadsPage from './pages/admin/LeadsPage';
 import AdminCampaignsPage from './pages/admin/CampaignsPage';
 import AdminEmployeesPage from './pages/admin/EmployeesPage';
+import OrganizationPage from './pages/admin/OrganizationPage';
 import AdminSettingsPage from './pages/admin/SettingsPage';
 import AdminFeedbackPage from './pages/admin/FeedbackPage';
 import AdminActivityFeedPage from './pages/admin/ActivityFeedPage';
@@ -48,7 +49,8 @@ export default function App() {
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="leads" element={<AdminLeadsPage />} />
         <Route path="campaigns" element={<AdminCampaignsPage />} />
-        <Route path="employees" element={<AdminEmployeesPage />} />
+        <Route path="employees" element={<Navigate to="/admin/organization" replace />} />
+        <Route path="organization" element={<OrganizationPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />
         <Route path="feedback" element={<AdminFeedbackPage />} />
         <Route path="activity" element={<AdminActivityFeedPage />} />

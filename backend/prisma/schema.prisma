@@ -20,11 +20,12 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]
-  campaigns    Campaign[]
-  leads        Lead[]
-  tags         Tag[]
+  users         User[]
+  campaigns     Campaign[]
+  leads         Lead[]
+  tags          Tag[]
   leaveRequests LeaveRequest[]
+  departments   Department[]
 
   @@map("organizations")
 }
@@ -46,6 +47,12 @@ model User {
   availability String   @default("AVAILABLE")  // AVAILABLE | BUSY | OFFLINE
   lastLogin    DateTime?
 
+  employeeId    String?      @unique
+  departmentId  String?
+  department    Department?  @relation("UserDepartment", fields: [departmentId], references: [id])
+  designationId String?
+  designation   Designation? @relation("UserDesignation", fields: [designationId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -60,8 +67,11 @@ model User {
   leaveRequests       LeaveRequest[]     @relation("EmployeeLeaves")
   approvedLeaves      LeaveRequest[]     @relation("ApprovedLeaves")
   leadComments        LeadComment[]
+  headedDepartments   Department[]       @relation("DepartmentHead")
 
   @@index([organizationId])
+  @@index([departmentId])
+  @@index([designationId])
   @@map("users")
 }
 
@@ -437,4 +447,47 @@ model Feedback {
   updatedAt DateTime @updatedAt
 
   @@map("feedback")
+}
+
+// ─── Organization Module ──────────────────────────────────────────────────────
+
+model Department {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  name        String
+  code        String
+  description String?
+  headId      String?
+  head        User?         @relation("DepartmentHead", fields: [headId], references: [id])
+  status      String        @default("ACTIVE")  // ACTIVE | INACTIVE
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees    User[]        @relation("UserDepartment")
+  designations Designation[]
+
+  @@unique([code, organizationId])
+  @@index([organizationId])
+  @@map("departments")
+}
+
+model Designation {
+  id           String     @id @default(uuid())
+  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId String
+
+  name        String
+  description String?
+  status      String     @default("ACTIVE")  // ACTIVE | INACTIVE
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees User[] @relation("UserDesignation")
+
+  @@index([departmentId])
+  @@map("designations")
 }

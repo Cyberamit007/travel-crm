@@ -7,6 +7,32 @@ export type NotificationType = 'FOLLOW_UP_DUE' | 'FOLLOW_UP_OVERDUE' | 'NEW_LEAD
 export type AvailabilityStatus = 'AVAILABLE' | 'BUSY' | 'OFFLINE';
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
+export interface Department {
+  id: string;
+  organizationId?: string;
+  name: string;
+  code: string;
+  description?: string;
+  headId?: string;
+  head?: { id: string; name: string };
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+  _count?: { employees: number; designations: number };
+}
+
+export interface Designation {
+  id: string;
+  departmentId: string;
+  department?: { id: string; name: string; code: string };
+  name: string;
+  description?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+  _count?: { employees: number };
+}
+
 export interface User {
   id: string;
   name: string;
@@ -18,6 +44,11 @@ export interface User {
   availability: AvailabilityStatus;
   lastLogin?: string;
   createdAt: string;
+  employeeId?: string;
+  departmentId?: string;
+  department?: { id: string; name: string; code: string };
+  designationId?: string;
+  designation?: { id: string; name: string };
   _count?: { assignedLeads: number };
 }
 

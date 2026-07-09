@@ -12,6 +12,8 @@ import activityRoutes from './activity.routes.js';
 import settingsRoutes from './settings.routes.js';
 import reportRoutes from './report.routes.js';
 import metaConnectionRoutes from './metaConnection.routes.js';
+import departmentRoutes from './department.routes.js';
+import designationRoutes from './designation.routes.js';
 
 const router = Router();
 
@@ -28,5 +30,7 @@ router.use('/activity', activityRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/reports', reportRoutes);
 router.use('/settings/meta-connection', metaConnectionRoutes);
+router.use('/departments', departmentRoutes);
+router.use('/designations', designationRoutes);
 
 export default router;

@@ -28,6 +28,12 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response): Promis
       where.isActive = true;
     }
 
+    // Support dept/desig filters (admin only)
+    if (isAdmin) {
+      if (req.query.departmentId) where.departmentId = req.query.departmentId;
+      if (req.query.designationId) where.designationId = req.query.designationId;
+    }
+
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
@@ -35,8 +41,11 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response): Promis
         take: Number(limit),
         select: {
           id: true, name: true, email: true, role: true,
-          phone: true, isActive: true, createdAt: true,
-          _count: { select: { assignedLeads: true } },
+          phone: true, isActive: true, availability: true, lastLogin: true, createdAt: true,
+          employeeId: true,
+          department: { select: { id: true, name: true, code: true } },
+          designation: { select: { id: true, name: true } },
+          _count: { select: { assignedLeads: { where: { deletedAt: null } } } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -55,7 +64,7 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response): Promis
 
 export const createUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { name, email, password, role, phone } = req.body;
+    const { name, email, password, role, phone, departmentId, designationId } = req.body;
 
     if (!name?.trim() || !email?.trim() || !password) {
       res.status(400).json({ success: false, error: 'Name, email, and password are required' });
@@ -72,6 +81,11 @@ export const createUser = async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
+    // Auto-generate employeeId: EMP001, EMP002, ...
+    const orgId = req.user?.organizationId ?? null;
+    const empCount = await prisma.user.count({ where: { organizationId: orgId } });
+    const employeeId = `EMP${String(empCount + 1).padStart(3, '0')}`;
+
     const hashed = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
       data: {
@@ -80,9 +94,17 @@ export const createUser = async (req: AuthenticatedRequest, res: Response): Prom
         password: hashed,
         role: role || 'EMPLOYEE',
         phone: phone || null,
-        organizationId: req.user?.organizationId ?? null,
+        organizationId: orgId,
+        employeeId,
+        departmentId: departmentId || null,
+        designationId: designationId || null,
       },
-      select: { id: true, name: true, email: true, role: true, phone: true, createdAt: true },
+      select: {
+        id: true, name: true, email: true, role: true, phone: true,
+        isActive: true, availability: true, createdAt: true, employeeId: true,
+        department: { select: { id: true, name: true, code: true } },
+        designation: { select: { id: true, name: true } },
+      },
     });
     res.status(201).json({ success: true, data: user });
   } catch {
@@ -93,12 +115,24 @@ export const createUser = async (req: AuthenticatedRequest, res: Response): Prom
 export const updateUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, phone, isActive } = req.body;
+    const { name, phone, isActive, departmentId, designationId } = req.body;
+
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (departmentId !== undefined) updateData.departmentId = departmentId || null;
+    if (designationId !== undefined) updateData.designationId = designationId || null;
 
     const user = await prisma.user.update({
       where: { id },
-      data: { name, phone, isActive },
-      select: { id: true, name: true, email: true, role: true, phone: true, isActive: true },
+      data: updateData,
+      select: {
+        id: true, name: true, email: true, role: true, phone: true, isActive: true,
+        availability: true, createdAt: true, employeeId: true,
+        department: { select: { id: true, name: true, code: true } },
+        designation: { select: { id: true, name: true } },
+      },
     });
     res.json({ success: true, data: user });
   } catch {
@@ -221,6 +255,9 @@ export const getEmployeeProfile = async (req: AuthenticatedRequest, res: Respons
       select: {
         id: true, name: true, email: true, role: true, phone: true,
         avatar: true, isActive: true, availability: true, lastLogin: true, createdAt: true,
+        employeeId: true,
+        department: { select: { id: true, name: true, code: true } },
+        designation: { select: { id: true, name: true } },
         campaignAssignments: {
           include: { campaign: { select: { id: true, name: true, destination: true, status: true } } },
         },
