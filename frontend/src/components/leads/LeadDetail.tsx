@@ -85,7 +85,7 @@ function InfoCell({ icon: Icon, label, value }: { icon: React.ElementType; label
 
 function StatusBar({ current, onUpdate, disabled }: { current: LeadStatus; onUpdate: (s: LeadStatus) => void; disabled: boolean }) {
   return (
-    <div className="flex gap-1.5 overflow-x-auto scrollbar-thin pb-0.5">
+    <div className="flex flex-wrap gap-1.5">
       {statusOrder.map((s) => {
         const cfg = leadStatusConfig[s];
         const isCurrent = current === s;
@@ -95,7 +95,7 @@ function StatusBar({ current, onUpdate, disabled }: { current: LeadStatus; onUpd
             onClick={() => !isCurrent && onUpdate(s)}
             disabled={isCurrent || disabled}
             className={cn(
-              'flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap',
+              'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap',
               isCurrent
                 ? `${cfg.bg} ${cfg.color} border-transparent ring-2 ring-offset-1 ring-current shadow-sm`
                 : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-800 hover:bg-slate-50 disabled:cursor-default'
