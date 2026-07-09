@@ -9,48 +9,182 @@
   body {
     @apply bg-slate-50 text-slate-900 font-sans antialiased;
   }
+  :root {
+    --panel-width: min(620px, 100vw);
+  }
 }
 
 @layer components {
+  /* ── Cards ──────────────────────────────────────────────────────────────── */
   .card {
-    @apply bg-white rounded-xl border border-slate-200 shadow-sm;
+    @apply bg-white rounded-2xl border border-slate-100 shadow-sm;
   }
+  .card-interactive {
+    @apply card hover:shadow-md hover:-translate-y-px transition-all duration-200 cursor-pointer;
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────────────────────── */
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center bg-primary-600 hover:bg-primary-700 active:bg-primary-800
+      text-white font-semibold px-4 py-2.5 rounded-xl transition-all duration-150
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2
+      disabled:opacity-50 disabled:cursor-not-allowed
+      shadow-sm hover:shadow-md active:scale-[0.99];
   }
   .btn-secondary {
-    @apply bg-white hover:bg-slate-50 text-slate-700 font-medium px-4 py-2 rounded-lg border border-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2;
+    @apply inline-flex items-center justify-center bg-white hover:bg-slate-50 active:bg-slate-100
+      text-slate-700 font-medium px-4 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300
+      transition-all duration-150
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-1
+      active:scale-[0.99];
   }
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2;
+    @apply inline-flex items-center justify-center bg-red-600 hover:bg-red-700 active:bg-red-800
+      text-white font-semibold px-4 py-2.5 rounded-xl transition-all duration-150
+      shadow-sm hover:shadow-md active:scale-[0.99]
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2;
   }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center text-slate-600 hover:text-slate-900
+      hover:bg-slate-100 active:bg-slate-200 font-medium px-3 py-2 rounded-xl
+      transition-all duration-150 focus-visible:outline-none;
+  }
+
+  /* ── Inputs ──────────────────────────────────────────────────────────────── */
   .input {
-    @apply w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors bg-white;
+    @apply w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-slate-900
+      placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-400/40
+      focus:border-primary-400 transition-all bg-white text-sm;
   }
   .label {
-    @apply block text-sm font-medium text-slate-700 mb-1;
+    @apply block text-xs font-medium text-slate-500 mb-1.5 tracking-wide;
   }
+
+  /* ── Badges ──────────────────────────────────────────────────────────────── */
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
   }
+
+  /* ── Stat card ───────────────────────────────────────────────────────────── */
   .stat-card {
     @apply card p-6 flex flex-col gap-2;
+  }
+
+  /* ── Slide panel ─────────────────────────────────────────────────────────── */
+  .slide-panel-backdrop {
+    @apply fixed inset-0 bg-slate-950/25 backdrop-blur-[2px] z-40 transition-opacity duration-300;
+  }
+  .slide-panel {
+    @apply fixed inset-y-0 right-0 z-50 flex flex-col bg-white shadow-2xl;
+    width: var(--panel-width);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .slide-panel.panel-closed {
+    transform: translateX(100%);
+  }
+  .slide-panel.panel-open {
+    transform: translateX(0);
+  }
+
+  /* ── Section heading ─────────────────────────────────────────────────────── */
+  .section-eyebrow {
+    @apply text-xs font-semibold text-slate-400 uppercase tracking-widest;
+  }
+
+  /* ── Tab strip ───────────────────────────────────────────────────────────── */
+  .tab-strip {
+    @apply flex gap-1 p-1 bg-slate-100 rounded-xl w-fit;
+  }
+  .tab-item {
+    @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all text-slate-500 hover:text-slate-700;
+  }
+  .tab-item-active {
+    @apply tab-item bg-white text-slate-900 shadow-sm;
+  }
+
+  /* ── Page header ─────────────────────────────────────────────────────────── */
+  .page-header {
+    @apply flex items-center justify-between gap-4 flex-wrap;
+  }
+  .page-title {
+    @apply text-xl font-bold text-slate-900 tracking-tight;
+  }
+  .page-subtitle {
+    @apply text-sm text-slate-500 mt-0.5;
+  }
+
+  /* ── Data table improvements ─────────────────────────────────────────────── */
+  .data-table th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide whitespace-nowrap bg-slate-50/80;
+  }
+  .data-table td {
+    @apply px-4 py-3 text-slate-700;
+  }
+  .data-table tbody tr {
+    @apply border-b border-slate-50 transition-colors;
+  }
+  .data-table tbody tr:hover {
+    @apply bg-slate-50;
+  }
+  .data-table tbody tr:last-child {
+    @apply border-0;
+  }
+
+  /* ── Empty states ────────────────────────────────────────────────────────── */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 text-center;
+  }
+  .empty-state-icon {
+    @apply w-12 h-12 text-slate-300 mb-3;
+  }
+  .empty-state-title {
+    @apply text-sm font-semibold text-slate-600 mb-1;
+  }
+  .empty-state-body {
+    @apply text-xs text-slate-400;
   }
 }
 
 @layer utilities {
+  /* Numeric columns – prevents digit jitter */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Custom thin scrollbar */
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 transparent;
+    scrollbar-color: #e2e8f0 transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
+    height: 5px;
   }
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #e2e8f0;
+    border-radius: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background-color: #cbd5e1;
-    border-radius: 3px;
+  }
+
+  /* Shimmer animation for skeletons */
+  @keyframes shimmer {
+    from { background-position: -200% 0; }
+    to { background-position: 200% 0; }
+  }
+  .skeleton {
+    @apply rounded-lg;
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Subtle ring for elevated cards */
+  .ring-card {
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.04);
   }
 }

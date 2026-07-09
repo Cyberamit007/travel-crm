@@ -239,16 +239,16 @@ export default function AdminLeadsPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Leads</h2>
-          <p className="text-sm text-slate-500 mt-0.5">{meta?.total ?? 0} total leads</p>
+          <h2 className="page-title">Leads</h2>
+          <p className="page-subtitle">{meta?.total ?? 0} total leads</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => refetch()} className="btn-secondary p-2" title="Refresh">
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-2">
+          <button onClick={() => setCreateOpen(true)} className="btn-primary gap-2">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">New Lead</span>
           </button>

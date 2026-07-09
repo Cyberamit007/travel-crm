@@ -265,12 +265,12 @@ export default function AdminCampaignsPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Campaigns</h2>
-          <p className="text-sm text-slate-500 mt-0.5">{campaigns.length} campaigns</p>
+          <h2 className="page-title">Campaigns</h2>
+          <p className="page-subtitle">{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</p>
         </div>
-        <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-2">
+        <button onClick={() => setCreateOpen(true)} className="btn-primary gap-2">
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">New Campaign</span>
         </button>
@@ -306,7 +306,16 @@ export default function AdminCampaignsPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="card p-5 h-56 animate-pulse bg-slate-100" />
+            <div key={i} className="card overflow-hidden">
+              <div className="skeleton h-28" />
+              <div className="p-5 space-y-3">
+                <div className="skeleton h-4 w-3/4 rounded-lg" />
+                <div className="skeleton h-3 w-1/2 rounded-lg" />
+                <div className="grid grid-cols-3 gap-2">
+                  {[1,2,3].map(j => <div key={j} className="skeleton h-12 rounded-xl" />)}
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       ) : campaigns.length === 0 ? (

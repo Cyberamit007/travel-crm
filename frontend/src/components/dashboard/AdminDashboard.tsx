@@ -359,10 +359,10 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-5">
       {/* Header with export */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="page-header">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Dashboard</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Overview of your travel CRM</p>
+          <h2 className="page-title">Dashboard</h2>
+          <p className="page-subtitle">Overview of your travel CRM</p>
         </div>
         <ExportBar />
       </div>
@@ -472,43 +472,43 @@ export default function AdminDashboard() {
             <div className="p-6"><div className="h-32 bg-slate-100 animate-pulse rounded-lg" /></div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="data-table w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Campaign</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Total</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Pending</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Confirmed</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Lost</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Conv%</th>
+                  <tr>
+                    <th className="text-left">Campaign</th>
+                    <th className="text-right">Total</th>
+                    <th className="text-right">Pending</th>
+                    <th className="text-right">Confirmed</th>
+                    <th className="text-right">Lost</th>
+                    <th className="text-right">Conv%</th>
                   </tr>
                 </thead>
                 <tbody>
                   {campaignStats.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center">
-                        <div className="flex flex-col items-center text-slate-400">
-                          <Megaphone className="w-8 h-8 mb-2 opacity-30" />
-                          <span className="text-sm">No campaigns yet</span>
+                      <td colSpan={6} className="py-10 text-center">
+                        <div className="empty-state">
+                          <Megaphone className="empty-state-icon" />
+                          <p className="empty-state-title">No campaigns yet</p>
                         </div>
                       </td>
                     </tr>
                   ) : (
                     campaignStats.map((c) => (
-                      <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3">
+                      <tr key={c.id}>
+                        <td>
                           <p className="font-medium text-slate-800 truncate max-w-[130px]">{c.name}</p>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <p className="text-xs text-slate-400 truncate">{c.destination}</p>
                             <Badge campaignStatus={c.status} />
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right font-medium text-slate-700">{c.total}</td>
-                        <td className="px-4 py-3 text-right font-medium text-orange-600">{c.pending ?? c.active}</td>
-                        <td className="px-4 py-3 text-right font-medium text-green-700">{c.confirmed}</td>
-                        <td className="px-4 py-3 text-right font-medium text-red-600">{c.lost}</td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={cn('font-semibold', parseFloat(c.conversionRate) >= 50 ? 'text-green-600' : parseFloat(c.conversionRate) >= 25 ? 'text-yellow-600' : 'text-red-600')}>
+                        <td className="text-right font-semibold text-slate-700 tabular">{c.total}</td>
+                        <td className="text-right font-semibold text-orange-600 tabular">{c.pending ?? c.active}</td>
+                        <td className="text-right font-semibold text-emerald-700 tabular">{c.confirmed}</td>
+                        <td className="text-right font-semibold text-red-600 tabular">{c.lost}</td>
+                        <td className="text-right">
+                          <span className={cn('font-semibold tabular', parseFloat(c.conversionRate) >= 50 ? 'text-emerald-600' : parseFloat(c.conversionRate) >= 25 ? 'text-amber-600' : 'text-red-600')}>
                             {c.conversionRate}%
                           </span>
                         </td>

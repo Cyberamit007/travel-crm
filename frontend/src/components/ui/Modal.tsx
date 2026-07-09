@@ -8,16 +8,17 @@ interface ModalProps {
   title?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   className?: string;
 }
 
 const sizeClasses = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
-  lg: 'max-w-lg',
-  xl: 'max-w-xl',
+  sm:  'max-w-sm',
+  md:  'max-w-md',
+  lg:  'max-w-lg',
+  xl:  'max-w-xl',
   '2xl': 'max-w-2xl',
+  '3xl': 'max-w-3xl',
 };
 
 export default function Modal({
@@ -33,9 +34,7 @@ export default function Modal({
 
   useEffect(() => {
     if (!open) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handleKey);
     document.body.style.overflow = 'hidden';
     return () => {
@@ -49,37 +48,36 @@ export default function Modal({
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={(e) => {
-        if (e.target === overlayRef.current) onClose();
-      }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div
         className={cn(
-          'relative w-full bg-white rounded-xl shadow-xl flex flex-col max-h-[90vh]',
+          'relative w-full bg-white flex flex-col max-h-[95vh] sm:max-h-[90vh]',
+          'rounded-t-2xl sm:rounded-2xl shadow-2xl ring-card',
           sizeClasses[size],
           className
         )}
       >
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0">
-            <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+            <h2 className="text-base font-semibold text-slate-900">{title}</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+              className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto px-6 py-5 scrollbar-thin">
           {children}
         </div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-xl flex-shrink-0">
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl flex-shrink-0">
             {footer}
           </div>
         )}
