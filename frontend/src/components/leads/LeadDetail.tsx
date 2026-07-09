@@ -11,6 +11,9 @@ import Badge from '../ui/Badge';
 import Avatar from '../ui/Avatar';
 import Modal from '../ui/Modal';
 import LeadForm from './LeadForm';
+import PriorityBadge from '../ui/PriorityBadge';
+import TagChip from '../ui/TagChip';
+import CommentsSection from './CommentsSection';
 import { Skeleton } from '../ui/Skeleton';
 import {
   formatDate, formatDateTime, formatRelativeTime, formatCurrency, isOverdue, cn, leadStatusConfig,
@@ -218,6 +221,7 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
   const { user } = useAuthStore();
   const [editOpen, setEditOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState<'details' | 'comments'>('details');
   const [transferToId, setTransferToId] = useState('');
   const [transferReason, setTransferReason] = useState('');
 
@@ -292,10 +296,19 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <Badge status={lead.status} />
                   <Badge source={lead.source} />
+                  <PriorityBadge priority={(lead as any).priority ?? 'MEDIUM'} />
                   {!lead.isRead && (
                     <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">New</span>
                   )}
                 </div>
+                {/* Tags */}
+                {((lead as any).tags?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {(lead as any).tags.map((lt: any) => (
+                      <TagChip key={lt.tagId ?? lt.id} tag={lt.tag ?? lt} />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             {canActOnLead && (
@@ -311,6 +324,43 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
               </div>
             )}
           </div>
+
+          {/* Lost Reason display */}
+          {lead.status === 'LOST' && (lead as any).lostReason && (
+            <div className="flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm">
+              <span className="text-red-500 mt-0.5">❌</span>
+              <div>
+                <p className="font-semibold text-red-700">Lost Reason</p>
+                <p className="text-red-600 mt-0.5">
+                  {(lead as any).lostReason === 'Other' ? (lead as any).lostReasonOther : (lead as any).lostReason}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Tab bar */}
+          <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+            {(['details', 'comments'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setDetailTab(tab)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-all',
+                  detailTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab: Comments */}
+          {detailTab === 'comments' && (
+            <CommentsSection leadId={lead.id} />
+          )}
+
+          {/* Tab: Details */}
+          {detailTab === 'details' && (<>
 
           {/* Status Progression */}
           <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
@@ -412,6 +462,8 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
           {lead.activityLogs && lead.activityLogs.length > 0 && (
             <ActivityTimeline logs={lead.activityLogs} />
           )}
+
+          </>)}
         </div>
       )}
 

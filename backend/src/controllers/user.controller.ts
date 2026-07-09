@@ -190,6 +190,79 @@ export const exportUsers = async (req: AuthenticatedRequest, res: Response): Pro
   }
 };
 
+export const updateAvailability = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { availability } = req.body;
+    const allowed = ['AVAILABLE', 'BUSY', 'OFFLINE'];
+    if (!allowed.includes(availability)) {
+      res.status(400).json({ success: false, error: 'Invalid availability status' }); return;
+    }
+    // Employees can only update their own; admin can update anyone
+    if (req.user?.role === 'EMPLOYEE' && id !== req.user.id) {
+      res.status(403).json({ success: false, error: 'Not authorized' }); return;
+    }
+    const user = await prisma.user.update({
+      where: { id },
+      data: { availability },
+      select: { id: true, name: true, availability: true },
+    });
+    res.json({ success: true, data: user });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const getEmployeeProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findFirst({
+      where: { id, organizationId: req.user?.organizationId ?? null },
+      select: {
+        id: true, name: true, email: true, role: true, phone: true,
+        avatar: true, isActive: true, availability: true, lastLogin: true, createdAt: true,
+        campaignAssignments: {
+          include: { campaign: { select: { id: true, name: true, destination: true, status: true } } },
+        },
+        assignedLeads: {
+          where: { deletedAt: null },
+          select: { id: true, status: true, followUpDate: true, followUpDone: true },
+        },
+        activityLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: { lead: { select: { id: true, name: true } } },
+        },
+      },
+    });
+
+    if (!user) { res.status(404).json({ success: false, error: 'Employee not found' }); return; }
+
+    const leads = user.assignedLeads;
+    const total = leads.length;
+    const confirmed = leads.filter((l) => l.status === 'CONFIRMED').length;
+    const lost = leads.filter((l) => l.status === 'LOST').length;
+    const pending = leads.filter((l) => !['CONFIRMED', 'LOST'].includes(l.status)).length;
+    const now = new Date();
+    const overdue = leads.filter(
+      (l) => l.status === 'FOLLOW_UP_SCHEDULED' && !l.followUpDone && l.followUpDate && new Date(l.followUpDate) < now
+    ).length;
+
+    res.json({
+      success: true,
+      data: {
+        ...user,
+        stats: {
+          total, confirmed, lost, pending, overdue,
+          conversionRate: total > 0 ? ((confirmed / total) * 100).toFixed(1) : '0',
+        },
+      },
+    });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 export const getEmployeePerformance = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const employees = await prisma.user.findMany({

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getLeads, getLeadById, createLeadManual, updateLead, transferLead, deleteLead, getStats, getOverdueFollowUps, getRecentActivity, getDashboardStats, exportLeads } from '../controllers/lead.controller.js';
+import { getLeads, getLeadById, createLeadManual, updateLead, transferLead, deleteLead, getStats, getOverdueFollowUps, getRecentActivity, getDashboardStats, exportLeads, checkDuplicate } from '../controllers/lead.controller.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
@@ -7,6 +7,7 @@ const router = Router();
 router.use(authenticate);
 router.get('/', getLeads);
 router.get('/stats', getStats);
+router.get('/check-duplicate', checkDuplicate);
 router.get('/dashboard-stats', requireAdmin, getDashboardStats);
 router.get('/export', requireAdmin, exportLeads);
 router.get('/overdue', getOverdueFollowUps);

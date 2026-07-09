@@ -9,11 +9,13 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cron from 'node-cron';
 import jwt from 'jsonwebtoken';
+import path from 'path';
 
 import routes from './routes/index.js';
 import { setSocketServer, sendFollowUpReminders } from './services/notification.service.js';
 import logger from './utils/logger.js';
 import { JWTPayload } from './types/index.js';
+import { UPLOAD_DIR_PATH } from './middleware/upload.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -68,6 +70,7 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeade
 app.use('/api/auth/login', authLimiter);
 
 app.use('/api', routes);
+app.use('/api/uploads', express.static(UPLOAD_DIR_PATH));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'Travel CRM API' });

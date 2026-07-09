@@ -12,6 +12,9 @@ import LeadForm from '../../components/leads/LeadForm';
 import LeadDetail from '../../components/leads/LeadDetail';
 import Badge from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
+import PriorityBadge from '../../components/ui/PriorityBadge';
+import TagChip from '../../components/ui/TagChip';
+import { useTags } from '../../hooks/useTags';
 import { formatDate, isOverdue, cn } from '../../utils/helpers';
 import toast from 'react-hot-toast';
 
@@ -39,6 +42,8 @@ export default function AdminLeadsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState(searchParams.get('status') || '');
   const [source, setSource] = useState('');
+  const [priority, setPriority] = useState('');
+  const [tagId, setTagId] = useState('');
 
   useEffect(() => {
     const s = searchParams.get('status') || '';
@@ -54,11 +59,12 @@ export default function AdminLeadsPage() {
   const [bulkSelected, setBulkSelected] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState<LeadStatus>('CONTACTED');
 
-  const filters = { page, limit: 20, search: search || undefined, status: status || undefined, source: source || undefined, campaignId: campaignId || undefined, assignedToId: assignedToId || undefined };
+  const filters = { page, limit: 20, search: search || undefined, status: status || undefined, source: source || undefined, campaignId: campaignId || undefined, assignedToId: assignedToId || undefined, priority: priority || undefined, tagId: tagId || undefined };
 
   const { data, isLoading, refetch } = useLeads(filters);
   const { data: campaignsData } = useCampaigns({ limit: 100 });
   const { data: usersData } = useUsers({ role: 'EMPLOYEE', limit: 100 });
+  const { data: allTags = [] } = useTags();
   const createLead = useCreateLead();
   const updateLead = useUpdateLead();
   const deleteLead = useDeleteLead();
@@ -127,6 +133,12 @@ export default function AdminLeadsPage() {
       ),
     },
     {
+      key: 'priority',
+      header: 'P',
+      headerClassName: 'w-8',
+      render: (row) => <PriorityBadge priority={(row as any).priority ?? 'MEDIUM'} />,
+    },
+    {
       key: 'source',
       header: 'Source',
       render: (row) => <Badge source={row.source} />,
@@ -135,6 +147,22 @@ export default function AdminLeadsPage() {
       key: 'status',
       header: 'Status',
       render: (row) => <Badge status={row.status} />,
+    },
+    {
+      key: 'tags',
+      header: 'Tags',
+      render: (row) => {
+        const tags = (row as any).tags ?? [];
+        if (!tags.length) return null;
+        return (
+          <div className="flex flex-wrap gap-1">
+            {tags.slice(0, 2).map((lt: any) => (
+              <TagChip key={lt.tag?.id ?? lt.id} tag={lt.tag ?? lt} />
+            ))}
+            {tags.length > 2 && <span className="text-xs text-slate-400">+{tags.length - 2}</span>}
+          </div>
+        );
+      },
     },
     {
       key: 'campaign',
@@ -269,6 +297,26 @@ export default function AdminLeadsPage() {
             <option value="">All Employees</option>
             {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
+          <select
+            value={priority}
+            onChange={(e) => { setPriority(e.target.value); setPage(1); }}
+            className="input py-1.5 text-sm w-auto min-w-[130px]"
+          >
+            <option value="">All Priorities</option>
+            <option value="HIGH">🔴 High</option>
+            <option value="MEDIUM">🟡 Medium</option>
+            <option value="LOW">🟢 Low</option>
+          </select>
+          {allTags.length > 0 && (
+            <select
+              value={tagId}
+              onChange={(e) => { setTagId(e.target.value); setPage(1); }}
+              className="input py-1.5 text-sm w-auto min-w-[120px]"
+            >
+              <option value="">All Tags</option>
+              {allTags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
         </div>
 
         {/* Bulk actions */}

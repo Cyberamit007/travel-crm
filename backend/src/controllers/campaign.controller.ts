@@ -1,6 +1,9 @@
 import { Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import { UPLOAD_DIR_PATH } from '../middleware/upload.js';
 
 // keywords is stored as JSON string in DB; parse before sending to client
 function parseCampaign(c: any) {
@@ -237,6 +240,134 @@ export const exportCampaigns = async (req: AuthenticatedRequest, res: Response):
     });
 
     res.json({ success: true, data: rows });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// ─── Campaign Notes ───────────────────────────────────────────────────────────
+
+const noteInclude = {
+  author: { select: { id: true, name: true, avatar: true, role: true } },
+};
+
+export const getCampaignNotes = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const notes = await prisma.campaignNote.findMany({
+      where: { campaignId: id },
+      include: noteInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ success: true, data: notes });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const createCampaignNote = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+    if (!content?.trim()) { res.status(400).json({ success: false, error: 'Content is required' }); return; }
+    const note = await prisma.campaignNote.create({
+      data: { content: content.trim(), campaignId: id, authorId: req.user!.id },
+      include: noteInclude,
+    });
+    res.status(201).json({ success: true, data: note });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const updateCampaignNote = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { noteId } = req.params;
+    const { content } = req.body;
+    const existing = await prisma.campaignNote.findUnique({ where: { id: noteId } });
+    if (!existing) { res.status(404).json({ success: false, error: 'Note not found' }); return; }
+    if (existing.authorId !== req.user!.id && req.user?.role !== 'ADMIN') {
+      res.status(403).json({ success: false, error: 'Not authorized' }); return;
+    }
+    const note = await prisma.campaignNote.update({
+      where: { id: noteId },
+      data: { content: content.trim(), isEdited: true },
+      include: noteInclude,
+    });
+    res.json({ success: true, data: note });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const deleteCampaignNote = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { noteId } = req.params;
+    const existing = await prisma.campaignNote.findUnique({ where: { id: noteId } });
+    if (!existing) { res.status(404).json({ success: false, error: 'Note not found' }); return; }
+    if (existing.authorId !== req.user!.id && req.user?.role !== 'ADMIN') {
+      res.status(403).json({ success: false, error: 'Not authorized' }); return;
+    }
+    await prisma.campaignNote.delete({ where: { id: noteId } });
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// ─── Campaign Attachments ────────────────────────────────────────────────────
+
+export const getCampaignAttachments = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const attachments = await prisma.campaignAttachment.findMany({
+      where: { campaignId: id },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ success: true, data: attachments });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const uploadCampaignAttachment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const file = (req as any).file;
+    if (!file) { res.status(400).json({ success: false, error: 'No file uploaded' }); return; }
+
+    const fileUrl = `/api/uploads/${file.filename}`;
+    const attachment = await prisma.campaignAttachment.create({
+      data: {
+        name: file.originalname,
+        fileUrl,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        campaignId: id,
+        uploadedById: req.user!.id,
+      },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    });
+    res.status(201).json({ success: true, data: attachment });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const deleteCampaignAttachment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { attachmentId } = req.params;
+    const attachment = await prisma.campaignAttachment.findUnique({ where: { id: attachmentId } });
+    if (!attachment) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
+
+    // Delete file from disk
+    const filename = path.basename(attachment.fileUrl);
+    const filePath = path.join(UPLOAD_DIR_PATH, filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    await prisma.campaignAttachment.delete({ where: { id: attachmentId } });
+    res.json({ success: true });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }

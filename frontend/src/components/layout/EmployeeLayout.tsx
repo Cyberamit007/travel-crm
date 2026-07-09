@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Mountain, LayoutDashboard, Users, Calendar, Bell,
-  LogOut, ChevronDown, Menu, X, Settings, UserCircle
+  LogOut, ChevronDown, Menu, X, Settings, UserCircle, CalendarOff
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -16,6 +16,7 @@ const navLinks = [
   { to: '/employee/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/employee/leads', label: 'My Leads', icon: Users },
   { to: '/employee/follow-ups', label: 'Follow-ups', icon: Calendar },
+  { to: '/employee/leaves', label: 'My Leaves', icon: CalendarOff },
   { to: '/employee/settings', label: 'Settings', icon: Settings },
 ];
 

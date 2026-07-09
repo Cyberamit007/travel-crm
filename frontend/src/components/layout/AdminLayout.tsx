@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Mountain, LayoutDashboard, Users, Briefcase, Bell, Settings,
-  LogOut, ChevronDown, Menu, X, UserCircle, Megaphone, MessageSquarePlus
+  LogOut, ChevronDown, Menu, X, UserCircle, Megaphone, MessageSquarePlus,
+  CalendarOff, Activity, BarChart2
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -17,6 +18,9 @@ const navLinks = [
   { to: '/admin/leads', label: 'Leads', icon: Users },
   { to: '/admin/campaigns', label: 'Campaigns', icon: Megaphone },
   { to: '/admin/employees', label: 'Employees', icon: Briefcase },
+  { to: '/admin/leaves', label: 'Leaves', icon: CalendarOff },
+  { to: '/admin/reports', label: 'Reports', icon: BarChart2 },
+  { to: '/admin/activity', label: 'Activity', icon: Activity },
   { to: '/admin/feedback', label: 'Feedback', icon: MessageSquarePlus },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ];

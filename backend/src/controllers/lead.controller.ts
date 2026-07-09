@@ -15,7 +15,7 @@ function orgFilter(req: AuthenticatedRequest): Record<string, unknown> {
 export const getLeads = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const {
-      status, source, campaignId, assignedToId,
+      status, source, campaignId, assignedToId, priority, tagId,
       search, page = 1, limit = 20,
       sortBy = 'createdAt', sortOrder = 'desc',
     } = req.query;
@@ -31,6 +31,8 @@ export const getLeads = async (req: AuthenticatedRequest, res: Response): Promis
     if (status) where.status = status;
     if (source) where.source = source;
     if (campaignId) where.campaignId = campaignId;
+    if (priority) where.priority = priority;
+    if (tagId) where.tags = { some: { tagId } };
     if (assignedToId && req.user?.role === 'ADMIN') where.assignedToId = assignedToId;
 
     if (search) {
@@ -51,6 +53,7 @@ export const getLeads = async (req: AuthenticatedRequest, res: Response): Promis
         include: {
           campaign: { select: { id: true, name: true, destination: true } },
           assignedTo: { select: { id: true, name: true, email: true } },
+          tags: { include: { tag: true } },
         },
         orderBy: { [sortBy as string]: sortOrder },
       }),
@@ -77,6 +80,7 @@ export const getLeadById = async (req: AuthenticatedRequest, res: Response): Pro
       include: {
         campaign: true,
         assignedTo: { select: { id: true, name: true, email: true, phone: true } },
+        tags: { include: { tag: true } },
         activityLogs: {
           include: { user: { select: { id: true, name: true } } },
           orderBy: { createdAt: 'desc' },
@@ -97,6 +101,34 @@ export const getLeadById = async (req: AuthenticatedRequest, res: Response): Pro
   }
 };
 
+// ─── Duplicate check ──────────────────────────────────────────────────────────
+
+export const checkDuplicate = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { phone, email } = req.query;
+    const org = orgFilter(req);
+    const conditions: any[] = [];
+
+    if (phone) conditions.push({ phone: String(phone) });
+    if (email) conditions.push({ email: String(email) });
+
+    if (conditions.length === 0) { res.json({ success: true, data: [] }); return; }
+
+    const duplicates = await prisma.lead.findMany({
+      where: { ...org, deletedAt: null, OR: conditions },
+      select: {
+        id: true, name: true, phone: true, email: true, status: true, createdAt: true,
+        assignedTo: { select: { id: true, name: true } },
+        campaign: { select: { id: true, name: true } },
+      },
+      take: 5,
+    });
+    res.json({ success: true, data: duplicates });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 export const createLeadManual = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -104,7 +136,7 @@ export const createLeadManual = async (req: AuthenticatedRequest, res: Response)
     const {
       name, phone, email, source, message, destination, notes,
       followUpDate, followUpNotes, status, campaignId, assignedToId,
-      groupSize, budget, preferredDate,
+      groupSize, budget, preferredDate, priority, lostReason, lostReasonOther, tagIds,
     } = req.body;
 
     if (!name?.trim() || !phone?.trim()) {
@@ -122,6 +154,9 @@ export const createLeadManual = async (req: AuthenticatedRequest, res: Response)
         destination: destination?.trim() || null,
         notes: notes || null,
         status: status || 'NEW',
+        priority: priority || 'MEDIUM',
+        lostReason: status === 'LOST' ? (lostReason || null) : null,
+        lostReasonOther: status === 'LOST' && lostReason === 'Other' ? (lostReasonOther || null) : null,
         campaignId: campaignId || null,
         assignedToId: assignedToId || null,
         groupSize: groupSize && !isNaN(Number(groupSize)) ? Number(groupSize) : null,
@@ -130,10 +165,12 @@ export const createLeadManual = async (req: AuthenticatedRequest, res: Response)
         followUpDate: followUpDate ? new Date(followUpDate) : null,
         followUpNotes: followUpNotes || null,
         organizationId: req.user?.organizationId ?? null,
+        tags: tagIds?.length ? { create: (tagIds as string[]).map((tagId) => ({ tagId })) } : undefined,
       },
       include: {
         campaign: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
+        tags: { include: { tag: true } },
       },
     });
 
@@ -175,13 +212,31 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response): Prom
       res.status(403).json({ success: false, error: 'Access denied' }); return;
     }
 
-    const { status, notes, followUpDate, followUpNotes, followUpDone, campaignId, assignedToId, ...rest } = req.body;
+    const { status, notes, followUpDate, followUpNotes, followUpDone, campaignId, assignedToId, priority, lostReason, lostReasonOther, tagIds, ...rest } = req.body;
     const updateData: Record<string, unknown> = { ...rest };
 
-    if (status !== undefined) updateData.status = status;
+    if (status !== undefined) {
+      updateData.status = status;
+      if (status === 'LOST') {
+        updateData.lostReason = lostReason || existing.lostReason || null;
+        updateData.lostReasonOther = lostReason === 'Other' ? (lostReasonOther || null) : null;
+      }
+    }
+    if (priority !== undefined) updateData.priority = priority;
     if (notes !== undefined) updateData.notes = notes;
     if (followUpNotes !== undefined) updateData.followUpNotes = followUpNotes;
     if (followUpDone !== undefined) updateData.followUpDone = followUpDone;
+
+    // Handle tag updates
+    if (Array.isArray(tagIds)) {
+      await prisma.leadTag.deleteMany({ where: { leadId: id } });
+      if (tagIds.length > 0) {
+        await prisma.leadTag.createMany({
+          data: tagIds.map((tagId: string) => ({ leadId: id, tagId })),
+          skipDuplicates: true,
+        });
+      }
+    }
 
     if (followUpDate !== undefined) {
       const parsed = followUpDate ? new Date(followUpDate) : null;
@@ -203,11 +258,13 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response): Prom
       include: {
         campaign: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
+        tags: { include: { tag: true } },
       },
     });
 
     const changes: string[] = [];
     if (status && status !== existing.status) changes.push(`Status: ${existing.status} → ${status}`);
+    if (priority && priority !== existing.priority) changes.push(`Priority: ${existing.priority} → ${priority}`);
     if (assignedToId && assignedToId !== existing.assignedToId) {
       changes.push('Reassigned');
       await createNotification(

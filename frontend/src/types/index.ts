@@ -1,8 +1,11 @@
 export type Role = 'ADMIN' | 'EMPLOYEE';
 export type LeadSource = 'WHATSAPP' | 'INSTAGRAM' | 'MANUAL' | 'WEBSITE';
 export type LeadStatus = 'NEW' | 'CONTACTED' | 'INTERESTED' | 'FOLLOW_UP_SCHEDULED' | 'CONFIRMED' | 'LOST';
+export type LeadPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 export type CampaignStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'DRAFT';
 export type NotificationType = 'FOLLOW_UP_DUE' | 'FOLLOW_UP_OVERDUE' | 'NEW_LEAD_ASSIGNED' | 'LEAD_STATUS_CHANGED' | 'CAMPAIGN_UPDATE' | 'SYSTEM';
+export type AvailabilityStatus = 'AVAILABLE' | 'BUSY' | 'OFFLINE';
+export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface User {
   id: string;
@@ -12,8 +15,26 @@ export interface User {
   phone?: string;
   avatar?: string;
   isActive: boolean;
+  availability: AvailabilityStatus;
+  lastLogin?: string;
   createdAt: string;
   _count?: { assignedLeads: number };
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  organizationId?: string;
+  _count?: { leads: number };
+  createdAt: string;
+}
+
+export interface LeadTag {
+  id: string;
+  leadId: string;
+  tagId: string;
+  tag: Tag;
 }
 
 export interface Campaign {
@@ -45,6 +66,29 @@ export interface CampaignEmployee {
   assignedAt: string;
 }
 
+export interface CampaignNote {
+  id: string;
+  content: string;
+  isEdited: boolean;
+  campaignId: string;
+  authorId: string;
+  author: Pick<User, 'id' | 'name' | 'avatar' | 'role'>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignAttachment {
+  id: string;
+  name: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  campaignId: string;
+  uploadedById: string;
+  uploadedBy: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+}
+
 export interface Lead {
   id: string;
   name: string;
@@ -52,12 +96,15 @@ export interface Lead {
   email?: string;
   source: LeadSource;
   status: LeadStatus;
+  priority: LeadPriority;
   message?: string;
   destination?: string;
   campaignId?: string;
   campaign?: Pick<Campaign, 'id' | 'name' | 'destination'>;
   assignedToId?: string;
   assignedTo?: Pick<User, 'id' | 'name' | 'email'>;
+  lostReason?: string;
+  lostReasonOther?: string;
   followUpDate?: string;
   followUpNotes?: string;
   followUpDone: boolean;
@@ -69,7 +116,21 @@ export interface Lead {
   whatsappMsgId?: string;
   instagramLeadId?: string;
   adName?: string;
+  tags?: LeadTag[];
   activityLogs?: ActivityLog[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeadComment {
+  id: string;
+  content: string;
+  isEdited: boolean;
+  leadId: string;
+  authorId: string;
+  author: Pick<User, 'id' | 'name' | 'avatar' | 'role'>;
+  parentId?: string;
+  replies?: LeadComment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -90,10 +151,65 @@ export interface ActivityLog {
   id: string;
   action: string;
   details?: string;
+  entityType?: string;
+  entityId?: string;
   userId: string;
-  user: Pick<User, 'id' | 'name'>;
+  user: Pick<User, 'id' | 'name' | 'avatar' | 'role'>;
   leadId?: string;
+  lead?: Pick<Lead, 'id' | 'name'>;
   createdAt: string;
+}
+
+export interface LeaveRequest {
+  id: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: LeaveStatus;
+  adminNote?: string;
+  employeeId: string;
+  employee: Pick<User, 'id' | 'name' | 'email' | 'avatar'>;
+  approvedById?: string;
+  approvedBy?: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  phone?: string;
+  avatar?: string;
+  isActive: boolean;
+  availability: AvailabilityStatus;
+  lastLogin?: string;
+  createdAt: string;
+  stats: {
+    total: number;
+    confirmed: number;
+    lost: number;
+    pending: number;
+    overdue: number;
+    conversionRate: string;
+  };
+  campaignAssignments: Array<{
+    id: string;
+    campaign: Pick<Campaign, 'id' | 'name' | 'destination' | 'status'>;
+  }>;
+  activityLogs: ActivityLog[];
+}
+
+export interface OrgSettings {
+  sources: string[];
+  destinations: string[];
+  lostReasons: string[];
+  companyName: string;
+  companyPhone: string;
+  companyEmail: string;
+  companyAddress: string;
+  companyWebsite: string;
 }
 
 export interface LeadStats {

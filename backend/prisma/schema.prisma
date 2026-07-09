@@ -20,9 +20,11 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
-  campaigns Campaign[]
-  leads     Lead[]
+  users        User[]
+  campaigns    Campaign[]
+  leads        Lead[]
+  tags         Tag[]
+  leaveRequests LeaveRequest[]
 
   @@map("organizations")
 }
@@ -34,13 +36,15 @@ model User {
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
 
-  name      String
-  email     String   @unique
-  password  String
-  role      String   @default("EMPLOYEE") // ADMIN | EMPLOYEE
-  phone     String?
-  avatar    String?
-  isActive  Boolean  @default(true)
+  name         String
+  email        String   @unique
+  password     String
+  role         String   @default("EMPLOYEE")   // ADMIN | EMPLOYEE
+  phone        String?
+  avatar       String?
+  isActive     Boolean  @default(true)
+  availability String   @default("AVAILABLE")  // AVAILABLE | BUSY | OFFLINE
+  lastLogin    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -51,6 +55,11 @@ model User {
   activityLogs        ActivityLog[]
   feedbacks           Feedback[]
   refreshTokens       RefreshToken[]
+  campaignNotes       CampaignNote[]
+  campaignAttachments CampaignAttachment[]
+  leaveRequests       LeaveRequest[]     @relation("EmployeeLeaves")
+  approvedLeaves      LeaveRequest[]     @relation("ApprovedLeaves")
+  leadComments        LeadComment[]
 
   @@index([organizationId])
   @@map("users")
@@ -98,8 +107,10 @@ model Campaign {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  leads     Lead[]
-  employees CampaignEmployee[]
+  leads       Lead[]
+  employees   CampaignEmployee[]
+  notes       CampaignNote[]
+  attachments CampaignAttachment[]
 
   @@index([organizationId])
   @@index([status])
@@ -118,6 +129,43 @@ model CampaignEmployee {
   @@map("campaign_employees")
 }
 
+model CampaignNote {
+  id         String   @id @default(uuid())
+  content    String
+  isEdited   Boolean  @default(false)
+
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignId String
+
+  author     User     @relation(fields: [authorId], references: [id])
+  authorId   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campaignId])
+  @@map("campaign_notes")
+}
+
+model CampaignAttachment {
+  id        String   @id @default(uuid())
+  name      String
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignId String
+
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId])
+  @@map("campaign_attachments")
+}
+
 // ─── Leads ───────────────────────────────────────────────────────────────────
 
 model Lead {
@@ -129,9 +177,13 @@ model Lead {
   phone String
   email String?
 
-  source  String  @default("MANUAL") // WHATSAPP | INSTAGRAM | MANUAL | WEBSITE
-  status  String  @default("NEW")    // NEW | CONTACTED | INTERESTED | FOLLOW_UP_SCHEDULED | CONFIRMED | LOST
-  message String?
+  source   String  @default("MANUAL")  // WHATSAPP | INSTAGRAM | MANUAL | WEBSITE
+  status   String  @default("NEW")     // NEW | CONTACTED | INTERESTED | FOLLOW_UP_SCHEDULED | CONFIRMED | LOST
+  priority String  @default("MEDIUM")  // HIGH | MEDIUM | LOW
+  message  String?
+
+  lostReason      String?
+  lostReasonOther String?
 
   destination String?
   campaign    Campaign? @relation(fields: [campaignId], references: [id])
@@ -164,9 +216,12 @@ model Lead {
 
   notifications Notification[]
   activityLogs  ActivityLog[]
+  tags          LeadTag[]
+  comments      LeadComment[]
 
   @@index([organizationId])
   @@index([status])
+  @@index([priority])
   @@index([source])
   @@index([assignedToId])
   @@index([campaignId])
@@ -174,6 +229,90 @@ model Lead {
   @@index([deletedAt])
   @@index([followUpDate])
   @@map("leads")
+}
+
+// ─── Tags ────────────────────────────────────────────────────────────────────
+
+model Tag {
+  id             String        @id @default(uuid())
+  name           String
+  color          String        @default("#6366f1") // hex color
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  leads LeadTag[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
+  @@map("tags")
+}
+
+model LeadTag {
+  id     String @id @default(uuid())
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId String
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId  String
+
+  @@unique([leadId, tagId])
+  @@index([leadId])
+  @@index([tagId])
+  @@map("lead_tags")
+}
+
+// ─── Lead Comments (Internal) ────────────────────────────────────────────────
+
+model LeadComment {
+  id       String  @id @default(uuid())
+  content  String
+  isEdited Boolean @default(false)
+
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId String
+
+  author   User   @relation(fields: [authorId], references: [id])
+  authorId String
+
+  parent   LeadComment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  parentId String?
+  replies  LeadComment[] @relation("CommentReplies")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leadId])
+  @@index([parentId])
+  @@map("lead_comments")
+}
+
+// ─── Leave Requests ──────────────────────────────────────────────────────────
+
+model LeaveRequest {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  startDate DateTime
+  endDate   DateTime
+  reason    String
+  status    String   @default("PENDING")  // PENDING | APPROVED | REJECTED
+  adminNote String?
+
+  employee   User   @relation("EmployeeLeaves", fields: [employeeId], references: [id])
+  employeeId String
+
+  approvedBy   User?   @relation("ApprovedLeaves", fields: [approvedById], references: [id])
+  approvedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([organizationId])
+  @@index([status])
+  @@map("leave_requests")
 }
 
 // ─── Notifications ───────────────────────────────────────────────────────────
@@ -200,9 +339,11 @@ model Notification {
 // ─── Activity Log ────────────────────────────────────────────────────────────
 
 model ActivityLog {
-  id      String  @id @default(uuid())
-  action  String
-  details String?
+  id         String  @id @default(uuid())
+  action     String
+  details    String?
+  entityType String? // LEAD | CAMPAIGN | USER | LEAVE
+  entityId   String?
 
   user   User   @relation(fields: [userId], references: [id])
   userId String
@@ -215,6 +356,7 @@ model ActivityLog {
   @@index([userId])
   @@index([leadId])
   @@index([createdAt])
+  @@index([entityType])
   @@map("activity_logs")
 }
 

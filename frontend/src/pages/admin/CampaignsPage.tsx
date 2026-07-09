@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Plus, Target, CheckCircle, Megaphone, FileText, Users, MapPin, Calendar, TrendingUp } from 'lucide-react';
+import { Plus, Target, CheckCircle, Megaphone, FileText, Users, MapPin, Calendar, TrendingUp, StickyNote, Paperclip } from 'lucide-react';
 import { useCampaigns, useCampaign, useCampaignStats, useCreateCampaign, useUpdateCampaign, useDeleteCampaign } from '../../hooks/useCampaigns';
 import { Campaign, CampaignStatus, Lead } from '../../types/index';
 import CampaignCard from '../../components/campaigns/CampaignCard';
 import CampaignForm from '../../components/campaigns/CampaignForm';
+import CampaignNotesSection from '../../components/campaigns/CampaignNotesSection';
+import CampaignAttachmentsSection from '../../components/campaigns/CampaignAttachmentsSection';
 import Modal from '../../components/ui/Modal';
 import StatsCard from '../../components/ui/StatsCard';
 import Badge from '../../components/ui/Badge';
@@ -30,7 +32,8 @@ function CampaignDetailModal({
   onEdit: (c: Campaign) => void;
 }) {
   const { data, isLoading } = useCampaign(campaignId);
-  const campaign = data?.data as any; // includes .leads and .employees from getCampaignById
+  const campaign = data?.data as any;
+  const [campaignTab, setCampaignTab] = useState<'overview' | 'notes' | 'attachments'>('overview');
 
   if (!campaignId) return null;
 
@@ -44,6 +47,35 @@ function CampaignDetailModal({
         </div>
       ) : campaign ? (
         <div className="space-y-5">
+          {/* Tabs */}
+          <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+            {([
+              ['overview', 'Overview', TrendingUp],
+              ['notes', 'Notes', StickyNote],
+              ['attachments', 'Attachments', Paperclip],
+            ] as const).map(([key, label, Icon]) => (
+              <button
+                key={key}
+                onClick={() => setCampaignTab(key)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                  campaignTab === key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab: Notes */}
+          {campaignTab === 'notes' && <CampaignNotesSection campaignId={campaignId} />}
+
+          {/* Tab: Attachments */}
+          {campaignTab === 'attachments' && <CampaignAttachmentsSection campaignId={campaignId} />}
+
+          {/* Tab: Overview */}
+          {campaignTab === 'overview' && <>
           {/* Header */}
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -169,6 +201,7 @@ function CampaignDetailModal({
               </div>
             )}
           </div>
+          </>}
         </div>
       ) : (
         <p className="text-slate-400 text-center py-8">Campaign not found</p>

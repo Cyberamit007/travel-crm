@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Plus, Edit, Trash2, ToggleLeft, ToggleRight, TrendingUp, Search, Copy, Check, KeyRound } from 'lucide-react';
+import { Plus, Edit, Trash2, ToggleLeft, ToggleRight, TrendingUp, Search, Copy, Check, KeyRound, UserCircle } from 'lucide-react';
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, useEmployeePerformance, useResetEmployeePassword } from '../../hooks/useUsers';
 import { User } from '../../types/index';
 import { useForm } from 'react-hook-form';
 import Table, { Column } from '../../components/ui/Table';
 import Modal from '../../components/ui/Modal';
 import Avatar from '../../components/ui/Avatar';
+import AvailabilityBadge from '../../components/ui/AvailabilityBadge';
+import EmployeeProfileModal from '../../components/employees/EmployeeProfileModal';
 import { formatDate, cn } from '../../utils/helpers';
 import { EmployeePerformance } from '../../types/index';
 
@@ -259,6 +261,7 @@ export default function AdminEmployeesPage() {
   const [perfEmployee, setPerfEmployee] = useState<EmployeePerformance | null>(null);
   const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string } | null>(null);
   const [resetPassUser, setResetPassUser] = useState<User | null>(null);
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
 
   const { data, isLoading } = useUsers({ search: search || undefined, limit: 100 });
   const { data: perfData } = useEmployeePerformance();
@@ -302,7 +305,15 @@ export default function AdminEmployeesPage() {
         <div className="flex items-center gap-3">
           <Avatar name={row.name} size="sm" />
           <div>
-            <p className="font-medium text-slate-800">{row.name}</p>
+            <div className="flex items-center gap-2">
+              <button
+                className="font-medium text-slate-800 hover:text-primary-600 transition-colors text-left"
+                onClick={(e) => { e.stopPropagation(); setProfileUserId(row.id); }}
+              >
+                {row.name}
+              </button>
+              <AvailabilityBadge status={(row as any).availability ?? 'AVAILABLE'} size="xs" showLabel={false} />
+            </div>
             <p className="text-xs text-slate-400">{row.email}</p>
           </div>
         </div>
@@ -369,6 +380,13 @@ export default function AdminEmployeesPage() {
         const perf = getPerf(row.id);
         return (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setProfileUserId(row.id)}
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-primary-600 transition-colors"
+              title="View Profile"
+            >
+              <UserCircle className="w-4 h-4" />
+            </button>
             {perf && (
               <button
                 onClick={() => setPerfEmployee(perf)}
@@ -485,6 +503,11 @@ export default function AdminEmployeesPage() {
         open={!!resetPassUser}
         onClose={() => setResetPassUser(null)}
         user={resetPassUser}
+      />
+
+      <EmployeeProfileModal
+        employeeId={profileUserId}
+        onClose={() => setProfileUserId(null)}
       />
     </div>
   );

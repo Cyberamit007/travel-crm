@@ -10,9 +10,13 @@ import AdminCampaignsPage from './pages/admin/CampaignsPage';
 import AdminEmployeesPage from './pages/admin/EmployeesPage';
 import AdminSettingsPage from './pages/admin/SettingsPage';
 import AdminFeedbackPage from './pages/admin/FeedbackPage';
+import AdminLeavePage from './pages/admin/LeavePage';
+import AdminActivityFeedPage from './pages/admin/ActivityFeedPage';
+import AdminReportsPage from './pages/admin/ReportsPage';
 import EmployeeLeadsPage from './pages/employee/LeadsPage';
 import EmployeeFollowUpsPage from './pages/employee/FollowUpsPage';
 import EmployeeSettingsPage from './pages/employee/SettingsPage';
+import EmployeeLeavePage from './pages/employee/LeavePage';
 
 function RoleRedirect() {
   const { user, isAuthenticated } = useAuthStore();
@@ -49,6 +53,9 @@ export default function App() {
         <Route path="employees" element={<AdminEmployeesPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />
         <Route path="feedback" element={<AdminFeedbackPage />} />
+        <Route path="leaves" element={<AdminLeavePage />} />
+        <Route path="activity" element={<AdminActivityFeedPage />} />
+        <Route path="reports" element={<AdminReportsPage />} />
       </Route>
 
       <Route
@@ -64,6 +71,7 @@ export default function App() {
         <Route path="leads" element={<EmployeeLeadsPage />} />
         <Route path="follow-ups" element={<EmployeeFollowUpsPage />} />
         <Route path="settings" element={<EmployeeSettingsPage />} />
+        <Route path="leaves" element={<EmployeeLeavePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

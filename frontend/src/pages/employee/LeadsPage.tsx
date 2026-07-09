@@ -12,6 +12,8 @@ import Pagination from '../../components/ui/Pagination';
 import LeadForm from '../../components/leads/LeadForm';
 import LeadDetail from '../../components/leads/LeadDetail';
 import Badge from '../../components/ui/Badge';
+import PriorityBadge from '../../components/ui/PriorityBadge';
+import TagChip from '../../components/ui/TagChip';
 import { formatDate, isOverdue, cn } from '../../utils/helpers';
 
 const STATUSES = [
@@ -83,6 +85,12 @@ export default function EmployeeLeadsPage() {
       ),
     },
     {
+      key: 'priority',
+      header: 'P',
+      headerClassName: 'w-8',
+      render: (row) => <PriorityBadge priority={(row as any).priority ?? 'MEDIUM'} />,
+    },
+    {
       key: 'source',
       header: 'Source',
       render: (row) => <Badge source={row.source} />,
@@ -91,6 +99,22 @@ export default function EmployeeLeadsPage() {
       key: 'status',
       header: 'Status',
       render: (row) => <Badge status={row.status} />,
+    },
+    {
+      key: 'tags',
+      header: 'Tags',
+      render: (row) => {
+        const tags = (row as any).tags ?? [];
+        if (!tags.length) return null;
+        return (
+          <div className="flex flex-wrap gap-1">
+            {tags.slice(0, 2).map((lt: any) => (
+              <TagChip key={lt.tag?.id ?? lt.id} tag={lt.tag ?? lt} />
+            ))}
+            {tags.length > 2 && <span className="text-xs text-slate-400">+{tags.length - 2}</span>}
+          </div>
+        );
+      },
     },
     {
       key: 'destination',
