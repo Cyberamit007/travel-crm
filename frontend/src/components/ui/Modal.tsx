@@ -10,6 +10,7 @@ interface ModalProps {
   footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   className?: string;
+  noPadding?: boolean;
 }
 
 const sizeClasses = {
@@ -29,6 +30,7 @@ export default function Modal({
   footer,
   size = 'md',
   className,
+  noPadding = false,
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +74,7 @@ export default function Modal({
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 scrollbar-thin">
+        <div className={cn('flex-1 overflow-y-auto scrollbar-thin', !noPadding && 'px-6 py-5')}>
           {children}
         </div>
 

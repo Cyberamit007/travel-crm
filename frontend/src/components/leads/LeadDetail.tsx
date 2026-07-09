@@ -9,7 +9,6 @@ import { useLead, useUpdateLead, useTransferLead } from '../../hooks/useLeads';
 import { useUsers } from '../../hooks/useUsers';
 import Badge from '../ui/Badge';
 import Avatar from '../ui/Avatar';
-import SlidePanel from '../ui/SlidePanel';
 import Modal from '../ui/Modal';
 import LeadForm from './LeadForm';
 import PriorityBadge from '../ui/PriorityBadge';
@@ -37,9 +36,9 @@ const statusOrder: LeadStatus[] = ['NEW', 'CONTACTED', 'INTERESTED', 'FOLLOW_UP_
 
 function WorkspaceSkeleton() {
   return (
-    <div className="flex flex-col h-full">
+    <div>
       {/* Header skeleton */}
-      <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-slate-100 space-y-3">
+      <div className="px-6 pt-5 pb-4 border-b border-slate-100 space-y-3">
         <div className="flex items-center gap-4">
           <Skeleton className="w-14 h-14 rounded-full flex-shrink-0" />
           <div className="flex-1 space-y-2">
@@ -56,7 +55,7 @@ function WorkspaceSkeleton() {
         <Skeleton className="h-9 w-64 rounded-xl" />
       </div>
       {/* Body skeleton */}
-      <div className="flex-1 p-6 space-y-4">
+      <div className="p-6 space-y-4">
         <div className="grid grid-cols-2 gap-3">
           {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
         </div>
@@ -376,14 +375,13 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
 
   return (
     <>
-      <SlidePanel open={open} onClose={onClose} noPadding>
+      <Modal open={open} onClose={onClose} size="3xl" noPadding>
         {isLoading || !lead ? (
           <WorkspaceSkeleton />
         ) : (
-          <div className="flex flex-col h-full">
-
+          <>
             {/* ── Sticky Header ─────────────────────────────────────────── */}
-            <div className="flex-shrink-0 bg-white border-b border-slate-100">
+            <div className="sticky top-0 z-10 bg-white border-b border-slate-100">
               {/* Top bar: avatar + name + close */}
               <div className="flex items-start gap-4 px-6 pt-5 pb-4">
                 <Avatar name={lead.name} size="lg" />
@@ -499,8 +497,8 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
               </div>
             </div>
 
-            {/* ── Scrollable Tab Body ────────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-5">
+            {/* ── Tab Body ──────────────────────────────────────────────── */}
+            <div className="px-6 py-5">
               {activeTab === 'overview' && (
                 <OverviewTab lead={lead} canAct={canAct} onUpdateLead={(data) => updateLead.mutate(data)} />
               )}
@@ -518,11 +516,11 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
                 <CommentsSection leadId={lead.id} />
               )}
             </div>
-          </div>
+          </>
         )}
-      </SlidePanel>
+      </Modal>
 
-      {/* ── Edit Modal (outside SlidePanel) ──────────────────────────────── */}
+      {/* ── Edit Modal ───────────────────────────────────────────────────── */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Lead" size="2xl">
         {lead && (
           <LeadForm
