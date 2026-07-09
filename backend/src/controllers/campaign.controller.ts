@@ -16,7 +16,9 @@ export const getCampaigns = async (req: AuthenticatedRequest, res: Response): Pr
     const { status, search, page = 1, limit = 20 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      archivedAt: null,  // exclude archived campaigns from main list
+    };
     if (status) where.status = status;
     if (search) {
       where.OR = [
@@ -350,6 +352,31 @@ export const uploadCampaignAttachment = async (req: AuthenticatedRequest, res: R
       include: { uploadedBy: { select: { id: true, name: true } } },
     });
     res.status(201).json({ success: true, data: attachment });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// ─── Archived Campaigns ───────────────────────────────────────────────────────
+
+export const getArchivedCampaigns = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const orgId = req.user?.organizationId;
+    const where: Record<string, unknown> = { archivedAt: { not: null } };
+    if (orgId) where.organizationId = orgId;
+
+    const campaigns = await prisma.campaign.findMany({
+      where,
+      select: {
+        id: true, name: true, destination: true, metaCampaignId: true,
+        archivedAt: true, archiveS3Key: true, createdAt: true,
+        _count: { select: { leads: true } },
+      },
+      orderBy: { archivedAt: 'desc' },
+      take: 100,
+    } as any);
+
+    res.json({ success: true, data: campaigns });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }

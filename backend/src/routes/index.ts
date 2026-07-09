@@ -11,6 +11,7 @@ import commentRoutes from './comment.routes.js';
 import activityRoutes from './activity.routes.js';
 import settingsRoutes from './settings.routes.js';
 import reportRoutes from './report.routes.js';
+import metaConnectionRoutes from './metaConnection.routes.js';
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/tags', tagRoutes);
 router.use('/activity', activityRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/reports', reportRoutes);
+router.use('/settings/meta-connection', metaConnectionRoutes);
 
 export default router;

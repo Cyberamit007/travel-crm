@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Link2 } from 'lucide-react';
 import { Campaign, CampaignStatus } from '../../types/index';
 import { useUsers } from '../../hooks/useUsers';
 
@@ -42,6 +42,8 @@ export default function CampaignForm({
   isLoading,
   onCancel,
 }: CampaignFormProps) {
+  const isMetaCampaign = Boolean(defaultValues?.isFromMeta);
+
   const { data: usersData } = useUsers({ role: 'EMPLOYEE', limit: 100, isActive: true });
   const employees = usersData?.data ?? [];
 
@@ -116,13 +118,20 @@ export default function CampaignForm({
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
+      {isMetaCampaign && (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700">
+          <Link2 className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>This campaign is synced from Meta Ads. Name, status, dates, and budget are managed by Meta and cannot be edited here.</span>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Campaign Name *</label>
           <input
             {...register('name', { required: 'Name is required' })}
-            className="input"
+            className={isMetaCampaign ? 'input bg-slate-50 cursor-not-allowed' : 'input'}
             placeholder="e.g. Kedarnath Summer 2025"
+            readOnly={isMetaCampaign}
           />
           {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
         </div>
@@ -152,7 +161,7 @@ export default function CampaignForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Status</label>
-          <select {...register('status')} className="input">
+          <select {...register('status')} className={isMetaCampaign ? 'input bg-slate-50 cursor-not-allowed' : 'input'} disabled={isMetaCampaign}>
             <option value="DRAFT">Draft</option>
             <option value="ACTIVE">Active</option>
             <option value="PAUSED">Paused</option>
@@ -174,11 +183,21 @@ export default function CampaignForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Start Date</label>
-          <input {...register('startDate')} type="date" className="input" />
+          <input
+            {...register('startDate')}
+            type="date"
+            className={isMetaCampaign ? 'input bg-slate-50 cursor-not-allowed' : 'input'}
+            readOnly={isMetaCampaign}
+          />
         </div>
         <div>
           <label className="label">End Date</label>
-          <input {...register('endDate')} type="date" className="input" />
+          <input
+            {...register('endDate')}
+            type="date"
+            className={isMetaCampaign ? 'input bg-slate-50 cursor-not-allowed' : 'input'}
+            readOnly={isMetaCampaign}
+          />
         </div>
       </div>
 
@@ -187,9 +206,10 @@ export default function CampaignForm({
         <input
           {...register('budget', { valueAsNumber: true, min: 0 })}
           type="number"
-          className="input"
+          className={isMetaCampaign ? 'input bg-slate-50 cursor-not-allowed' : 'input'}
           placeholder="e.g. 50000"
           min={0}
+          readOnly={isMetaCampaign}
         />
       </div>
 

@@ -4,7 +4,9 @@ import {
   getCampaignStats, exportCampaigns,
   getCampaignNotes, createCampaignNote, updateCampaignNote, deleteCampaignNote,
   getCampaignAttachments, uploadCampaignAttachment, deleteCampaignAttachment,
+  getArchivedCampaigns,
 } from '../controllers/campaign.controller.js';
+import { getArchiveDownload } from './metaConnection.routes.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 
@@ -12,8 +14,10 @@ const router = Router();
 
 router.use(authenticate);
 router.get('/', getCampaigns);
+router.get('/archived', requireAdmin, getArchivedCampaigns);
 router.get('/stats', requireAdmin, getCampaignStats);
 router.get('/export', requireAdmin, exportCampaigns);
+router.get('/:id/archive-download', requireAdmin, getArchiveDownload);
 router.get('/:id', getCampaignById);
 router.post('/', requireAdmin, createCampaign);
 router.put('/:id', requireAdmin, updateCampaign);

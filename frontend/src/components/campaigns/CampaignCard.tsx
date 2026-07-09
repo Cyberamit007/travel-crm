@@ -1,4 +1,4 @@
-import { Calendar, Target, Users, Edit, Trash2, MapPin } from 'lucide-react';
+import { Calendar, Target, Users, Edit, Trash2, MapPin, Link2 } from 'lucide-react';
 import { Campaign } from '../../types/index';
 import Badge from '../ui/Badge';
 import Avatar from '../ui/Avatar';
@@ -27,8 +27,14 @@ export default function CampaignCard({ campaign, onEdit, onDelete, onView }: Cam
     <div className="card p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <Badge campaignStatus={campaign.status} />
+            {campaign.isFromMeta && (
+              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-100 tracking-wide">
+                <Link2 className="w-2.5 h-2.5" />
+                META
+              </span>
+            )}
           </div>
           <button
             onClick={() => onView?.(campaign)}

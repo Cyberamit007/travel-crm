@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Plus, Target, CheckCircle, Megaphone, FileText, Users, MapPin, Calendar, TrendingUp, StickyNote, Paperclip } from 'lucide-react';
+import { Plus, Target, CheckCircle, Megaphone, FileText, Users, MapPin, Calendar, TrendingUp, StickyNote, Paperclip, Archive, ChevronDown, ChevronUp, Download, Link2 } from 'lucide-react';
 import { useCampaigns, useCampaign, useCampaignStats, useCreateCampaign, useUpdateCampaign, useDeleteCampaign } from '../../hooks/useCampaigns';
+import { useArchivedCampaigns, useArchiveDownload } from '../../hooks/useMetaConnection';
 import { Campaign, CampaignStatus, Lead } from '../../types/index';
 import CampaignCard from '../../components/campaigns/CampaignCard';
 import CampaignForm from '../../components/campaigns/CampaignForm';
@@ -10,6 +11,7 @@ import Modal from '../../components/ui/Modal';
 import StatsCard from '../../components/ui/StatsCard';
 import Badge from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
+import toast from 'react-hot-toast';
 import { cn, formatDate, formatCurrency, formatDateTime } from '../../utils/helpers';
 
 const STATUS_TABS: { value: CampaignStatus | 'ALL'; label: string }[] = [
@@ -79,8 +81,14 @@ function CampaignDetailModal({
           {/* Header */}
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <Badge campaignStatus={campaign.status} />
+                {campaign.isFromMeta && (
+                  <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-100 tracking-wide">
+                    <Link2 className="w-2.5 h-2.5" />
+                    META
+                  </span>
+                )}
               </div>
               <h2 className="text-xl font-bold text-slate-900">{campaign.name}</h2>
               <div className="flex items-center gap-1.5 text-slate-500 text-sm mt-1">
@@ -218,10 +226,13 @@ export default function AdminCampaignsPage() {
   const [editCampaign, setEditCampaign] = useState<Campaign | null>(null);
   const [deleteCampaign, setDeleteCampaign] = useState<Campaign | null>(null);
   const [detailCampaignId, setDetailCampaignId] = useState<string | null>(null);
+  const [archivedOpen, setArchivedOpen] = useState(false);
 
   const filters = activeTab === 'ALL' ? {} : { status: activeTab };
   const { data, isLoading } = useCampaigns({ ...filters, limit: 50 });
   const { data: statsData } = useCampaignStats();
+  const { data: archivedCampaigns = [] } = useArchivedCampaigns();
+  const archiveDownload = useArchiveDownload();
   const createCampaign = useCreateCampaign();
   const updateCampaign = useUpdateCampaign();
   const deleteCampaignMutation = useDeleteCampaign();
@@ -319,6 +330,68 @@ export default function AdminCampaignsPage() {
               onDelete={setDeleteCampaign}
             />
           ))}
+        </div>
+      )}
+
+      {/* Archived campaigns */}
+      {archivedCampaigns.length > 0 && (
+        <div>
+          <button
+            onClick={() => setArchivedOpen(!archivedOpen)}
+            className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors py-1.5"
+          >
+            <Archive className="w-4 h-4" />
+            Archived ({archivedCampaigns.length})
+            {archivedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          {archivedOpen && (
+            <div className="card overflow-hidden mt-2">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Campaign</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Destination</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Leads</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Archived On</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500">Archive File</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {archivedCampaigns.map((ac) => (
+                      <tr key={ac.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium text-slate-800">{ac.name}</td>
+                        <td className="px-4 py-3 text-slate-500">{ac.destination}</td>
+                        <td className="px-4 py-3 text-slate-600">{ac._count.leads}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{formatDate(ac.archivedAt)}</td>
+                        <td className="px-4 py-3 text-right">
+                          {ac.archiveS3Key ? (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const result = await archiveDownload.mutateAsync(ac.id);
+                                  window.open(result.url, '_blank', 'noopener,noreferrer');
+                                } catch {
+                                  toast.error('Failed to get download link');
+                                }
+                              }}
+                              disabled={archiveDownload.isPending}
+                              className="btn-secondary text-xs py-1 px-3 inline-flex items-center gap-1 ml-auto"
+                            >
+                              <Download className="w-3 h-3" />
+                              Download
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">No file</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

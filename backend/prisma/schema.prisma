@@ -104,6 +104,16 @@ model Campaign {
   utmCampaign    String?
   keywords       String   @default("[]")
 
+  // Meta Ads Manager sync fields
+  metaCampaignId  String?   @unique
+  metaAdAccountId String?
+  metaObjective   String?
+  metaStatus      String?               // Meta raw: ACTIVE | PAUSED | DELETED | ARCHIVED
+  isFromMeta      Boolean   @default(false)
+  lastSyncedAt    DateTime?
+  archivedAt      DateTime?             // set after S3 upload completes
+  archiveS3Key    String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -202,6 +212,8 @@ model Lead {
   metaPageId      String?
   adId            String?
   adName          String?
+  adsetId         String?               // Meta adset ID
+  metaCampaignId  String?               // denormalized for archival queries
 
   notes         String?
   budget        Float?
@@ -372,6 +384,38 @@ model WebhookLog {
 
   @@index([processed])
   @@map("webhook_logs")
+}
+
+// ─── Meta Ads Integration ────────────────────────────────────────────────────
+
+model MetaConnection {
+  id              String   @id @default(cuid())
+  organizationId  String   @unique
+  adAccountId     String
+  pageId          String?
+  systemUserToken String                // AES-256-GCM encrypted at rest
+  isActive        Boolean  @default(true)
+  lastSyncAt      DateTime?
+  lastSyncError   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("meta_connections")
+}
+
+model CampaignArchive {
+  id             String   @id @default(cuid())
+  organizationId String?
+  metaCampaignId String
+  campaignName   String
+  leadCount      Int
+  s3Key          String
+  s3Bucket       String
+  fileSizeBytes  Int?
+  archivedAt     DateTime @default(now())
+
+  @@index([organizationId])
+  @@map("campaign_archives")
 }
 
 // ─── Feedback ────────────────────────────────────────────────────────────────

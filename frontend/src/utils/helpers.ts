@@ -27,6 +27,7 @@ export const campaignStatusConfig: Record<CampaignStatus, { label: string; color
   PAUSED:    { label: 'Paused',    color: 'text-yellow-700', bg: 'bg-yellow-100' },
   COMPLETED: { label: 'Completed', color: 'text-slate-700',  bg: 'bg-slate-100' },
   DRAFT:     { label: 'Draft',     color: 'text-blue-700',   bg: 'bg-blue-100' },
+  ENDED:     { label: 'Ended',     color: 'text-purple-700', bg: 'bg-purple-100' },
 };
 
 export const formatDate = (date: string | Date | undefined | null): string => {

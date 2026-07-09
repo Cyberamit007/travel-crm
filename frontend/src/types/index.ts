@@ -2,7 +2,7 @@ export type Role = 'ADMIN' | 'EMPLOYEE';
 export type LeadSource = 'WHATSAPP' | 'INSTAGRAM' | 'MANUAL' | 'WEBSITE';
 export type LeadStatus = 'NEW' | 'CONTACTED' | 'INTERESTED' | 'FOLLOW_UP_SCHEDULED' | 'CONFIRMED' | 'LOST';
 export type LeadPriority = 'HIGH' | 'MEDIUM' | 'LOW';
-export type CampaignStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'DRAFT';
+export type CampaignStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'DRAFT' | 'ENDED';
 export type NotificationType = 'FOLLOW_UP_DUE' | 'FOLLOW_UP_OVERDUE' | 'NEW_LEAD_ASSIGNED' | 'LEAD_STATUS_CHANGED' | 'CAMPAIGN_UPDATE' | 'SYSTEM';
 export type AvailabilityStatus = 'AVAILABLE' | 'BUSY' | 'OFFLINE';
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -56,6 +56,10 @@ export interface Campaign {
   _count?: { leads: number };
   createdAt: string;
   updatedAt: string;
+  isFromMeta?: boolean;
+  metaCampaignId?: string;
+  archivedAt?: string;
+  archiveS3Key?: string;
 }
 
 export interface CampaignEmployee {

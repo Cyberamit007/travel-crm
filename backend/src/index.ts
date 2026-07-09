@@ -13,6 +13,7 @@ import path from 'path';
 
 import routes from './routes/index.js';
 import { setSocketServer, sendFollowUpReminders } from './services/notification.service.js';
+import { runMetaSync } from './services/metaSync.service.js';
 import logger from './utils/logger.js';
 import { JWTPayload } from './types/index.js';
 import { UPLOAD_DIR_PATH } from './middleware/upload.js';
@@ -102,6 +103,11 @@ io.on('connection', (socket) => {
 cron.schedule('*/30 * * * *', async () => {
   logger.info('Running follow-up reminder check...');
   await sendFollowUpReminders();
+});
+
+cron.schedule('*/15 * * * *', async () => {
+  logger.info('Running Meta campaign sync...');
+  await runMetaSync().catch((err) => logger.error('Meta sync cron error', err));
 });
 
 const PORT = process.env.PORT || 5000;

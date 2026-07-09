@@ -14,10 +14,14 @@ export interface CreateLeadInput {
   metaPageId?: string;
   adId?: string;
   adName?: string;
+  adsetId?: string;
+  metaCampaignId?: string;
   groupSize?: number;
   budget?: number;
   preferredDate?: string;
   organizationId?: string | null;
+  /** Direct campaign ID override — skips matchCampaign() when set */
+  campaignId?: string;
 }
 
 export const matchCampaign = async (input: {
@@ -67,7 +71,8 @@ export const createLead = async (
   input: CreateLeadInput,
   matchOptions?: { whatsappNumber?: string; instagramAdId?: string }
 ) => {
-  const campaignId = await matchCampaign({
+  // Use explicit campaignId from adMap resolution; fall back to keyword/number matching
+  const campaignId = input.campaignId ?? await matchCampaign({
     whatsappNumber: matchOptions?.whatsappNumber,
     instagramAdId: matchOptions?.instagramAdId,
     message: input.message,
@@ -76,12 +81,15 @@ export const createLead = async (
 
   const assignedToId = campaignId ? await assignEmployeeForCampaign(campaignId) : null;
 
+  // Destructure campaignId override so it doesn't conflict with the resolved value below
+  const { campaignId: _overrideCampaignId, ...restInput } = input;
+
   const lead = await prisma.lead.create({
     data: {
-      ...input,
+      ...restInput,
       campaignId: campaignId ?? undefined,
       assignedToId: assignedToId ?? undefined,
-    },
+    } as any,
     include: { campaign: true, assignedTo: true },
   });
 

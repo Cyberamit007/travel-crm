@@ -4,13 +4,17 @@ import { useNavigate } from 'react-router-dom';
 import {
   Eye, EyeOff, Send, Lock, Globe, Smartphone, Instagram,
   Tag, MapPin, AlertCircle, Plus, Trash2, Edit2, Building2,
-  Check, Palette,
+  Check, Palette, Link2, RefreshCw, Unlink, Clock, AlertTriangle,
 } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
 import { useSettings, useUpdateSettings } from '../../hooks/useSettings';
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag } from '../../hooks/useTags';
+import {
+  useMetaConnection, useSaveMetaConnection, useDeleteMetaConnection, useTriggerMetaSync,
+  MetaConnectionInput,
+} from '../../hooks/useMetaConnection';
 import { cn } from '../../utils/helpers';
 
 const TABS = [
@@ -18,6 +22,7 @@ const TABS = [
   { key: 'org', label: 'Organization', icon: Building2 },
   { key: 'tags', label: 'Lead Tags', icon: Tag },
   { key: 'webhooks', label: 'Webhooks', icon: Globe },
+  { key: 'integrations', label: 'Integrations', icon: Link2 },
 ];
 
 // ─── Change Password ──────────────────────────────────────────────────────────
@@ -492,6 +497,208 @@ function WebhookSimulator() {
   );
 }
 
+// ─── Meta Integrations ────────────────────────────────────────────────────────
+
+function MetaIntegrationsSection() {
+  const { data: connection, isLoading } = useMetaConnection();
+  const saveConnection = useSaveMetaConnection();
+  const deleteConnection = useDeleteMetaConnection();
+  const triggerSync = useTriggerMetaSync();
+  const [showToken, setShowToken] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<MetaConnectionInput>();
+
+  const onSave = async (data: MetaConnectionInput) => {
+    try {
+      await saveConnection.mutateAsync(data);
+      toast.success('Meta connection saved');
+      reset();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to save connection');
+    }
+  };
+
+  const onDisconnect = async () => {
+    try {
+      await deleteConnection.mutateAsync();
+      toast.success('Meta connection removed');
+      setConfirmDisconnect(false);
+    } catch {
+      toast.error('Failed to disconnect');
+    }
+  };
+
+  const onSync = async () => {
+    try {
+      await triggerSync.mutateAsync();
+      toast.success('Sync started — campaigns will update within a few minutes');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Sync failed');
+    }
+  };
+
+  if (isLoading) return <div className="card p-6 animate-pulse h-48" />;
+
+  return (
+    <div className="space-y-5">
+      {/* Header card */}
+      <div className="card p-5">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Link2 className="w-5 h-5 text-blue-600" />
+          </div>
+          <div className="flex-1">
+            <h4 className="font-semibold text-slate-800 text-sm">Meta (Facebook / Instagram) Ads</h4>
+            <p className="text-xs text-slate-400 mt-0.5">Sync campaigns, ad sets, and leads from your Meta Ad Account automatically</p>
+          </div>
+          {connection && (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-100 flex-shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              Connected
+            </span>
+          )}
+        </div>
+      </div>
+
+      {connection ? (
+        /* ── Status card when connection exists ── */
+        <div className="card p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Ad Account ID</label>
+              <input value={connection.adAccountId} readOnly className="input bg-slate-50 cursor-not-allowed font-mono text-sm" />
+            </div>
+            {connection.pageId && (
+              <div>
+                <label className="label">Page ID</label>
+                <input value={connection.pageId} readOnly className="input bg-slate-50 cursor-not-allowed font-mono text-sm" />
+              </div>
+            )}
+            <div>
+              <label className="label">System User Token</label>
+              <input value={`••••••••${connection.tokenLastFour}`} readOnly className="input bg-slate-50 cursor-not-allowed font-mono text-sm" />
+            </div>
+            <div>
+              <label className="label">Last Synced</label>
+              <input
+                value={connection.lastSyncAt ? new Date(connection.lastSyncAt).toLocaleString('en-IN') : 'Never'}
+                readOnly
+                className="input bg-slate-50 cursor-not-allowed text-sm"
+              />
+            </div>
+          </div>
+
+          {connection.lastSyncError && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-red-700">Last sync error</p>
+                <p className="text-xs mt-0.5 text-red-600">{connection.lastSyncError}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3 pt-1">
+            <button
+              onClick={onSync}
+              disabled={triggerSync.isPending}
+              className="btn-primary flex items-center gap-2 text-sm py-2"
+            >
+              <RefreshCw className={cn('w-4 h-4', triggerSync.isPending && 'animate-spin')} />
+              {triggerSync.isPending ? 'Starting...' : 'Sync Now'}
+            </button>
+            <button
+              onClick={() => setConfirmDisconnect(true)}
+              className="btn-secondary flex items-center gap-2 text-sm py-2 text-red-600 hover:bg-red-50 hover:border-red-200"
+            >
+              <Unlink className="w-4 h-4" />
+              Disconnect
+            </button>
+          </div>
+
+          {confirmDisconnect && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+              <p className="text-sm text-red-700 font-medium mb-3">
+                Disconnect Meta? Synced campaigns remain but automatic sync will stop.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={onDisconnect}
+                  disabled={deleteConnection.isPending}
+                  className="btn-danger text-sm py-1.5 px-4"
+                >
+                  {deleteConnection.isPending ? 'Disconnecting...' : 'Yes, Disconnect'}
+                </button>
+                <button onClick={() => setConfirmDisconnect(false)} className="btn-secondary text-sm py-1.5 px-4">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ── Connection form when no connection exists ── */
+        <div className="card p-5">
+          <p className="text-xs text-slate-500 mb-5">
+            Enter your Meta Business credentials to start syncing campaigns and leads automatically every 15 minutes.
+          </p>
+          <form onSubmit={handleSubmit(onSave)} className="space-y-4 max-w-md">
+            <div>
+              <label className="label">Ad Account ID *</label>
+              <input
+                {...register('adAccountId', { required: 'Required' })}
+                className="input font-mono"
+                placeholder="act_123456789"
+              />
+              {errors.adAccountId && <p className="text-red-500 text-xs mt-1">{errors.adAccountId.message}</p>}
+            </div>
+            <div>
+              <label className="label">Page ID <span className="text-slate-400 font-normal">(optional)</span></label>
+              <input {...register('pageId')} className="input font-mono" placeholder="Your Facebook Page ID" />
+            </div>
+            <div>
+              <label className="label">System User Token *</label>
+              <div className="relative">
+                <input
+                  {...register('systemUserToken', { required: 'Required' })}
+                  type={showToken ? 'text' : 'password'}
+                  className="input pr-10 font-mono text-sm"
+                  placeholder="EAAxxxx..."
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(!showToken)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {errors.systemUserToken && <p className="text-red-500 text-xs mt-1">{errors.systemUserToken.message}</p>}
+            </div>
+            <button
+              type="submit"
+              disabled={saveConnection.isPending}
+              className="btn-primary flex items-center gap-2 text-sm"
+            >
+              <Link2 className="w-4 h-4" />
+              {saveConnection.isPending ? 'Connecting...' : 'Connect Meta'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Info footer */}
+      <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+        <Clock className="w-4 h-4 text-slate-400 flex-shrink-0" />
+        <p className="text-xs text-slate-500">
+          Campaigns sync every 15 minutes. Deleted Meta campaigns are automatically archived to S3 with full lead history.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminSettingsPage() {
@@ -521,6 +728,8 @@ export default function AdminSettingsPage() {
           </button>
         ))}
       </div>
+
+      {activeTab === 'integrations' && <MetaIntegrationsSection />}
 
       {activeTab === 'account' && (
         <div className="space-y-5">

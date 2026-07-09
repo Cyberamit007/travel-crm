@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { createLead } from '../services/lead.service.js';
 import { WebhookWhatsAppEntry, WebhookInstagramEntry } from '../types/index.js';
 import logger from '../utils/logger.js';
+import { getAdEntry } from '../services/adMap.service.js';
 
 import prisma from '../lib/prisma.js';
 
@@ -106,6 +107,9 @@ export const handleInstagramWebhook = async (req: Request, res: Response): Promi
       }
 
       for (const leadgen of entry.leadgen || []) {
+        // Resolve adId → campaign via in-memory map (populated by Meta sync)
+        const adEntry = leadgen.ad_id ? getAdEntry(leadgen.ad_id) : undefined;
+
         await createLead(
           {
             name: `Instagram Lead ${leadgen.leadgen_id}`,
@@ -116,10 +120,14 @@ export const handleInstagramWebhook = async (req: Request, res: Response): Promi
             adId: leadgen.ad_id,
             adName: leadgen.ad_name,
             metaPageId: leadgen.page_id,
+            // adMap-resolved fields — fall back to keyword matching if map is empty
+            campaignId: adEntry?.campaignId,
+            adsetId: adEntry?.adsetId,
+            metaCampaignId: adEntry?.metaCampaignId,
           },
-          { instagramAdId: leadgen.ad_id }
+          { instagramAdId: adEntry ? undefined : leadgen.ad_id }, // skip keyword match if adMap resolved
         );
-        logger.info(`Instagram leadgen created: ${leadgen.leadgen_id}`);
+        logger.info(`Instagram leadgen created: ${leadgen.leadgen_id}${adEntry ? ` → campaign ${adEntry.campaignId}` : ''}`);
       }
     }
   } catch (err) {
