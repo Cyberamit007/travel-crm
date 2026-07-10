@@ -327,6 +327,34 @@ export interface TourCategory {
   updatedAt: string;
 }
 
+// ─── Bookings ─────────────────────────────────────────────────────────────────
+
+export type FoodPreference = 'VEG' | 'NON_VEG' | 'JAIN' | 'NO_PREFERENCE';
+export type RoomSharing = 'SINGLE' | 'DOUBLE' | 'TRIPLE' | 'QUAD';
+export type TourType = 'FIT' | 'GIT';
+
+export interface Booking {
+  id: string;
+  organizationId?: string;
+  leadId: string;
+  travelerName: string;
+  numberOfTravelers: number;
+  aadharNumber?: string;
+  foodPreference: FoodPreference;
+  roomSharing: RoomSharing;
+  departureLocation?: string;
+  departurePackage?: string;
+  tourType: TourType;
+  specialRequest?: string;
+  finalPrice: number;
+  amountPaid: number;
+  balanceAmount: number;
+  balanceDueDate?: string;
+  status: 'ACTIVE' | 'CANCELLED';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type FeedbackType = 'BUG' | 'SUGGESTION' | 'OTHER';
 export type FeedbackPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type FeedbackStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';

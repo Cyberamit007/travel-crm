@@ -15,6 +15,7 @@ import metaConnectionRoutes from './metaConnection.routes.js';
 import departmentRoutes from './department.routes.js';
 import designationRoutes from './designation.routes.js';
 import mastersRoutes from './masters.routes.js';
+import bookingRoutes from './booking.routes.js';
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use('/settings/meta-connection', metaConnectionRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/designations', designationRoutes);
 router.use('/masters', mastersRoutes);
+router.use('/bookings', bookingRoutes);
 
 export default router;

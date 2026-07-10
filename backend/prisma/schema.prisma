@@ -535,3 +535,34 @@ model TourCategory {
   @@index([organizationId])
   @@map("tour_categories")
 }
+
+// ─── Bookings ─────────────────────────────────────────────────────────────────
+
+model Booking {
+  id             String  @id @default(uuid())
+  organizationId String?
+  leadId         String  @unique
+
+  travelerName      String
+  numberOfTravelers Int
+  aadharNumber      String?
+  foodPreference    String  @default("NO_PREFERENCE") // VEG | NON_VEG | JAIN | NO_PREFERENCE
+  roomSharing       String  @default("DOUBLE")        // SINGLE | DOUBLE | TRIPLE | QUAD
+  departureLocation String?
+  departurePackage  String?
+  tourType          String  @default("GIT")           // FIT | GIT
+  specialRequest    String?
+
+  finalPrice     Float
+  amountPaid     Float    @default(0)
+  balanceAmount  Float    @default(0)
+  balanceDueDate DateTime?
+
+  status    String   @default("ACTIVE")  // ACTIVE | CANCELLED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([leadId])
+  @@map("bookings")
+}

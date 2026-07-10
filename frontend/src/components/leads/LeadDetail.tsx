@@ -2,11 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Phone, Mail, Calendar, User, Megaphone, DollarSign,
   Users, MapPin, MessageSquare, Clock, CheckCircle, Edit, ArrowRightLeft,
-  Star, Save, FileText, Activity, X,
+  Star, Save, FileText, Activity, X, Utensils, BedDouble, Package,
+  IndianRupee, ChevronRight,
 } from 'lucide-react';
-import { Lead, LeadStatus } from '../../types/index';
+import { Lead, LeadStatus, Booking } from '../../types/index';
 import { useLead, useUpdateLead, useTransferLead } from '../../hooks/useLeads';
+import { useBookingByLead } from '../../hooks/useBookings';
 import { useUsers } from '../../hooks/useUsers';
+import BookingConfirmModal from './BookingConfirmModal';
 import Badge from '../ui/Badge';
 import Avatar from '../ui/Avatar';
 import Modal from '../ui/Modal';
@@ -234,9 +237,115 @@ function ActivityTimeline({ logs }: { logs: NonNullable<Lead['activityLogs']> })
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ lead, canAct, onUpdateLead }: { lead: Lead; canAct: boolean; onUpdateLead: (data: any) => void }) {
+function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => void }) {
+  const foodLabel: Record<string, string> = {
+    VEG: 'Vegetarian', NON_VEG: 'Non-Vegetarian', JAIN: 'Jain', NO_PREFERENCE: 'No Preference',
+  };
+  const roomLabel: Record<string, string> = {
+    SINGLE: 'Single Occupancy', DOUBLE: 'Double Sharing', TRIPLE: 'Triple Sharing', QUAD: 'Quad Sharing',
+  };
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-100 border-b border-emerald-200">
+        <div className="flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-emerald-600" />
+          <span className="text-sm font-semibold text-emerald-800">Booking Confirmed</span>
+        </div>
+        <button onClick={onEdit} className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-medium">
+          <Edit className="w-3 h-3" /> Edit
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {/* Travelers */}
+        <div className="flex items-start gap-2">
+          <Users className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Travelers</p>
+            <p className="text-sm font-medium text-slate-800">{booking.numberOfTravelers}</p>
+          </div>
+        </div>
+        {/* Food */}
+        <div className="flex items-start gap-2">
+          <Utensils className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Food</p>
+            <p className="text-sm font-medium text-slate-800">{foodLabel[booking.foodPreference] ?? booking.foodPreference}</p>
+          </div>
+        </div>
+        {/* Room */}
+        <div className="flex items-start gap-2">
+          <BedDouble className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Room</p>
+            <p className="text-sm font-medium text-slate-800">{roomLabel[booking.roomSharing] ?? booking.roomSharing}</p>
+          </div>
+        </div>
+        {/* Tour Type */}
+        <div className="flex items-start gap-2">
+          <Package className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Tour Type</p>
+            <p className="text-sm font-medium text-slate-800">{booking.tourType}</p>
+          </div>
+        </div>
+        {/* Departure */}
+        {(booking.departureLocation || booking.departurePackage) && (
+          <div className="flex items-start gap-2 col-span-2">
+            <MapPin className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Departure</p>
+              <p className="text-sm font-medium text-slate-800">
+                {[booking.departureLocation, booking.departurePackage].filter(Boolean).join(' — ')}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Payment strip */}
+      <div className="flex border-t border-emerald-200">
+        <div className="flex-1 px-4 py-2.5 text-center border-r border-emerald-200">
+          <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Final Price</p>
+          <p className="text-sm font-bold text-slate-800">₹{booking.finalPrice.toLocaleString('en-IN')}</p>
+        </div>
+        <div className="flex-1 px-4 py-2.5 text-center border-r border-emerald-200">
+          <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Paid</p>
+          <p className="text-sm font-bold text-emerald-700">₹{booking.amountPaid.toLocaleString('en-IN')}</p>
+        </div>
+        <div className="flex-1 px-4 py-2.5 text-center">
+          <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Balance</p>
+          <p className={`text-sm font-bold ${booking.balanceAmount > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
+            ₹{booking.balanceAmount.toLocaleString('en-IN')}
+          </p>
+        </div>
+      </div>
+
+      {/* Special request */}
+      {booking.specialRequest && (
+        <div className="px-4 py-2.5 border-t border-emerald-200 flex items-start gap-2">
+          <ChevronRight className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-slate-600"><span className="font-semibold text-emerald-700">Special Request:</span> {booking.specialRequest}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OverviewTab({ lead, canAct, onUpdateLead, booking, onEditBooking }: {
+  lead: Lead; canAct: boolean; onUpdateLead: (data: any) => void;
+  booking?: Booking | null; onEditBooking: () => void;
+}) {
   return (
     <div className="space-y-5">
+      {/* Booking summary */}
+      {lead.status === 'CONFIRMED' && booking && (
+        <BookingSummary booking={booking} onEdit={onEditBooking} />
+      )}
+
       {/* Lost reason banner */}
       {lead.status === 'LOST' && (lead as any).lostReason && (
         <div className="flex items-start gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm">
@@ -332,18 +441,25 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferToId, setTransferToId] = useState('');
   const [transferReason, setTransferReason] = useState('');
+  const [bookingOpen, setBookingOpen] = useState(false);
 
   const { data, isLoading } = useLead(leadId);
   const updateLead = useUpdateLead();
   const transferLead = useTransferLead();
   const { data: usersData } = useUsers({ limit: 100 });
+  const { data: bookingData } = useBookingByLead(leadId);
 
   const lead = data?.data;
+  const booking = bookingData?.data ?? null;
   const employees = (usersData?.data ?? []).filter((e) => e.id !== lead?.assignedToId);
   const canAct = user?.role === 'ADMIN' || lead?.assignedToId === user?.id;
 
   const handleStatusChange = (status: LeadStatus) => {
     if (!lead) return;
+    if (status === 'CONFIRMED') {
+      setBookingOpen(true);
+      return;
+    }
     updateLead.mutate({ id: lead.id, status });
   };
 
@@ -500,7 +616,10 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
             {/* ── Tab Body ──────────────────────────────────────────────── */}
             <div className="px-6 py-5">
               {activeTab === 'overview' && (
-                <OverviewTab lead={lead} canAct={canAct} onUpdateLead={(data) => updateLead.mutate(data)} />
+                <OverviewTab
+                  lead={lead} canAct={canAct} onUpdateLead={(data) => updateLead.mutate(data)}
+                  booking={booking} onEditBooking={() => setBookingOpen(true)}
+                />
               )}
               {activeTab === 'notes' && (
                 canAct
@@ -531,6 +650,16 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
           />
         )}
       </Modal>
+
+      {/* ── Booking Confirm Modal ────────────────────────────────────────── */}
+      {lead && (
+        <BookingConfirmModal
+          open={bookingOpen}
+          onClose={() => setBookingOpen(false)}
+          lead={lead}
+          existingBooking={booking}
+        />
+      )}
 
       {/* ── Transfer Modal ───────────────────────────────────────────────── */}
       <Modal
