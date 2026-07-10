@@ -14,6 +14,11 @@ import AdminFeedbackPage from './pages/admin/FeedbackPage';
 import AdminActivityFeedPage from './pages/admin/ActivityFeedPage';
 import AdminReportsPage from './pages/admin/ReportsPage';
 import MastersPage from './pages/admin/MastersPage';
+import PackagesPage from './pages/admin/PackagesPage';
+import BookingsPage from './pages/admin/BookingsPage';
+import CustomersPage from './pages/admin/CustomersPage';
+import FinancePage from './pages/admin/FinancePage';
+import OperationsPage from './pages/admin/OperationsPage';
 import EmployeeLeadsPage from './pages/employee/LeadsPage';
 import EmployeeFollowUpsPage from './pages/employee/FollowUpsPage';
 import EmployeeSettingsPage from './pages/employee/SettingsPage';
@@ -57,6 +62,11 @@ export default function App() {
         <Route path="activity" element={<AdminActivityFeedPage />} />
         <Route path="reports" element={<AdminReportsPage />} />
         <Route path="masters" element={<MastersPage />} />
+        <Route path="packages" element={<PackagesPage />} />
+        <Route path="bookings" element={<BookingsPage />} />
+        <Route path="customers" element={<CustomersPage />} />
+        <Route path="finance" element={<FinancePage />} />
+        <Route path="operations" element={<OperationsPage />} />
       </Route>
 
       <Route

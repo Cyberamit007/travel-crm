@@ -4,7 +4,8 @@ import {
   Mountain, LayoutDashboard, Users2, Bell, Settings,
   LogOut, ChevronDown, Menu, X, UserCircle, Megaphone,
   MessageSquarePlus, Activity, BarChart2, Building2,
-  UserCheck, Database, ChevronRight,
+  UserCheck, Database, ChevronRight, Package, BookOpen,
+  UserCheck2, Wallet, Map,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -37,7 +38,17 @@ const NAV: NavEntry[] = [
   { type: 'item', to: '/admin/organization', label: 'Organization', icon: Building2 },
 
   { type: 'divider', label: 'ERP' },
-  { type: 'item', to: '/admin/masters', label: 'Masters', icon: Database },
+  {
+    type: 'group', label: 'ERP', icon: Package,
+    items: [
+      { to: '/admin/packages',   label: 'Packages',   icon: Package },
+      { to: '/admin/bookings',   label: 'Bookings',   icon: BookOpen },
+      { to: '/admin/customers',  label: 'Customers',  icon: UserCheck2 },
+      { to: '/admin/finance',    label: 'Finance',    icon: Wallet },
+      { to: '/admin/operations', label: 'Operations', icon: Map },
+      { to: '/admin/masters',    label: 'Masters',    icon: Database },
+    ],
+  },
 
   { type: 'divider', label: 'SYSTEM' },
   { type: 'item', to: '/admin/reports',  label: 'Reports',  icon: BarChart2 },

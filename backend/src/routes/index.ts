@@ -16,6 +16,8 @@ import departmentRoutes from './department.routes.js';
 import designationRoutes from './designation.routes.js';
 import mastersRoutes from './masters.routes.js';
 import bookingRoutes from './booking.routes.js';
+import packageRoutes from './packages.routes.js';
+import erpRoutes from './erp.routes.js';
 
 const router = Router();
 
@@ -36,5 +38,7 @@ router.use('/departments', departmentRoutes);
 router.use('/designations', designationRoutes);
 router.use('/masters', mastersRoutes);
 router.use('/bookings', bookingRoutes);
+router.use('/packages', packageRoutes);
+router.use('/erp', erpRoutes);
 
 export default router;

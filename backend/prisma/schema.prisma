@@ -28,6 +28,7 @@ model Organization {
   departments   Department[]
   destinations  Destination[]
   tourCategories TourCategory[]
+  packages      Package[]
 
   @@map("organizations")
 }
@@ -242,6 +243,7 @@ model Lead {
   activityLogs  ActivityLog[]
   tags          LeadTag[]
   comments      LeadComment[]
+  booking       Booking?
 
   @@index([organizationId])
   @@index([status])
@@ -513,6 +515,8 @@ model Destination {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  packages Package[]
+
   @@index([organizationId])
   @@index([status])
   @@map("destinations")
@@ -532,6 +536,8 @@ model TourCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  packages Package[]
+
   @@index([organizationId])
   @@map("tour_categories")
 }
@@ -542,6 +548,7 @@ model Booking {
   id             String  @id @default(uuid())
   organizationId String?
   leadId         String  @unique
+  lead           Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   travelerName      String
   numberOfTravelers Int
@@ -565,4 +572,47 @@ model Booking {
   @@index([organizationId])
   @@index([leadId])
   @@map("bookings")
+}
+
+// ─── Packages ─────────────────────────────────────────────────────────────────
+
+model Package {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  name        String
+  code        String                              // e.g. "KED-6N7D-DEL"
+  description String?
+
+  destinationId  String?
+  destination    Destination?  @relation(fields: [destinationId], references: [id], onDelete: SetNull)
+
+  tourCategoryId String?
+  tourCategory   TourCategory? @relation(fields: [tourCategoryId], references: [id], onDelete: SetNull)
+
+  nights     Int
+  days       Int
+
+  inclusions String @default("[]")   // JSON array of strings
+  exclusions String @default("[]")   // JSON array of strings
+  highlights String @default("[]")   // JSON array of strings
+
+  pricePerPerson Float
+  priceSingle    Float?
+  priceDouble    Float?
+  priceTriple    Float?
+  priceQuad      Float?
+
+  isPopular Boolean @default(false)
+  status    String  @default("ACTIVE")  // ACTIVE | INACTIVE | DRAFT
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([destinationId])
+  @@index([tourCategoryId])
+  @@index([status])
+  @@map("packages")
 }

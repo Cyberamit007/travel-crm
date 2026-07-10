@@ -327,6 +327,36 @@ export interface TourCategory {
   updatedAt: string;
 }
 
+// ─── Packages ─────────────────────────────────────────────────────────────────
+
+export type PackageStatus = 'ACTIVE' | 'INACTIVE' | 'DRAFT';
+
+export interface Package {
+  id: string;
+  organizationId?: string;
+  name: string;
+  code: string;
+  description?: string;
+  destinationId?: string;
+  destination?: { id: string; name: string; country: string; state?: string };
+  tourCategoryId?: string;
+  tourCategory?: { id: string; name: string; icon?: string };
+  nights: number;
+  days: number;
+  inclusions: string;   // JSON string array
+  exclusions: string;   // JSON string array
+  highlights: string;   // JSON string array
+  pricePerPerson: number;
+  priceSingle?: number;
+  priceDouble?: number;
+  priceTriple?: number;
+  priceQuad?: number;
+  isPopular: boolean;
+  status: PackageStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ─── Bookings ─────────────────────────────────────────────────────────────────
 
 export type FoodPreference = 'VEG' | 'NON_VEG' | 'JAIN' | 'NO_PREFERENCE';
@@ -353,6 +383,38 @@ export interface Booking {
   status: 'ACTIVE' | 'CANCELLED';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BookingWithLead extends Booking {
+  lead: Pick<Lead, 'id' | 'name' | 'phone' | 'email' | 'destination' | 'preferredDate'> & {
+    assignedTo?: Pick<User, 'id' | 'name'>;
+  };
+}
+
+export interface FinanceSummary {
+  totalRevenue: number;
+  totalCollected: number;
+  totalBalance: number;
+  overdueBalance: number;
+  fullyPaid: number;
+  partiallyPaid: number;
+  unpaid: number;
+  total: number;
+}
+
+export interface MonthlyFinanceData {
+  month: number;
+  revenue: number;
+  collected: number;
+  count: number;
+}
+
+export interface TripGroup {
+  departureDate: string;
+  totalPax: number;
+  totalRevenue: number;
+  totalCollected: number;
+  bookings: Array<Lead & { booking?: Booking }>;
 }
 
 export type FeedbackType = 'BUG' | 'SUGGESTION' | 'OTHER';
