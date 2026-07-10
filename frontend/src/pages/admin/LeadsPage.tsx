@@ -90,9 +90,23 @@ export default function AdminLeadsPage() {
 
   const handleBulkUpdate = () => {
     if (bulkSelected.length === 0) return;
-    Promise.all(bulkSelected.map((id) => updateLead.mutateAsync({ id, status: bulkStatus }))).then(() => {
+    // CONFIRMED leads can't be bulk-moved to earlier statuses — they must go through the booking flow
+    const eligibleIds = bulkSelected.filter((id) => {
+      const lead = leads.find((l) => l.id === id);
+      return lead?.status !== 'CONFIRMED';
+    });
+    const skipped = bulkSelected.length - eligibleIds.length;
+    if (eligibleIds.length === 0) {
+      toast.error('All selected leads are confirmed bookings — they cannot be bulk-updated.');
+      return;
+    }
+    Promise.all(eligibleIds.map((id) => updateLead.mutateAsync({ id, status: bulkStatus }))).then(() => {
       setBulkSelected([]);
-      toast.success(`Updated ${bulkSelected.length} leads`);
+      if (skipped > 0) {
+        toast.success(`Updated ${eligibleIds.length} lead${eligibleIds.length !== 1 ? 's' : ''}. ${skipped} confirmed booking${skipped !== 1 ? 's' : ''} skipped.`);
+      } else {
+        toast.success(`Updated ${eligibleIds.length} lead${eligibleIds.length !== 1 ? 's' : ''}`);
+      }
     });
   };
 
@@ -328,7 +342,7 @@ export default function AdminLeadsPage() {
               onChange={(e) => setBulkStatus(e.target.value as LeadStatus)}
               className="input py-1 text-sm w-auto min-w-[160px]"
             >
-              {STATUSES.slice(1).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              {STATUSES.slice(1).filter((s) => s.value !== 'CONFIRMED').map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
             <button onClick={handleBulkUpdate} disabled={updateLead.isPending} className="btn-primary py-1 px-3 text-sm">
               Update Status

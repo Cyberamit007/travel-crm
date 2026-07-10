@@ -58,6 +58,7 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN';
   const isEditMode = !!defaultValues?.id;
+  const isConfirmedLead = isEditMode && defaultValues?.status === 'CONFIRMED';
 
   const { data: campaignsData } = useCampaigns({ limit: 100 });
   const { data: usersData } = useUsers({ role: 'EMPLOYEE', limit: 100, isActive: true });
@@ -256,13 +257,26 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
           <div>
             <label className="label">Status <span className="text-red-500">*</span></label>
             <select {...register('status', { required: true })} className="input">
-              <option value="NEW">New</option>
-              <option value="CONTACTED">Contacted</option>
-              <option value="INTERESTED">Interested</option>
-              <option value="FOLLOW_UP_SCHEDULED">Follow-up Scheduled</option>
-              <option value="CONFIRMED">Confirmed</option>
-              <option value="LOST">Lost</option>
+              {isConfirmedLead ? (
+                // Once confirmed, can only stay confirmed or mark lost
+                <>
+                  <option value="CONFIRMED">Confirmed ✓</option>
+                  <option value="LOST">Lost</option>
+                </>
+              ) : (
+                // CONFIRMED must go through the BookingConfirmModal — not available here
+                <>
+                  <option value="NEW">New</option>
+                  <option value="CONTACTED">Contacted</option>
+                  <option value="INTERESTED">Interested</option>
+                  <option value="FOLLOW_UP_SCHEDULED">Follow-up Scheduled</option>
+                  <option value="LOST">Lost</option>
+                </>
+              )}
             </select>
+            {isConfirmedLead && (
+              <p className="text-xs text-amber-600 mt-1">Confirmed bookings can only be marked as Lost from here.</p>
+            )}
           </div>
           <div>
             <label className="label">Priority</label>

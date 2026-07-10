@@ -33,13 +33,13 @@ function TravelerRow({ lead, onView }: { lead: any; onView: () => void }) {
 
   return (
     <tr className="hover:bg-slate-50 transition-colors text-sm">
-      <td className="px-4 py-2.5">
+      <td className="px-4 py-2.5 align-top">
         <p className="font-medium text-slate-800">{lead.name}</p>
         <div className="flex items-center gap-1 text-xs text-slate-400">
           <Phone className="w-3 h-3" />{lead.phone}
         </div>
       </td>
-      <td className="px-4 py-2.5 hidden sm:table-cell">
+      <td className="px-4 py-2.5 align-top hidden sm:table-cell">
         <div className="flex items-center gap-1 text-xs text-slate-600">
           <Users className="w-3 h-3 text-slate-400" />
           {booking?.numberOfTravelers ?? lead.groupSize ?? 1} pax
@@ -50,7 +50,7 @@ function TravelerRow({ lead, onView }: { lead: any; onView: () => void }) {
           </div>
         )}
       </td>
-      <td className="px-4 py-2.5 hidden md:table-cell">
+      <td className="px-4 py-2.5 align-top hidden md:table-cell">
         {booking?.foodPreference && booking.foodPreference !== 'NO_PREFERENCE' && (
           <span className="badge badge-muted text-[10px]">{booking.foodPreference}</span>
         )}
@@ -61,7 +61,7 @@ function TravelerRow({ lead, onView }: { lead: any; onView: () => void }) {
           </p>
         )}
       </td>
-      <td className="px-4 py-2.5 text-right">
+      <td className="px-4 py-2.5 align-top text-right">
         {booking ? (
           <>
             <p className="font-semibold text-slate-800 tabular text-xs">{formatCurrency(booking.finalPrice)}</p>
@@ -79,7 +79,7 @@ function TravelerRow({ lead, onView }: { lead: any; onView: () => void }) {
           <span className="text-xs text-slate-400">—</span>
         )}
       </td>
-      <td className="px-4 py-2.5 text-center">
+      <td className="px-4 py-2.5 align-top text-center">
         <button onClick={onView} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-primary-600 transition-colors">
           <ExternalLink className="w-3 h-3" />
         </button>

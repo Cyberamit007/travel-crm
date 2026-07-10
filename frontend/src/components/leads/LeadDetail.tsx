@@ -92,16 +92,21 @@ function StatusBar({ current, onUpdate, disabled }: { current: LeadStatus; onUpd
       {statusOrder.map((s) => {
         const cfg = leadStatusConfig[s];
         const isCurrent = current === s;
+        // Once a booking is confirmed, only LOST is the allowed forward transition
+        const isLocked = current === 'CONFIRMED' && s !== 'CONFIRMED' && s !== 'LOST';
         return (
           <button
             key={s}
-            onClick={() => !isCurrent && onUpdate(s)}
-            disabled={isCurrent || disabled}
+            onClick={() => !isCurrent && !isLocked && onUpdate(s)}
+            disabled={isCurrent || disabled || isLocked}
+            title={isLocked ? 'Cannot revert a confirmed booking' : undefined}
             className={cn(
               'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap',
               isCurrent
                 ? `${cfg.bg} ${cfg.color} border-transparent ring-2 ring-offset-1 ring-current shadow-sm`
-                : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-800 hover:bg-slate-50 disabled:cursor-default'
+                : isLocked
+                  ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                  : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-800 hover:bg-slate-50 disabled:cursor-default'
             )}
           >
             {isCurrent && <span className="mr-1">✓</span>}{cfg.label}
@@ -456,6 +461,8 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
 
   const handleStatusChange = (status: LeadStatus) => {
     if (!lead) return;
+    // Guard: once confirmed, can only move to LOST
+    if (lead.status === 'CONFIRMED' && status !== 'LOST') return;
     if (status === 'CONFIRMED') {
       setBookingOpen(true);
       return;

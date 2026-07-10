@@ -41,6 +41,7 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
   const createBooking = useCreateBooking();
   const updateBooking = useUpdateBooking();
   const isEdit = !!existingBooking;
+  const todayDate = new Date().toISOString().split('T')[0];
 
   const { register, handleSubmit, control, setValue, formState: { errors } } = useForm<BookingForm>({
     defaultValues: {
@@ -255,7 +256,15 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
           {balanceAmount > 0 && (
             <div className="mt-3">
               <label className="label">Balance Due Date</label>
-              <input type="date" {...register('balanceDueDate')} className="input" />
+              <input
+                type="date"
+                {...register('balanceDueDate', {
+                  validate: (val) => !val || val >= todayDate || 'Balance due date cannot be in the past',
+                })}
+                className="input"
+                min={todayDate}
+              />
+              {errors.balanceDueDate && <p className="text-red-500 text-xs mt-1">{errors.balanceDueDate.message}</p>}
             </div>
           )}
         </div>

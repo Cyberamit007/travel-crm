@@ -82,7 +82,7 @@ export default function Table<T extends { id?: string }>({
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={cn('px-4 py-3 text-slate-700', col.className)}
+                    className={cn('px-4 py-3 text-slate-700 align-top', col.className)}
                   >
                     {col.render
                       ? col.render(row, index)

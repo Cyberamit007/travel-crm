@@ -150,7 +150,7 @@ export default function BookingsPage() {
               <tbody className="divide-y divide-slate-100">
                 {bookings.map((b) => (
                   <tr key={b.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-3 align-top">
                       <p className="font-semibold text-slate-800">{b.travelerName}</p>
                       <p className="text-xs text-slate-400">{b.lead?.phone}</p>
                       {b.lead?.destination && (
@@ -160,7 +160,7 @@ export default function BookingsPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 hidden sm:table-cell">
+                    <td className="px-4 py-3 align-top hidden sm:table-cell">
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5">
                           <Users className="w-3 h-3 text-slate-400" />
@@ -175,13 +175,13 @@ export default function BookingsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-right">
+                    <td className="px-4 py-3 align-top text-right">
                       <p className="font-semibold text-slate-800 tabular">{formatCurrency(b.finalPrice)}</p>
                     </td>
-                    <td className="px-4 py-3.5 text-right hidden md:table-cell">
+                    <td className="px-4 py-3 align-top text-right hidden md:table-cell">
                       <p className="text-emerald-600 font-medium tabular">{formatCurrency(b.amountPaid)}</p>
                     </td>
-                    <td className="px-4 py-3.5 text-right hidden md:table-cell">
+                    <td className="px-4 py-3 align-top text-right hidden md:table-cell">
                       <p className={cn('font-medium tabular', b.balanceAmount > 0 ? 'text-orange-500' : 'text-emerald-600')}>
                         {formatCurrency(b.balanceAmount)}
                       </p>
@@ -189,10 +189,10 @@ export default function BookingsPage() {
                         <p className="text-[10px] text-slate-400">Due {formatDate(b.balanceDueDate)}</p>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 text-center">
+                    <td className="px-4 py-3 align-top text-center">
                       <PaymentBadge booking={b} />
                     </td>
-                    <td className="px-4 py-3.5 text-right">
+                    <td className="px-4 py-3 align-top text-right">
                       <button
                         onClick={() => navigate(`/admin/leads?id=${b.leadId}`)}
                         className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-primary-600 transition-colors"

@@ -68,21 +68,21 @@ function BookingRow({ b, onView }: { b: BookingWithLead; onView: () => void }) {
 
   return (
     <tr className="hover:bg-slate-50 transition-colors">
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 align-top">
         <p className="font-semibold text-slate-800 text-sm">{b.travelerName}</p>
         <p className="text-xs text-slate-400">{b.lead?.phone}</p>
         {b.lead?.destination && <p className="text-xs text-slate-400">{b.lead.destination}</p>}
       </td>
-      <td className="px-4 py-3 hidden sm:table-cell">
+      <td className="px-4 py-3 align-top hidden sm:table-cell">
         <div className="flex items-center gap-1 text-xs text-slate-500">
           <Users className="w-3 h-3" />{b.numberOfTravelers}
         </div>
         {b.lead?.preferredDate && <p className="text-xs text-slate-400 mt-0.5">{b.lead.preferredDate}</p>}
       </td>
-      <td className="px-4 py-3 text-right">
+      <td className="px-4 py-3 align-top text-right">
         <p className="font-semibold text-slate-800 tabular text-sm">{formatCurrency(b.finalPrice)}</p>
       </td>
-      <td className="px-4 py-3 hidden md:table-cell">
+      <td className="px-4 py-3 align-top hidden md:table-cell">
         <div className="min-w-[80px]">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-emerald-600 font-medium">{formatCurrency(b.amountPaid)}</span>
@@ -93,7 +93,7 @@ function BookingRow({ b, onView }: { b: BookingWithLead; onView: () => void }) {
           </div>
         </div>
       </td>
-      <td className="px-4 py-3 text-right">
+      <td className="px-4 py-3 align-top text-right">
         {b.balanceAmount > 0 ? (
           <>
             <p className={cn('font-semibold tabular text-sm', isOverdue ? 'text-red-500' : 'text-orange-500')}>
@@ -111,7 +111,7 @@ function BookingRow({ b, onView }: { b: BookingWithLead; onView: () => void }) {
           </span>
         )}
       </td>
-      <td className="px-4 py-3 text-center">
+      <td className="px-4 py-3 align-top text-center">
         <button onClick={onView} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-primary-600 transition-colors">
           <ExternalLink className="w-3.5 h-3.5" />
         </button>

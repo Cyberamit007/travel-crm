@@ -216,6 +216,11 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response): Prom
     const updateData: Record<string, unknown> = { ...rest };
 
     if (status !== undefined) {
+      // Once CONFIRMED, a lead can only move to LOST — never backward
+      if (existing.status === 'CONFIRMED' && status !== 'CONFIRMED' && status !== 'LOST') {
+        res.status(400).json({ success: false, error: 'A confirmed booking cannot be reverted to a previous status' });
+        return;
+      }
       updateData.status = status;
       if (status === 'LOST') {
         updateData.lostReason = lostReason || existing.lostReason || null;
