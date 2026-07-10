@@ -141,7 +141,7 @@ function PackageFormModal({
     };
 
     if (isEdit && existing) {
-      updatePkg.mutate({ id: existing.id, ...payload }, { onSuccess: onClose });
+      updatePkg.mutate({ id: existing.id, ...payload } as any, { onSuccess: onClose });
     } else {
       createPkg.mutate(payload as any, { onSuccess: onClose });
     }
