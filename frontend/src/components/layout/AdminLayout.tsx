@@ -5,7 +5,7 @@ import {
   LogOut, ChevronDown, Menu, X, UserCircle, Megaphone,
   MessageSquarePlus, Activity, BarChart2, Building2,
   UserCheck, Database, ChevronRight, Package, BookOpen,
-  UserCheck2, Wallet, Map,
+  Contact, Wallet, Map,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -43,7 +43,7 @@ const NAV: NavEntry[] = [
     items: [
       { to: '/admin/packages',   label: 'Packages',   icon: Package },
       { to: '/admin/bookings',   label: 'Bookings',   icon: BookOpen },
-      { to: '/admin/customers',  label: 'Customers',  icon: UserCheck2 },
+      { to: '/admin/customers',  label: 'Customers',  icon: Contact },
       { to: '/admin/finance',    label: 'Finance',    icon: Wallet },
       { to: '/admin/operations', label: 'Operations', icon: Map },
       { to: '/admin/masters',    label: 'Masters',    icon: Database },
