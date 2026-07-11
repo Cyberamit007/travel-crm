@@ -123,7 +123,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Period selector */}
-      <div className="card p-4 flex flex-wrap items-center gap-3">
+      <div className="card p-5 flex flex-wrap items-center gap-3">
         <div className="flex gap-1 p-1 bg-slate-100 rounded-xl flex-wrap">
           {PERIODS.map((p) => (
             <button

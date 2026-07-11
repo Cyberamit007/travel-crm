@@ -50,7 +50,7 @@ export default function EmployeeSettingsPage() {
         <p className="text-sm text-slate-500 mt-0.5">Manage your account settings</p>
       </div>
 
-      <div className="card p-6">
+      <div className="card p-5">
         <h3 className="font-semibold text-slate-900 mb-4">Account Information</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -64,7 +64,7 @@ export default function EmployeeSettingsPage() {
         </div>
       </div>
 
-      <div className="card p-6">
+      <div className="card p-5">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-9 h-9 bg-mountain-100 rounded-xl flex items-center justify-center">
             <Lock className="w-5 h-5 text-mountain-600" />

@@ -61,7 +61,7 @@ export default function MyCustomersPage() {
           { label: 'Balance Due', value: String(stats.balanceDue), color: 'text-orange-500' },
           { label: 'Total Revenue', value: formatCurrency(stats.totalRevenue), color: 'text-primary-600' },
         ].map((s) => (
-          <div key={s.label} className="card text-center py-3">
+          <div key={s.label} className="card text-center px-4 py-3">
             <p className={cn('text-xl font-bold', s.color)}>{s.value}</p>
             <p className="text-xs text-slate-500 mt-0.5">{s.label}</p>
           </div>
@@ -94,7 +94,7 @@ export default function MyCustomersPage() {
               const isOverdue = booking?.balanceDueDate && booking?.balanceAmount > 0 && new Date(booking.balanceDueDate) < new Date();
 
               return (
-                <div key={c.id} className="card hover:shadow-md transition-all">
+                <div key={c.id} className="card p-4 hover:shadow-md transition-all">
                   <div className="flex items-start gap-4">
                     {/* Avatar */}
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-mountain-400 to-primary-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">

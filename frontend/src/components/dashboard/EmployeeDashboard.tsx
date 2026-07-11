@@ -345,7 +345,7 @@ export default function EmployeeDashboard() {
 
           {/* Today's Follow-ups List */}
           {stats.todayFollowUps.length > 0 && (
-            <div className="card p-4">
+            <div className="card p-5">
               <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-orange-500" />
                 Today's Follow-ups ({stats.todayFollowUps.length})
@@ -399,7 +399,7 @@ export default function EmployeeDashboard() {
         {/* Quick Actions + Recent confirmed */}
         <div className="xl:col-span-1 space-y-4">
           {/* Quick Actions */}
-          <div className="card p-4">
+          <div className="card p-5">
             <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-primary-500" />
               Quick Status Update
@@ -430,7 +430,7 @@ export default function EmployeeDashboard() {
 
           {/* Confirmed Leads summary */}
           {stats.confirmed.length > 0 && (
-            <div className="card p-4">
+            <div className="card p-5">
               <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 Your Confirmed ({stats.confirmed.length})

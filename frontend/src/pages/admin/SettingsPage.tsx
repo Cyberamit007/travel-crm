@@ -50,7 +50,7 @@ function ChangePasswordSection() {
   };
 
   return (
-    <div className="card p-6">
+    <div className="card p-5">
       <div className="flex items-center gap-3 mb-5">
         <div className="w-9 h-9 bg-mountain-100 rounded-xl flex items-center justify-center">
           <Lock className="w-5 h-5 text-mountain-600" />

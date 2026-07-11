@@ -35,7 +35,7 @@ function CustomerCard({ lead, onView }: { lead: any; onView: () => void }) {
   const PsIcon = ps?.icon;
 
   return (
-    <div className="card hover:shadow-lg transition-all group">
+    <div className="card p-5 hover:shadow-lg transition-all group">
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
@@ -170,7 +170,7 @@ export default function CustomersPage() {
           { label: 'Fully Paid', value: stats.fullyPaid, color: 'text-emerald-600' },
           { label: 'Balance Pending', value: stats.withBalance, color: 'text-orange-500' },
         ].map((s) => (
-          <div key={s.label} className="card text-center py-3">
+          <div key={s.label} className="card text-center px-4 py-3">
             <p className={cn('text-2xl font-bold', s.color)}>{s.value}</p>
             <p className="text-xs text-slate-500 mt-0.5">{s.label}</p>
           </div>

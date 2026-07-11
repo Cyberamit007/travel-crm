@@ -278,7 +278,7 @@ function PackageCard({ pkg, onEdit, onDelete }: { pkg: Package; onEdit: () => vo
   const exclusions = parseList(pkg.exclusions);
 
   return (
-    <div className="card hover:shadow-lg transition-all group">
+    <div className="card p-5 hover:shadow-lg transition-all group">
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
@@ -440,7 +440,7 @@ export default function PackagesPage() {
           { label: 'Popular', value: stats.popular, color: 'text-amber-600' },
           { label: 'Draft', value: stats.draft, color: 'text-slate-400' },
         ].map((s) => (
-          <div key={s.label} className="card text-center py-3">
+          <div key={s.label} className="card text-center px-4 py-3">
             <p className={cn('text-2xl font-bold', s.color)}>{s.value}</p>
             <p className="text-xs text-slate-500 mt-0.5">{s.label}</p>
           </div>

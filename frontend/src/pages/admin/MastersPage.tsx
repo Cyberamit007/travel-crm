@@ -225,18 +225,18 @@ function DestinationsTab() {
 
       {/* Table */}
       {isLoading ? (
-        <div className="card">
+        <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="tabular w-full">
+            <table className="data-table w-full">
               <thead>
                 <tr>
-                  <th>Destination</th><th>Location</th><th>Type</th><th>Popular</th><th>Status</th><th></th>
+                  <th>Destination</th><th>Country</th><th>State / City</th><th>Type</th><th>Popular</th><th>Status</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {[1, 2, 3, 4, 5].map((i) => (
                   <tr key={i}>
-                    {[1, 2, 3, 4, 5, 6].map((j) => (
+                    {[1, 2, 3, 4, 5, 6, 7].map((j) => (
                       <td key={j}><Skeleton className="h-4 w-24" /></td>
                     ))}
                   </tr>
@@ -258,22 +258,22 @@ function DestinationsTab() {
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="tabular w-full">
+            <table className="w-full">
               <thead>
-                <tr>
-                  <th className="pl-5">Destination</th>
-                  <th>Country</th>
-                  <th>State / City</th>
-                  <th>Type</th>
-                  <th>Popular</th>
-                  <th>Status</th>
-                  <th className="pr-5">Actions</th>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Destination</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Country</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">State / City</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Popular</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {destinations.map((dest) => (
-                  <tr key={dest.id} className={cn(!dest.status || dest.status !== 'ACTIVE' ? 'opacity-50' : '')}>
-                    <td className="pl-5">
+                  <tr key={dest.id} className={cn('border-b border-slate-100 hover:bg-slate-50 transition-colors', !dest.status || dest.status !== 'ACTIVE' ? 'opacity-50' : '')}>
+                    <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-slate-900">{dest.name}</p>
                         {dest.description && (
@@ -281,7 +281,7 @@ function DestinationsTab() {
                         )}
                       </div>
                     </td>
-                    <td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         {dest.type === 'INTERNATIONAL' ? (
                           <Globe className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
@@ -291,10 +291,10 @@ function DestinationsTab() {
                         <span className="text-slate-700">{dest.country}</span>
                       </div>
                     </td>
-                    <td className="text-slate-500 text-sm">
+                    <td className="px-4 py-3 text-slate-500 text-sm">
                       {[dest.state, dest.city].filter(Boolean).join(', ') || '—'}
                     </td>
-                    <td>
+                    <td className="px-4 py-3">
                       <span className={cn(
                         'badge text-[11px]',
                         dest.type === 'INTERNATIONAL' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -302,7 +302,7 @@ function DestinationsTab() {
                         {dest.type === 'INTERNATIONAL' ? 'International' : 'Domestic'}
                       </span>
                     </td>
-                    <td>
+                    <td className="px-4 py-3">
                       {dest.isPopular ? (
                         <span className="flex items-center gap-1 text-amber-600 text-xs font-medium">
                           <Star className="w-3.5 h-3.5 fill-amber-500" /> Popular
@@ -311,7 +311,7 @@ function DestinationsTab() {
                         <span className="text-slate-300 text-xs">—</span>
                       )}
                     </td>
-                    <td>
+                    <td className="px-4 py-3">
                       <button
                         onClick={() => handleToggle(dest)}
                         className={cn(
@@ -327,7 +327,7 @@ function DestinationsTab() {
                         }
                       </button>
                     </td>
-                    <td className="pr-5">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-0.5">
                         <button onClick={() => setEditDest(dest)} className="btn-ghost p-1.5" title="Edit">
                           <Edit className="w-3.5 h-3.5" />

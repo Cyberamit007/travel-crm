@@ -82,7 +82,7 @@ export default function BookingsPage() {
           ].map((s) => {
             const Icon = s.icon;
             return (
-              <div key={s.label} className="card flex items-center gap-3 py-3">
+              <div key={s.label} className="card flex items-center gap-3 px-4 py-3">
                 <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
                   <Icon className={cn('w-4 h-4', s.color)} />
                 </div>

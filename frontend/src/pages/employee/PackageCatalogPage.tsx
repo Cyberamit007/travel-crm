@@ -20,7 +20,7 @@ function PackageCard({ pkg }: { pkg: PkgType }) {
   const exclusions = parseList(pkg.exclusions);
 
   return (
-    <div className="card hover:shadow-lg transition-all">
+    <div className="card p-5 hover:shadow-lg transition-all">
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
