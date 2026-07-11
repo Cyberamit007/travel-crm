@@ -8,7 +8,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { usePackages, useCreatePackage, useUpdatePackage, useDeletePackage } from '../../hooks/usePackages';
 import { useItinerary, useCreateItineraryItem, useUpdateItineraryItem, useDeleteItineraryItem } from '../../hooks/useItinerary';
 import { useDestinations, useTourCategories } from '../../hooks/useMasters';
-import { Package, PackageItinerary } from '../../types/index';
+import { Package, PackageItinerary, TaskType, TaskDepartment } from '../../types/index';
 import Modal from '../../components/ui/Modal';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { formatCurrency, cn } from '../../utils/helpers';
@@ -501,13 +501,13 @@ function ItineraryItemForm({ packageId, existing, onClose }: {
         </div>
         <div>
           <label className="label text-xs">Task Type</label>
-          <select value={form.taskType} onChange={(e) => setForm((f) => ({ ...f, taskType: e.target.value }))} className="input text-sm">
+          <select value={form.taskType} onChange={(e) => setForm((f) => ({ ...f, taskType: e.target.value as TaskType }))} className="input text-sm">
             {Object.entries(TASK_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </div>
         <div>
           <label className="label text-xs">Department</label>
-          <select value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} className="input text-sm">
+          <select value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value as TaskDepartment }))} className="input text-sm">
             <option value="SALES">Sales</option>
             <option value="OPERATIONS">Operations</option>
             <option value="CUSTOMER_CARE">Customer Care</option>

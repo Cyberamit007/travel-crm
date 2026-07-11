@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { IndianRupee, Users, MapPin, Package, Utensils, BedDouble, Calendar, FileText } from 'lucide-react';
 import Modal from '../ui/Modal';
-import { Lead, Booking } from '../../types/index';
+import { Lead, Booking, FoodPreference, RoomSharing, TourType } from '../../types/index';
 import { useCreateBooking, useUpdateBooking } from '../../hooks/useBookings';
 import { usePackages } from '../../hooks/usePackages';
 import { formatCurrency, cn } from '../../utils/helpers';
@@ -105,11 +105,11 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
       travelerName: data.travelerName,
       numberOfTravelers: Number(data.numberOfTravelers),
       aadharNumber: data.aadharNumber || undefined,
-      foodPreference: data.foodPreference,
-      roomSharing: data.roomSharing,
+      foodPreference: data.foodPreference as FoodPreference,
+      roomSharing: data.roomSharing as RoomSharing,
       departureLocation: data.departureLocation || undefined,
       departurePackage: data.departurePackage || undefined,
-      tourType: data.tourType,
+      tourType: data.tourType as TourType,
       specialRequest: data.specialRequest || undefined,
       bookingNotes: data.bookingNotes || undefined,
       packageId: data.packageId || undefined,

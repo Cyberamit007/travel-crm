@@ -4,7 +4,7 @@ import {
   RefreshCw, ChevronDown, Filter,
 } from 'lucide-react';
 import { useMyTasks, useUpdateTask } from '../../hooks/useTasks';
-import { BookingTask } from '../../types/index';
+import { BookingTask, TaskStatus } from '../../types/index';
 import { cn, formatDate, formatRelativeTime } from '../../utils/helpers';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ export default function TasksPage() {
   const currentTasks: BookingTask[] = taskData[activeTab] ?? [];
 
   const handleStatusChange = (id: string, status: string) => {
-    updateTask.mutate({ id, status });
+    updateTask.mutate({ id, status: status as TaskStatus });
   };
 
   return (
