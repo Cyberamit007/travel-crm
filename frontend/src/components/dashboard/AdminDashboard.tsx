@@ -2,14 +2,15 @@ import { useState } from 'react';
 import {
   Users, Megaphone, CheckCircle, AlertCircle, Activity,
   TrendingUp, Calendar, Download, Star, Clock, Target,
-  ArrowUp, ArrowDown, Minus, Trophy, Zap,
+  ArrowUp, ArrowDown, Minus, Trophy, Zap, Plus,
+  ChevronRight, Flag, BarChart2,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
-import { useLeadStats, useRecentActivity } from '../../hooks/useLeads';
+import { useLeadStats, useRecentActivity, useLeads } from '../../hooks/useLeads';
 import { useCampaignStats } from '../../hooks/useCampaigns';
 import { useEmployeePerformance } from '../../hooks/useUsers';
 import { useDashboardStats } from '../../hooks/useDashboard';
@@ -320,6 +321,92 @@ function ExportBar() {
   );
 }
 
+function QuickActionsWidget() {
+  const navigate = useNavigate();
+  const actions = [
+    { label: 'New Lead',        icon: Plus,      color: 'text-primary-600 bg-primary-50 hover:bg-primary-100 border-primary-200', action: () => navigate('/admin/leads') },
+    { label: 'High Priority',   icon: Flag,       color: 'text-red-600 bg-red-50 hover:bg-red-100 border-red-200',               action: () => navigate('/admin/leads') },
+    { label: 'Overdue',         icon: AlertCircle,color: 'text-orange-600 bg-orange-50 hover:bg-orange-100 border-orange-200',   action: () => navigate('/admin/leads?status=FOLLOW_UP_SCHEDULED') },
+    { label: 'Confirmed',       icon: CheckCircle,color: 'text-green-600 bg-green-50 hover:bg-green-100 border-green-200',       action: () => navigate('/admin/leads?status=CONFIRMED') },
+    { label: 'Campaigns',       icon: Megaphone,  color: 'text-violet-600 bg-violet-50 hover:bg-violet-100 border-violet-200',   action: () => navigate('/admin/campaigns') },
+    { label: 'Reports',         icon: BarChart2,  color: 'text-sky-600 bg-sky-50 hover:bg-sky-100 border-sky-200',               action: () => navigate('/admin/reports') },
+  ];
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Zap className="w-4 h-4 text-amber-500" />
+        <h3 className="text-sm font-semibold text-slate-700">Quick Actions</h3>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        {actions.map((a) => {
+          const Icon = a.icon;
+          return (
+            <button
+              key={a.label}
+              onClick={a.action}
+              className={cn('flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-center transition-all', a.color)}
+            >
+              <Icon className="w-4 h-4" />
+              <span className="text-xs font-medium leading-tight">{a.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HighPriorityWidget({ organizationId }: { organizationId?: string }) {
+  const navigate = useNavigate();
+  const { data } = useLeads({ priority: 'HIGH', limit: 6 } as any);
+  const leads = (data?.data ?? []).filter((l) => l.status !== 'CONFIRMED' && l.status !== 'LOST');
+  const total = data?.meta?.total ?? 0;
+  const activeHighPriority = leads.length;
+
+  if (activeHighPriority === 0) return null;
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Flag className="w-4 h-4 text-red-500" />
+          <h3 className="text-sm font-semibold text-slate-700">High Priority Leads</h3>
+          <span className="text-xs font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{activeHighPriority}</span>
+        </div>
+        <button onClick={() => navigate('/admin/leads')} className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
+          View all <ChevronRight className="w-3 h-3" />
+        </button>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {leads.slice(0, 5).map((l) => (
+          <div key={l.id} className="flex items-center gap-3 px-5 py-3 hover:bg-red-50/50 transition-colors">
+            <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-800 truncate">{l.name}</p>
+              <p className="text-xs text-slate-400 truncate">{l.phone}{l.destination ? ` · ${l.destination}` : ''}</p>
+            </div>
+            <div className="text-right shrink-0">
+              <span className={cn(
+                'text-xs px-1.5 py-0.5 rounded-full font-medium',
+                l.status === 'NEW' ? 'bg-sky-100 text-sky-700' :
+                l.status === 'CONTACTED' ? 'bg-yellow-100 text-yellow-700' :
+                l.status === 'INTERESTED' ? 'bg-violet-100 text-violet-700' :
+                'bg-orange-100 text-orange-700'
+              )}>{l.status.replace('_', ' ')}</span>
+              {l.followUpDate && !l.followUpDone && (
+                <p className={cn('text-xs mt-0.5', new Date(l.followUpDate) < new Date() ? 'text-red-500 font-medium' : 'text-slate-400')}>
+                  {new Date(l.followUpDate) < new Date() ? '⚠ ' : ''}{l.followUpDate.slice(0, 10)}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
@@ -403,7 +490,10 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Row 2 — Daily Activity */}
+      {/* Row 2 — Quick Actions */}
+      <QuickActionsWidget />
+
+      {/* Row 2.5 — Daily Activity */}
       {dash && <DailyActivityCard daily={dash.daily} />}
 
       {/* Row 3 — Charts + Follow-up Health */}
@@ -528,7 +618,9 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Row 6 — Leaderboard + Workload */}
+      {/* Row 6 — High Priority Leads + Leaderboard + Workload */}
+      <HighPriorityWidget />
+
       {dash && (
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
           <div className="xl:col-span-3">

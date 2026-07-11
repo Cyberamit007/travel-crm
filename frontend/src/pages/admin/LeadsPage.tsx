@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Trash2, Eye, Edit, RefreshCw } from 'lucide-react';
+import { Plus, Search, Trash2, Eye, Edit, RefreshCw, LayoutGrid, List } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead } from '../../hooks/useLeads';
 import { useCampaigns } from '../../hooks/useCampaigns';
@@ -10,6 +10,7 @@ import Modal from '../../components/ui/Modal';
 import Pagination from '../../components/ui/Pagination';
 import LeadForm from '../../components/leads/LeadForm';
 import LeadDetail from '../../components/leads/LeadDetail';
+import KanbanBoard from '../../components/leads/KanbanBoard';
 import Badge from '../../components/ui/Badge';
 import Avatar from '../../components/ui/Avatar';
 import PriorityBadge from '../../components/ui/PriorityBadge';
@@ -44,6 +45,7 @@ export default function AdminLeadsPage() {
   const [source, setSource] = useState('');
   const [priority, setPriority] = useState('');
   const [tagId, setTagId] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
 
   useEffect(() => {
     const s = searchParams.get('status') || '';
@@ -60,8 +62,9 @@ export default function AdminLeadsPage() {
   const [bulkStatus, setBulkStatus] = useState<LeadStatus>('CONTACTED');
 
   const filters = { page, limit: 20, search: search || undefined, status: status || undefined, source: source || undefined, campaignId: campaignId || undefined, assignedToId: assignedToId || undefined, priority: priority || undefined, tagId: tagId || undefined };
+  const kanbanFilters = { page: 1, limit: 300, search: search || undefined, source: source || undefined, campaignId: campaignId || undefined, assignedToId: assignedToId || undefined, priority: priority || undefined, tagId: tagId || undefined };
 
-  const { data, isLoading, refetch } = useLeads(filters);
+  const { data, isLoading, refetch } = useLeads(viewMode === 'list' ? filters : kanbanFilters);
   const { data: campaignsData } = useCampaigns({ limit: 100 });
   const { data: usersData } = useUsers({ role: 'EMPLOYEE', limit: 100 });
   const { data: allTags = [] } = useTags();
@@ -259,6 +262,23 @@ export default function AdminLeadsPage() {
           <p className="page-subtitle">{meta?.total ?? 0} total leads</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+            <button
+              onClick={() => setViewMode('list')}
+              title="List view"
+              className={cn('p-1.5 rounded-lg transition-all', viewMode === 'list' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700')}
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              title="Kanban view"
+              className={cn('p-1.5 rounded-lg transition-all', viewMode === 'kanban' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700')}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
           <button onClick={() => refetch()} className="btn-secondary p-2" title="Refresh">
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -354,28 +374,38 @@ export default function AdminLeadsPage() {
         )}
       </div>
 
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200">
-          <input
-            type="checkbox"
-            checked={leads.length > 0 && bulkSelected.length === leads.length}
-            onChange={toggleSelectAll}
-            className="rounded border-slate-300 text-primary-600"
-          />
-          <span className="text-xs text-slate-500 font-medium">Select all</span>
-        </div>
-        <Table
-          columns={columns}
-          data={leads}
-          loading={isLoading}
-          emptyMessage="No leads found. Try adjusting your filters."
-          onRowClick={(row) => setDetailLeadId(row.id)}
+      {/* Table / Kanban */}
+      {viewMode === 'kanban' ? (
+        <KanbanBoard
+          leads={leads}
+          onOpenDetail={(id) => setDetailLeadId(id)}
+          onStatusChange={(id, s) => updateLead.mutate({ id, status: s })}
         />
-      </div>
+      ) : (
+        <>
+          <div className="card overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200">
+              <input
+                type="checkbox"
+                checked={leads.length > 0 && bulkSelected.length === leads.length}
+                onChange={toggleSelectAll}
+                className="rounded border-slate-300 text-primary-600"
+              />
+              <span className="text-xs text-slate-500 font-medium">Select all</span>
+            </div>
+            <Table
+              columns={columns}
+              data={leads}
+              loading={isLoading}
+              emptyMessage="No leads found. Try adjusting your filters."
+              onRowClick={(row) => setDetailLeadId(row.id)}
+            />
+          </div>
 
-      {meta && meta.totalPages > 1 && (
-        <Pagination page={page} totalPages={meta.totalPages} onPageChange={setPage} />
+          {meta && meta.totalPages > 1 && (
+            <Pagination page={page} totalPages={meta.totalPages} onPageChange={setPage} />
+          )}
+        </>
       )}
 
       {/* Create modal */}

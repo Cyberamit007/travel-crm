@@ -28,3 +28,36 @@ export function usePerformanceReport(params: ReportParams) {
     enabled: !!params.startDate && !!params.endDate,
   });
 }
+
+export function useLostReasonReport(params: ReportParams) {
+  return useQuery({
+    queryKey: ['reports', 'lost-reasons', params],
+    queryFn: async () => {
+      const { data } = await api.get('/reports/lost-reasons', { params });
+      return data;
+    },
+    enabled: !!params.startDate && !!params.endDate,
+  });
+}
+
+export function useCampaignReport(params: ReportParams) {
+  return useQuery({
+    queryKey: ['reports', 'campaigns', params],
+    queryFn: async () => {
+      const { data } = await api.get('/reports/campaigns', { params });
+      return data;
+    },
+    enabled: !!params.startDate && !!params.endDate,
+  });
+}
+
+export function useDailyTrend(params: ReportParams) {
+  return useQuery({
+    queryKey: ['reports', 'daily-trend', params],
+    queryFn: async () => {
+      const { data } = await api.get('/reports/daily-trend', { params });
+      return data;
+    },
+    enabled: !!params.startDate && !!params.endDate,
+  });
+}

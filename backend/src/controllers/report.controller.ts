@@ -52,6 +52,94 @@ export const getLeadReport = async (req: AuthenticatedRequest, res: Response): P
   }
 };
 
+export const getLostReasonReport = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const org = orgFilter(req);
+    const { start, end } = parseRange(req);
+    const where = { ...org, status: 'LOST' as const, createdAt: { gte: start, lte: end } };
+
+    const [byReason, total] = await Promise.all([
+      (prisma.lead as any).groupBy({ by: ['lostReason'], where, _count: true }),
+      prisma.lead.count({ where }),
+    ]);
+
+    const reasons = (byReason as { lostReason: string | null; _count: number }[])
+      .map((r) => ({ reason: r.lostReason || 'Not specified', count: r._count }))
+      .sort((a, b) => b.count - a.count);
+
+    res.json({ success: true, data: { total, reasons } });
+  } catch (e) {
+    console.error('[reports] getLostReasonReport error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const getCampaignReport = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const org = orgFilter(req);
+    const { start, end } = parseRange(req);
+
+    const campaigns = await (prisma as any).campaign.findMany({
+      where: { ...org },
+      select: { id: true, name: true, status: true, destination: true },
+      orderBy: { createdAt: 'desc' },
+    }).catch(() => []);
+
+    const stats = await Promise.all(
+      (campaigns as { id: string; name: string; status: string; destination?: string }[]).map(async (c) => {
+        const dateWhere = { ...org, campaignId: c.id, createdAt: { gte: start, lte: end } };
+        const [total, confirmed, lost] = await Promise.all([
+          prisma.lead.count({ where: dateWhere }),
+          prisma.lead.count({ where: { ...dateWhere, status: 'CONFIRMED' } }),
+          prisma.lead.count({ where: { ...dateWhere, status: 'LOST' } }),
+        ]);
+        return {
+          ...c,
+          total,
+          confirmed,
+          lost,
+          conversionRate: total > 0 ? parseFloat(((confirmed / total) * 100).toFixed(1)) : 0,
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: { campaigns: stats.filter((c) => c.total > 0).sort((a, b) => b.total - a.total) },
+    });
+  } catch (e) {
+    console.error('[reports] getCampaignReport error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const getDailyTrend = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const org = orgFilter(req);
+    const { start, end } = parseRange(req);
+
+    const leads = await prisma.lead.findMany({
+      where: { ...org, createdAt: { gte: start, lte: end } },
+      select: { createdAt: true, status: true },
+    });
+
+    const byDate: Record<string, { date: string; created: number; confirmed: number; lost: number }> = {};
+    leads.forEach((l) => {
+      const date = l.createdAt.toISOString().slice(0, 10);
+      if (!byDate[date]) byDate[date] = { date, created: 0, confirmed: 0, lost: 0 };
+      byDate[date].created++;
+      if (l.status === 'CONFIRMED') byDate[date].confirmed++;
+      if (l.status === 'LOST') byDate[date].lost++;
+    });
+
+    const trend = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
+    res.json({ success: true, data: { trend } });
+  } catch (e) {
+    console.error('[reports] getDailyTrend error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 export const getPerformanceReport = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const org = orgFilter(req);
