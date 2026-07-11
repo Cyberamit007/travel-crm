@@ -439,7 +439,7 @@ export interface Booking {
   id: string;
   organizationId?: string;
   leadId: string;
-  bookingNumber: string;
+  bookingNumber?: string;
   packageId?: string;
   package?: { id: string; name: string; code: string };
   travelerName: string;

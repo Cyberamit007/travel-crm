@@ -559,7 +559,7 @@ model Booking {
   leadId         String  @unique
   lead           Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
-  bookingNumber     String    @unique @default(cuid())
+  bookingNumber     String?   @unique
   packageId         String?
   package           Package?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
 
