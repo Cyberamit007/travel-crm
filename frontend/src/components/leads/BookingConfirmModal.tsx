@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import { IndianRupee, Users, MapPin, Package, Utensils, BedDouble, Star, CalendarClock, FileText } from 'lucide-react';
+import { IndianRupee, Users, MapPin, Package, Utensils, BedDouble, Calendar, FileText } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { Lead, Booking } from '../../types/index';
 import { useCreateBooking, useUpdateBooking } from '../../hooks/useBookings';
+import { usePackages } from '../../hooks/usePackages';
 import { formatCurrency, cn } from '../../utils/helpers';
 
 interface BookingForm {
@@ -16,6 +17,10 @@ interface BookingForm {
   departurePackage: string;
   tourType: string;
   specialRequest: string;
+  bookingNotes: string;
+  packageId: string;
+  departureDate: string;
+  returnDate: string;
   finalPrice: number;
   amountPaid: number;
   balanceDueDate: string;
@@ -43,6 +48,9 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
   const isEdit = !!existingBooking;
   const todayDate = new Date().toISOString().split('T')[0];
 
+  const { data: packagesData } = usePackages({ status: 'ACTIVE' });
+  const packages = packagesData?.data ?? [];
+
   const { register, handleSubmit, control, setValue, formState: { errors } } = useForm<BookingForm>({
     defaultValues: {
       travelerName: existingBooking?.travelerName ?? lead.name,
@@ -54,6 +62,10 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
       departurePackage: existingBooking?.departurePackage ?? '',
       tourType: existingBooking?.tourType ?? 'GIT',
       specialRequest: existingBooking?.specialRequest ?? '',
+      bookingNotes: existingBooking?.bookingNotes ?? '',
+      packageId: existingBooking?.packageId ?? '',
+      departureDate: existingBooking?.departureDate ? existingBooking.departureDate.split('T')[0] : '',
+      returnDate: existingBooking?.returnDate ? existingBooking.returnDate.split('T')[0] : '',
       finalPrice: existingBooking?.finalPrice ?? lead.budget ?? 0,
       amountPaid: existingBooking?.amountPaid ?? 0,
       balanceDueDate: existingBooking?.balanceDueDate
@@ -66,7 +78,6 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
   const amountPaid = useWatch({ control, name: 'amountPaid' });
   const balanceAmount = Math.max(0, Number(finalPrice || 0) - Number(amountPaid || 0));
 
-  // Reset form when booking changes
   useEffect(() => {
     if (open) {
       setValue('travelerName', existingBooking?.travelerName ?? lead.name);
@@ -78,6 +89,10 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
       setValue('departurePackage', existingBooking?.departurePackage ?? '');
       setValue('tourType', existingBooking?.tourType ?? 'GIT');
       setValue('specialRequest', existingBooking?.specialRequest ?? '');
+      setValue('bookingNotes', existingBooking?.bookingNotes ?? '');
+      setValue('packageId', existingBooking?.packageId ?? '');
+      setValue('departureDate', existingBooking?.departureDate ? existingBooking.departureDate.split('T')[0] : '');
+      setValue('returnDate', existingBooking?.returnDate ? existingBooking.returnDate.split('T')[0] : '');
       setValue('finalPrice', existingBooking?.finalPrice ?? lead.budget ?? 0);
       setValue('amountPaid', existingBooking?.amountPaid ?? 0);
       setValue('balanceDueDate', existingBooking?.balanceDueDate ? existingBooking.balanceDueDate.split('T')[0] : '');
@@ -96,6 +111,10 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
       departurePackage: data.departurePackage || undefined,
       tourType: data.tourType,
       specialRequest: data.specialRequest || undefined,
+      bookingNotes: data.bookingNotes || undefined,
+      packageId: data.packageId || undefined,
+      departureDate: data.departureDate || undefined,
+      returnDate: data.returnDate || undefined,
       finalPrice: Number(data.finalPrice),
       amountPaid: Number(data.amountPaid),
       balanceDueDate: data.balanceDueDate || undefined,
@@ -103,13 +122,7 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
 
     if (isEdit && existingBooking) {
       updateBooking.mutate(
-        {
-          ...payload,
-          id: existingBooking.id,
-          foodPreference: payload.foodPreference as Booking['foodPreference'],
-          roomSharing: payload.roomSharing as Booking['roomSharing'],
-          tourType: payload.tourType as Booking['tourType'],
-        },
+        { ...payload, id: existingBooking.id },
         { onSuccess: onClose }
       );
     } else {
@@ -136,6 +149,39 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
     >
       <form id="booking-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 
+        {/* Booking number display for edit mode */}
+        {isEdit && existingBooking?.bookingNumber && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 border border-primary-200 rounded-xl">
+            <span className="text-xs font-semibold text-primary-600">Booking #</span>
+            <span className="font-mono text-sm font-bold text-primary-800">{existingBooking.bookingNumber}</span>
+          </div>
+        )}
+
+        {/* ── Package & Trip Dates ─────────────────────────────────────────── */}
+        <div>
+          <SectionHeader icon={Package} label="Package & Dates" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className="label">Tour Package</label>
+              <select {...register('packageId')} className="input">
+                <option value="">-- No package linked --</option>
+                {packages.map((p) => (
+                  <option key={p.id} value={p.id}>{p.code} — {p.name} ({p.nights}N/{p.days}D)</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-400 mt-0.5">Linking a package auto-generates workflow tasks on departure date</p>
+            </div>
+            <div>
+              <label className="label">Departure Date</label>
+              <input type="date" {...register('departureDate')} className="input" />
+            </div>
+            <div>
+              <label className="label">Return Date</label>
+              <input type="date" {...register('returnDate')} className="input" />
+            </div>
+          </div>
+        </div>
+
         {/* ── Traveler Details ────────────────────────────────────────────── */}
         <div>
           <SectionHeader icon={Users} label="Traveler Details" />
@@ -148,8 +194,7 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
             <div>
               <label className="label">No. of Travelers *</label>
               <input
-                type="number"
-                min={1}
+                type="number" min={1}
                 {...register('numberOfTravelers', { required: 'Required', min: { value: 1, message: 'At least 1' }, valueAsNumber: true })}
                 className="input"
               />
@@ -199,9 +244,13 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
                 <option value="FIT">FIT — Fixed / Independent Tour</option>
               </select>
             </div>
-            <div className="sm:col-span-1">
+            <div>
               <label className="label">Special Request</label>
               <input {...register('specialRequest')} className="input" placeholder="Any special requirement…" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Internal Booking Notes</label>
+              <textarea {...register('bookingNotes')} className="input resize-none text-sm" rows={2} placeholder="Internal notes about this booking…" />
             </div>
           </div>
         </div>
@@ -213,9 +262,7 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
             <div>
               <label className="label">Price Finalised (₹) *</label>
               <input
-                type="number"
-                min={0}
-                step="0.01"
+                type="number" min={0} step="0.01"
                 {...register('finalPrice', { required: 'Price is required', min: { value: 0, message: 'Must be ≥ 0' }, valueAsNumber: true })}
                 className="input"
               />
@@ -223,13 +270,7 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
             </div>
             <div>
               <label className="label">Amount Paid (₹)</label>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                {...register('amountPaid', { valueAsNumber: true })}
-                className="input"
-              />
+              <input type="number" min={0} step="0.01" {...register('amountPaid', { valueAsNumber: true })} className="input" />
             </div>
           </div>
 
@@ -247,7 +288,7 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
             <div className="w-px h-8 bg-slate-200" />
             <div className="flex-1 text-center">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Balance Due</p>
-              <p className={`text-sm font-bold mt-0.5 ${balanceAmount > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
+              <p className={cn('text-sm font-bold mt-0.5', balanceAmount > 0 ? 'text-orange-600' : 'text-emerald-600')}>
                 {formatCurrency(balanceAmount)}
               </p>
             </div>

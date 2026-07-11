@@ -17,11 +17,12 @@ const parseList = (raw: any): string[] => {
 
 export const getPackages = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { status, destinationId, tourCategoryId, search } = req.query;
+    const { status, destinationId, tourCategoryId, search, difficultyLevel } = req.query;
     const where: any = { organizationId: orgId(req) };
     if (status) where.status = status;
     if (destinationId) where.destinationId = destinationId;
     if (tourCategoryId) where.tourCategoryId = tourCategoryId;
+    if (difficultyLevel) where.difficultyLevel = difficultyLevel;
     if (search) {
       where.OR = [
         { name: { contains: search as string, mode: 'insensitive' } },
@@ -35,6 +36,7 @@ export const getPackages = async (req: AuthenticatedRequest, res: Response): Pro
       include: {
         destination: { select: { id: true, name: true, country: true, state: true } },
         tourCategory: { select: { id: true, name: true, icon: true } },
+        _count: { select: { itineraryItems: true, bookings: true } },
       },
       orderBy: [{ isPopular: 'desc' }, { name: 'asc' }],
     });
@@ -55,6 +57,8 @@ export const getPackage = async (req: AuthenticatedRequest, res: Response): Prom
       include: {
         destination: { select: { id: true, name: true, country: true, state: true } },
         tourCategory: { select: { id: true, name: true, icon: true } },
+        itineraryItems: { orderBy: [{ dayOffset: 'asc' }, { sortOrder: 'asc' }] },
+        _count: { select: { bookings: true } },
       },
     });
     if (!pkg) { res.status(404).json({ success: false, error: 'Package not found' }); return; }
@@ -69,10 +73,12 @@ export const getPackage = async (req: AuthenticatedRequest, res: Response): Prom
 export const createPackage = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const {
-      name, code, description, destinationId, tourCategoryId,
-      nights, days, inclusions, exclusions, highlights,
-      pricePerPerson, priceSingle, priceDouble, priceTriple, priceQuad,
-      isPopular, status,
+      name, code, description, overview, destinationId, tourCategoryId,
+      nights, days, inclusions, exclusions, highlights, thingsToCarry,
+      pricePerPerson, priceSingle, priceDouble, priceTriple, priceQuad, offerPrice,
+      capacityMin, capacityMax, difficultyLevel, bestSeason,
+      pickupLocation, dropLocation, cancellationPolicy, termsAndConditions, packageNotes,
+      images, gallery, isPopular, status,
     } = req.body;
 
     if (!name?.trim()) { res.status(400).json({ success: false, error: 'Package name is required' }); return; }
@@ -89,6 +95,7 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
         name: name.trim(),
         code: code.trim().toUpperCase(),
         description: description?.trim() || null,
+        overview: overview?.trim() || null,
         destinationId: destinationId || null,
         tourCategoryId: tourCategoryId || null,
         nights: Number(nights),
@@ -96,11 +103,24 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
         inclusions: JSON.stringify(parseList(inclusions)),
         exclusions: JSON.stringify(parseList(exclusions)),
         highlights: JSON.stringify(parseList(highlights)),
+        thingsToCarry: JSON.stringify(parseList(thingsToCarry)),
         pricePerPerson: Number(pricePerPerson),
         priceSingle: priceSingle != null ? Number(priceSingle) : null,
         priceDouble: priceDouble != null ? Number(priceDouble) : null,
         priceTriple: priceTriple != null ? Number(priceTriple) : null,
         priceQuad: priceQuad != null ? Number(priceQuad) : null,
+        offerPrice: offerPrice != null ? Number(offerPrice) : null,
+        capacityMin: capacityMin != null ? Number(capacityMin) : null,
+        capacityMax: capacityMax != null ? Number(capacityMax) : null,
+        difficultyLevel: difficultyLevel || null,
+        bestSeason: JSON.stringify(parseList(bestSeason)),
+        pickupLocation: pickupLocation?.trim() || null,
+        dropLocation: dropLocation?.trim() || null,
+        cancellationPolicy: cancellationPolicy?.trim() || null,
+        termsAndConditions: termsAndConditions?.trim() || null,
+        packageNotes: packageNotes?.trim() || null,
+        images: JSON.stringify(parseList(images)),
+        gallery: JSON.stringify(parseList(gallery)),
         isPopular: Boolean(isPopular),
         status: status || 'ACTIVE',
       },
@@ -129,10 +149,12 @@ export const updatePackage = async (req: AuthenticatedRequest, res: Response): P
     if (!existing) { res.status(404).json({ success: false, error: 'Package not found' }); return; }
 
     const {
-      name, code, description, destinationId, tourCategoryId,
-      nights, days, inclusions, exclusions, highlights,
-      pricePerPerson, priceSingle, priceDouble, priceTriple, priceQuad,
-      isPopular, status,
+      name, code, description, overview, destinationId, tourCategoryId,
+      nights, days, inclusions, exclusions, highlights, thingsToCarry,
+      pricePerPerson, priceSingle, priceDouble, priceTriple, priceQuad, offerPrice,
+      capacityMin, capacityMax, difficultyLevel, bestSeason,
+      pickupLocation, dropLocation, cancellationPolicy, termsAndConditions, packageNotes,
+      images, gallery, isPopular, status,
     } = req.body;
 
     const pkg = await prisma.package.update({
@@ -141,6 +163,7 @@ export const updatePackage = async (req: AuthenticatedRequest, res: Response): P
         name: name?.trim() ?? existing.name,
         code: code ? code.trim().toUpperCase() : existing.code,
         description: description !== undefined ? description?.trim() || null : existing.description,
+        overview: overview !== undefined ? overview?.trim() || null : existing.overview,
         destinationId: destinationId !== undefined ? destinationId || null : existing.destinationId,
         tourCategoryId: tourCategoryId !== undefined ? tourCategoryId || null : existing.tourCategoryId,
         nights: nights !== undefined ? Number(nights) : existing.nights,
@@ -148,11 +171,24 @@ export const updatePackage = async (req: AuthenticatedRequest, res: Response): P
         inclusions: inclusions !== undefined ? JSON.stringify(parseList(inclusions)) : existing.inclusions,
         exclusions: exclusions !== undefined ? JSON.stringify(parseList(exclusions)) : existing.exclusions,
         highlights: highlights !== undefined ? JSON.stringify(parseList(highlights)) : existing.highlights,
+        thingsToCarry: thingsToCarry !== undefined ? JSON.stringify(parseList(thingsToCarry)) : existing.thingsToCarry,
         pricePerPerson: pricePerPerson !== undefined ? Number(pricePerPerson) : existing.pricePerPerson,
         priceSingle: priceSingle !== undefined ? (priceSingle != null ? Number(priceSingle) : null) : existing.priceSingle,
         priceDouble: priceDouble !== undefined ? (priceDouble != null ? Number(priceDouble) : null) : existing.priceDouble,
         priceTriple: priceTriple !== undefined ? (priceTriple != null ? Number(priceTriple) : null) : existing.priceTriple,
         priceQuad: priceQuad !== undefined ? (priceQuad != null ? Number(priceQuad) : null) : existing.priceQuad,
+        offerPrice: offerPrice !== undefined ? (offerPrice != null ? Number(offerPrice) : null) : existing.offerPrice,
+        capacityMin: capacityMin !== undefined ? (capacityMin != null ? Number(capacityMin) : null) : existing.capacityMin,
+        capacityMax: capacityMax !== undefined ? (capacityMax != null ? Number(capacityMax) : null) : existing.capacityMax,
+        difficultyLevel: difficultyLevel !== undefined ? difficultyLevel || null : existing.difficultyLevel,
+        bestSeason: bestSeason !== undefined ? JSON.stringify(parseList(bestSeason)) : existing.bestSeason,
+        pickupLocation: pickupLocation !== undefined ? pickupLocation?.trim() || null : existing.pickupLocation,
+        dropLocation: dropLocation !== undefined ? dropLocation?.trim() || null : existing.dropLocation,
+        cancellationPolicy: cancellationPolicy !== undefined ? cancellationPolicy?.trim() || null : existing.cancellationPolicy,
+        termsAndConditions: termsAndConditions !== undefined ? termsAndConditions?.trim() || null : existing.termsAndConditions,
+        packageNotes: packageNotes !== undefined ? packageNotes?.trim() || null : existing.packageNotes,
+        images: images !== undefined ? JSON.stringify(parseList(images)) : existing.images,
+        gallery: gallery !== undefined ? JSON.stringify(parseList(gallery)) : existing.gallery,
         isPopular: isPopular !== undefined ? Boolean(isPopular) : existing.isPopular,
         status: status ?? existing.status,
       },

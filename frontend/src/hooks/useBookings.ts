@@ -26,6 +26,10 @@ type BookingPayload = {
   departurePackage?: string;
   tourType: string;
   specialRequest?: string;
+  bookingNotes?: string;
+  packageId?: string;
+  departureDate?: string;
+  returnDate?: string;
   finalPrice: number;
   amountPaid: number;
   balanceDueDate?: string;

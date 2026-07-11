@@ -18,6 +18,9 @@ import mastersRoutes from './masters.routes.js';
 import bookingRoutes from './booking.routes.js';
 import packageRoutes from './packages.routes.js';
 import erpRoutes from './erp.routes.js';
+import itineraryRoutes from './itinerary.routes.js';
+import paymentRoutes from './payment.routes.js';
+import bookingTaskRoutes from './bookingTask.routes.js';
 
 const router = Router();
 
@@ -39,6 +42,11 @@ router.use('/designations', designationRoutes);
 router.use('/masters', mastersRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/packages', packageRoutes);
+router.use('/packages/:packageId/itinerary', itineraryRoutes);
+router.use('/bookings/:bookingId/payments', paymentRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/bookings/:bookingId/tasks', bookingTaskRoutes);
+router.use('/tasks', bookingTaskRoutes);
 router.use('/erp', erpRoutes);
 
 export default router;

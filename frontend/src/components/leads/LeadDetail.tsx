@@ -3,11 +3,12 @@ import {
   Phone, Mail, Calendar, User, Megaphone, DollarSign,
   Users, MapPin, MessageSquare, Clock, CheckCircle, Edit, ArrowRightLeft,
   Star, Save, FileText, Activity, X, Utensils, BedDouble, Package,
-  IndianRupee, ChevronRight,
+  IndianRupee, ChevronRight, CreditCard, Trash2, Plus,
 } from 'lucide-react';
-import { Lead, LeadStatus, Booking } from '../../types/index';
+import { Lead, LeadStatus, Booking, Payment } from '../../types/index';
 import { useLead, useUpdateLead, useTransferLead } from '../../hooks/useLeads';
 import { useBookingByLead } from '../../hooks/useBookings';
+import { useBookingPayments, useRecordPayment, useDeletePayment } from '../../hooks/usePayments';
 import { useUsers } from '../../hooks/useUsers';
 import BookingConfirmModal from './BookingConfirmModal';
 import Badge from '../ui/Badge';
@@ -31,7 +32,7 @@ interface LeadDetailProps {
   onToggleStar?: () => void;
 }
 
-type WorkspaceTab = 'overview' | 'notes' | 'activity' | 'comments';
+type WorkspaceTab = 'overview' | 'notes' | 'activity' | 'comments' | 'payments';
 
 const statusOrder: LeadStatus[] = ['NEW', 'CONTACTED', 'INTERESTED', 'FOLLOW_UP_SCHEDULED', 'CONFIRMED', 'LOST'];
 
@@ -254,9 +255,12 @@ function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => v
     <div className="rounded-xl border border-emerald-200 bg-emerald-50 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-100 border-b border-emerald-200">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <CheckCircle className="w-4 h-4 text-emerald-600" />
           <span className="text-sm font-semibold text-emerald-800">Booking Confirmed</span>
+          {booking.bookingNumber && (
+            <span className="text-xs font-mono bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded">{booking.bookingNumber}</span>
+          )}
         </div>
         <button onClick={onEdit} className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-medium">
           <Edit className="w-3 h-3" /> Edit
@@ -265,7 +269,29 @@ function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => v
 
       {/* Content */}
       <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {/* Travelers */}
+        {booking.package && (
+          <div className="flex items-start gap-2 col-span-2 sm:col-span-3">
+            <Package className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Package</p>
+              <p className="text-sm font-medium text-slate-800">{booking.package.name}
+                <span className="ml-1.5 text-xs text-slate-400 font-mono">({booking.package.code})</span>
+              </p>
+            </div>
+          </div>
+        )}
+        {(booking.departureDate || booking.returnDate) && (
+          <div className="flex items-start gap-2 col-span-2 sm:col-span-3">
+            <Calendar className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Travel Dates</p>
+              <p className="text-sm font-medium text-slate-800">
+                {booking.departureDate ? formatDate(booking.departureDate) : '—'}
+                {booking.returnDate && ` → ${formatDate(booking.returnDate)}`}
+              </p>
+            </div>
+          </div>
+        )}
         <div className="flex items-start gap-2">
           <Users className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
           <div>
@@ -273,7 +299,6 @@ function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => v
             <p className="text-sm font-medium text-slate-800">{booking.numberOfTravelers}</p>
           </div>
         </div>
-        {/* Food */}
         <div className="flex items-start gap-2">
           <Utensils className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
           <div>
@@ -281,7 +306,6 @@ function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => v
             <p className="text-sm font-medium text-slate-800">{foodLabel[booking.foodPreference] ?? booking.foodPreference}</p>
           </div>
         </div>
-        {/* Room */}
         <div className="flex items-start gap-2">
           <BedDouble className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
           <div>
@@ -289,15 +313,6 @@ function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => v
             <p className="text-sm font-medium text-slate-800">{roomLabel[booking.roomSharing] ?? booking.roomSharing}</p>
           </div>
         </div>
-        {/* Tour Type */}
-        <div className="flex items-start gap-2">
-          <Package className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Tour Type</p>
-            <p className="text-sm font-medium text-slate-800">{booking.tourType}</p>
-          </div>
-        </div>
-        {/* Departure */}
         {(booking.departureLocation || booking.departurePackage) && (
           <div className="flex items-start gap-2 col-span-2">
             <MapPin className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" />
@@ -329,11 +344,160 @@ function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => v
         </div>
       </div>
 
-      {/* Special request */}
       {booking.specialRequest && (
         <div className="px-4 py-2.5 border-t border-emerald-200 flex items-start gap-2">
           <ChevronRight className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-slate-600"><span className="font-semibold text-emerald-700">Special Request:</span> {booking.specialRequest}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Payments Tab ─────────────────────────────────────────────────────────────
+
+function PaymentsTab({ booking }: { booking: Booking }) {
+  const { data, isLoading } = useBookingPayments(booking.id);
+  const recordPayment = useRecordPayment();
+  const deletePayment = useDeletePayment();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ amount: '', type: 'PARTIAL', method: 'CASH', reference: '', notes: '' });
+
+  const payments = data?.data ?? [];
+
+  const methodLabel: Record<string, string> = {
+    CASH: 'Cash', UPI: 'UPI', BANK_TRANSFER: 'Bank Transfer', CHEQUE: 'Cheque', ONLINE: 'Online',
+  };
+  const typeColors: Record<string, string> = {
+    ADVANCE: 'bg-blue-100 text-blue-700',
+    PARTIAL: 'bg-amber-100 text-amber-700',
+    FINAL: 'bg-emerald-100 text-emerald-700',
+    REFUND: 'bg-red-100 text-red-700',
+  };
+
+  const handleRecord = () => {
+    if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0) return;
+    recordPayment.mutate({
+      bookingId: booking.id,
+      amount: Number(form.amount),
+      type: form.type,
+      method: form.method,
+      reference: form.reference || undefined,
+      notes: form.notes || undefined,
+    }, {
+      onSuccess: () => {
+        setShowForm(false);
+        setForm({ amount: '', type: 'PARTIAL', method: 'CASH', reference: '', notes: '' });
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card px-4 py-3 text-center">
+          <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1">Total</p>
+          <p className="text-base font-bold text-slate-800">₹{booking.finalPrice.toLocaleString('en-IN')}</p>
+        </div>
+        <div className="card px-4 py-3 text-center">
+          <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1">Collected</p>
+          <p className="text-base font-bold text-emerald-600">₹{booking.amountPaid.toLocaleString('en-IN')}</p>
+        </div>
+        <div className="card px-4 py-3 text-center">
+          <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1">Balance</p>
+          <p className={cn('text-base font-bold', booking.balanceAmount > 0 ? 'text-orange-600' : 'text-emerald-600')}>
+            ₹{booking.balanceAmount.toLocaleString('en-IN')}
+          </p>
+        </div>
+      </div>
+
+      {/* Record payment button */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-slate-700">Payment History</p>
+        {!showForm && (
+          <button onClick={() => setShowForm(true)} className="btn-primary text-xs gap-1.5">
+            <Plus className="w-3.5 h-3.5" /> Record Payment
+          </button>
+        )}
+      </div>
+
+      {/* Record form */}
+      {showForm && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="label text-xs">Amount (₹) *</label>
+              <input type="number" min={1} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className="input text-sm" placeholder="0" />
+            </div>
+            <div>
+              <label className="label text-xs">Type</label>
+              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className="input text-sm">
+                <option value="ADVANCE">Advance</option>
+                <option value="PARTIAL">Partial</option>
+                <option value="FINAL">Final</option>
+                <option value="REFUND">Refund</option>
+              </select>
+            </div>
+            <div>
+              <label className="label text-xs">Method</label>
+              <select value={form.method} onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))} className="input text-sm">
+                <option value="CASH">Cash</option>
+                <option value="UPI">UPI</option>
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="ONLINE">Online</option>
+              </select>
+            </div>
+            <div>
+              <label className="label text-xs">Reference / UTR</label>
+              <input value={form.reference} onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))} className="input text-sm" placeholder="Optional" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <button onClick={() => setShowForm(false)} className="btn-secondary text-xs">Cancel</button>
+            <button onClick={handleRecord} disabled={recordPayment.isPending || !form.amount} className="btn-primary text-xs">
+              {recordPayment.isPending ? 'Saving…' : 'Record'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Payment list */}
+      {isLoading ? (
+        <div className="text-center py-6 text-slate-400 text-sm">Loading…</div>
+      ) : payments.length === 0 ? (
+        <div className="text-center py-8 text-slate-400">
+          <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">No payments recorded</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {payments.map((p: Payment) => (
+            <div key={p.id} className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl group hover:border-slate-300 transition-colors">
+              <div className={cn('text-[10px] font-bold px-2 py-1 rounded-lg flex-shrink-0', typeColors[p.type] ?? 'bg-slate-100 text-slate-600')}>
+                {p.type}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-slate-800">₹{p.amount.toLocaleString('en-IN')}</span>
+                  <span className="text-xs text-slate-400">{methodLabel[p.method] ?? p.method}</span>
+                  {p.reference && <span className="text-xs text-slate-400 font-mono truncate">• {p.reference}</span>}
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                  <span>By {p.recordedBy?.name}</span>
+                  <span>• {formatDateTime(p.createdAt)}</span>
+                  {p.notes && <span>• {p.notes}</span>}
+                </div>
+              </div>
+              <button
+                onClick={() => deletePayment.mutate({ bookingId: booking.id, id: p.id })}
+                className="p-1.5 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -489,11 +653,13 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
     );
   };
 
+  const hasBooking = !!booking;
   const TABS: { key: WorkspaceTab; label: string; icon: React.ElementType }[] = [
     { key: 'overview', label: 'Overview', icon: User },
     { key: 'notes', label: 'Notes', icon: FileText },
     { key: 'activity', label: 'Activity', icon: Activity },
     { key: 'comments', label: 'Comments', icon: MessageSquare },
+    ...(hasBooking ? [{ key: 'payments' as WorkspaceTab, label: 'Payments', icon: CreditCard }] : []),
   ];
 
   return (
@@ -640,6 +806,9 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
               )}
               {activeTab === 'comments' && (
                 <CommentsSection leadId={lead.id} />
+              )}
+              {activeTab === 'payments' && booking && (
+                <PaymentsTab booking={booking} />
               )}
             </div>
           </>

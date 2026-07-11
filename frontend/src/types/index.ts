@@ -330,6 +330,12 @@ export interface TourCategory {
 // ─── Packages ─────────────────────────────────────────────────────────────────
 
 export type PackageStatus = 'ACTIVE' | 'INACTIVE' | 'DRAFT';
+export type DifficultyLevel = 'EASY' | 'MODERATE' | 'DIFFICULT' | 'EXTREME';
+export type TaskType = 'GENERAL' | 'COLLECT_DOCS' | 'COLLECT_PAYMENT' | 'CONFIRM_HOTEL' | 'CONFIRM_VEHICLE' | 'SEND_REMINDER' | 'TRIP_DAY' | 'COLLECT_REVIEW' | 'REFERRAL';
+export type TaskDepartment = 'SALES' | 'OPERATIONS' | 'CUSTOMER_CARE' | 'ALL';
+export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'SKIPPED';
+export type PaymentType = 'ADVANCE' | 'PARTIAL' | 'FINAL' | 'REFUND';
+export type PaymentMethod = 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE';
 
 export interface Package {
   id: string;
@@ -337,6 +343,7 @@ export interface Package {
   name: string;
   code: string;
   description?: string;
+  overview?: string;
   destinationId?: string;
   destination?: { id: string; name: string; country: string; state?: string };
   tourCategoryId?: string;
@@ -346,15 +353,80 @@ export interface Package {
   inclusions: string;   // JSON string array
   exclusions: string;   // JSON string array
   highlights: string;   // JSON string array
+  thingsToCarry: string; // JSON string array
   pricePerPerson: number;
+  offerPrice?: number;
   priceSingle?: number;
   priceDouble?: number;
   priceTriple?: number;
   priceQuad?: number;
+  capacityMin?: number;
+  capacityMax?: number;
+  difficultyLevel?: DifficultyLevel;
+  bestSeason: string;  // JSON string array of months
+  pickupLocation?: string;
+  dropLocation?: string;
+  cancellationPolicy?: string;
+  termsAndConditions?: string;
+  packageNotes?: string;
+  images: string;   // JSON string array of URLs
+  gallery: string;  // JSON string array of URLs
   isPopular: boolean;
   status: PackageStatus;
+  itineraryItems?: PackageItinerary[];
+  _count?: { itineraryItems: number; bookings: number };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PackageItinerary {
+  id: string;
+  packageId: string;
+  dayOffset: number;
+  title: string;
+  description?: string;
+  notes?: string;
+  taskType: TaskType;
+  department: TaskDepartment;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Payment {
+  id: string;
+  bookingId: string;
+  amount: number;
+  type: PaymentType;
+  method: PaymentMethod;
+  reference?: string;
+  notes?: string;
+  receiptNo?: string;
+  recordedById: string;
+  recordedBy: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+}
+
+export interface BookingTask {
+  id: string;
+  bookingId: string;
+  title: string;
+  description?: string;
+  notes?: string;
+  dueDate?: string;
+  dayOffset?: number;
+  taskType: TaskType;
+  department: TaskDepartment;
+  status: TaskStatus;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  assigneeId?: string;
+  assignee?: Pick<User, 'id' | 'name' | 'avatar'>;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  booking?: {
+    lead: Pick<Lead, 'id' | 'name' | 'phone' | 'destination'>;
+  };
 }
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────
@@ -367,6 +439,9 @@ export interface Booking {
   id: string;
   organizationId?: string;
   leadId: string;
+  bookingNumber: string;
+  packageId?: string;
+  package?: { id: string; name: string; code: string };
   travelerName: string;
   numberOfTravelers: number;
   aadharNumber?: string;
@@ -376,11 +451,18 @@ export interface Booking {
   departurePackage?: string;
   tourType: TourType;
   specialRequest?: string;
+  bookingNotes?: string;
+  departureDate?: string;
+  returnDate?: string;
   finalPrice: number;
   amountPaid: number;
   balanceAmount: number;
   balanceDueDate?: string;
-  status: 'ACTIVE' | 'CANCELLED';
+  salesExecutiveId?: string;
+  opsExecutiveId?: string;
+  status: 'ACTIVE' | 'CANCELLED' | 'COMPLETED';
+  payments?: Payment[];
+  tasks?: BookingTask[];
   createdAt: string;
   updatedAt: string;
 }

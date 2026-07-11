@@ -71,6 +71,8 @@ model User {
   approvedLeaves      LeaveRequest[]     @relation("ApprovedLeaves")
   leadComments        LeadComment[]
   headedDepartments   Department[]       @relation("DepartmentHead")
+  recordedPayments    Payment[]          @relation("PaymentRecorder")
+  assignedTasks       BookingTask[]      @relation("TaskAssignee")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -232,6 +234,13 @@ model Lead {
   budget        Float?
   groupSize     Int?
   preferredDate String?
+
+  // Customer profile fields (populated when lead becomes customer)
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyContactRel   String?
+  customerNotes         String?
+  travelPreferences     String?   // JSON: { style, budget, frequency }
 
   isRead    Boolean   @default(false)
   deletedAt DateTime? // soft delete — null means active
@@ -550,6 +559,10 @@ model Booking {
   leadId         String  @unique
   lead           Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
+  bookingNumber     String    @unique @default(cuid())
+  packageId         String?
+  package           Package?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
   travelerName      String
   numberOfTravelers Int
   aadharNumber      String?
@@ -559,18 +572,30 @@ model Booking {
   departurePackage  String?
   tourType          String  @default("GIT")           // FIT | GIT
   specialRequest    String?
+  bookingNotes      String?
+
+  departureDate DateTime?
+  returnDate    DateTime?
 
   finalPrice     Float
   amountPaid     Float    @default(0)
   balanceAmount  Float    @default(0)
   balanceDueDate DateTime?
 
-  status    String   @default("ACTIVE")  // ACTIVE | CANCELLED
+  salesExecutiveId String?
+  opsExecutiveId   String?
+
+  status    String   @default("ACTIVE")  // ACTIVE | CANCELLED | COMPLETED
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  payments     Payment[]
+  tasks        BookingTask[]
+
   @@index([organizationId])
   @@index([leadId])
+  @@index([packageId])
+  @@index([departureDate])
   @@map("bookings")
 }
 
@@ -584,6 +609,7 @@ model Package {
   name        String
   code        String                              // e.g. "KED-6N7D-DEL"
   description String?
+  overview    String?                             // rich overview / USP text
 
   destinationId  String?
   destination    Destination?  @relation(fields: [destinationId], references: [id], onDelete: SetNull)
@@ -594,25 +620,123 @@ model Package {
   nights     Int
   days       Int
 
-  inclusions String @default("[]")   // JSON array of strings
-  exclusions String @default("[]")   // JSON array of strings
-  highlights String @default("[]")   // JSON array of strings
+  inclusions    String @default("[]")   // JSON array
+  exclusions    String @default("[]")   // JSON array
+  highlights    String @default("[]")   // JSON array
+  thingsToCarry String @default("[]")   // JSON array
 
   pricePerPerson Float
+  offerPrice     Float?                           // discounted/offer price
   priceSingle    Float?
   priceDouble    Float?
   priceTriple    Float?
   priceQuad      Float?
 
+  capacityMin Int?                               // minimum group size
+  capacityMax Int?                               // maximum group size
+
+  difficultyLevel  String?                        // EASY | MODERATE | DIFFICULT | EXTREME
+  bestSeason       String @default("[]")          // JSON array of months
+  pickupLocation   String?
+  dropLocation     String?
+
+  cancellationPolicy  String?
+  termsAndConditions  String?
+  packageNotes        String?
+
+  images  String @default("[]")                  // JSON array of image URLs
+  gallery String @default("[]")                  // JSON array of gallery URLs
+
   isPopular Boolean @default(false)
-  status    String  @default("ACTIVE")  // ACTIVE | INACTIVE | DRAFT
+  status    String  @default("ACTIVE")            // ACTIVE | INACTIVE | DRAFT
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  itineraryItems PackageItinerary[]
+  bookings       Booking[]
 
   @@index([organizationId])
   @@index([destinationId])
   @@index([tourCategoryId])
   @@index([status])
   @@map("packages")
+}
+
+// ─── Package Itinerary (Day-Wise Workflow Template) ───────────────────────────
+
+model PackageItinerary {
+  id        String  @id @default(uuid())
+  packageId String
+  package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  dayOffset   Int     // -15 = 15 days before trip, 0 = departure day, +2 = 2 days after
+  title       String
+  description String?
+  notes       String?
+  taskType    String  @default("GENERAL") // GENERAL | COLLECT_DOCS | COLLECT_PAYMENT | CONFIRM_HOTEL | CONFIRM_VEHICLE | SEND_REMINDER | TRIP_DAY | COLLECT_REVIEW | REFERRAL
+  department  String  @default("SALES")   // SALES | OPERATIONS | CUSTOMER_CARE | ALL
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([packageId])
+  @@index([dayOffset])
+  @@map("package_itineraries")
+}
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+model Payment {
+  id        String  @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  amount    Float
+  type      String  @default("ADVANCE")       // ADVANCE | PARTIAL | FINAL | REFUND
+  method    String  @default("CASH")          // CASH | UPI | BANK_TRANSFER | CHEQUE | ONLINE
+  reference String?                           // UTR / cheque no / transaction ID
+  notes     String?
+  receiptNo String?
+
+  recordedById String
+  recordedBy   User   @relation("PaymentRecorder", fields: [recordedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+// ─── Booking Tasks ────────────────────────────────────────────────────────────
+
+model BookingTask {
+  id        String  @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  notes       String?
+  dueDate     DateTime?
+  dayOffset   Int?                             // from package itinerary
+  taskType    String    @default("GENERAL")
+  department  String    @default("SALES")      // SALES | OPERATIONS | CUSTOMER_CARE
+  status      String    @default("PENDING")    // PENDING | IN_PROGRESS | DONE | SKIPPED
+  priority    String    @default("MEDIUM")     // HIGH | MEDIUM | LOW
+
+  assigneeId  String?
+  assignee    User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookingId])
+  @@index([assigneeId])
+  @@index([dueDate])
+  @@index([status])
+  @@map("booking_tasks")
 }
