@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  UserCheck, Search, IndianRupee, Users, MapPin, Phone,
-  Mail, Calendar, ExternalLink, ChevronLeft, ChevronRight,
+  UserCheck, Search, Users, MapPin, Phone,
+  Mail, Calendar, ChevronLeft, ChevronRight,
   CheckCircle, Clock, AlertCircle,
 } from 'lucide-react';
 import { useCustomers } from '../../hooks/useErp';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { formatCurrency, formatDate, cn } from '../../utils/helpers';
+import { formatCurrency, cn } from '../../utils/helpers';
+import LeadDetail from '../../components/leads/LeadDetail';
 
 // ─── Customer Card ────────────────────────────────────────────────────────────
 
-function CustomerCard({ lead, onView }: { lead: any; onView: () => void }) {
+function CustomerCard({ lead, onView }: { lead: any; onView: (id: string) => void }) {
   const booking = lead.booking;
 
   const paymentStatus = !booking
@@ -35,7 +35,10 @@ function CustomerCard({ lead, onView }: { lead: any; onView: () => void }) {
   const PsIcon = ps?.icon;
 
   return (
-    <div className="card p-5 hover:shadow-lg transition-all group">
+    <div
+      className="card p-5 hover:shadow-lg transition-all cursor-pointer hover:border-primary-300"
+      onClick={() => onView(lead.id)}
+    >
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
@@ -53,13 +56,6 @@ function CustomerCard({ lead, onView }: { lead: any; onView: () => void }) {
             </div>
           </div>
         </div>
-        <button
-          onClick={onView}
-          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-          title="View lead"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-        </button>
       </div>
 
       {/* Contact */}
@@ -134,9 +130,9 @@ function CustomerCard({ lead, onView }: { lead: any; onView: () => void }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CustomersPage() {
-  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   const { data, isLoading } = useCustomers({ search, page, limit: 24 });
 
@@ -208,7 +204,7 @@ export default function CustomersPage() {
               <CustomerCard
                 key={c.id}
                 lead={c}
-                onView={() => navigate(`/admin/leads?id=${c.id}`)}
+                onView={setSelectedLeadId}
               />
             ))}
           </div>
@@ -229,6 +225,12 @@ export default function CustomersPage() {
           )}
         </>
       )}
+
+      <LeadDetail
+        leadId={selectedLeadId}
+        open={!!selectedLeadId}
+        onClose={() => setSelectedLeadId(null)}
+      />
     </div>
   );
 }
