@@ -6,11 +6,14 @@ import { useCampaigns } from '../../hooks/useCampaigns';
 import { useUsers } from '../../hooks/useUsers';
 import { useAuthStore } from '../../store/authStore';
 import { useSettings } from '../../hooks/useSettings';
+import { useDestinations } from '../../hooks/useMasters';
 import DuplicateWarningDialog from './DuplicateWarningDialog';
 import LostReasonModal from './LostReasonModal';
 import TagInput from '../ui/TagInput';
 import api from '../../services/api';
 import { cn } from '../../utils/helpers';
+
+const STATUS_ORDER: LeadStatus[] = ['NEW', 'CONTACTED', 'INTERESTED', 'FOLLOW_UP_SCHEDULED', 'CONFIRMED', 'LOST'];
 
 interface LeadFormData {
   name: string;
@@ -57,18 +60,23 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN';
+  const isEmployee = user?.role === 'EMPLOYEE';
   const isEditMode = !!defaultValues?.id;
   const isConfirmedLead = isEditMode && defaultValues?.status === 'CONFIRMED';
 
   const { data: campaignsData } = useCampaigns({ limit: 100 });
   const { data: usersData } = useUsers({ role: 'EMPLOYEE', limit: 100, isActive: true });
   const { data: settings } = useSettings();
+  const { data: destinationsData } = useDestinations({ status: 'ACTIVE' });
 
   const [duplicates, setDuplicates] = useState<any[]>([]);
   const [pendingSubmit, setPendingSubmit] = useState<LeadFormData | null>(null);
   const [lostModalOpen, setLostModalOpen] = useState(false);
   const [pendingLostData, setPendingLostData] = useState<LeadFormData | null>(null);
   const dupCheckedRef = useRef<{ phone: string; email: string }>({ phone: '', email: '' });
+  const [destOpen, setDestOpen] = useState(false);
+  const [destQuery, setDestQuery] = useState(defaultValues?.destination ?? '');
+  const destRef = useRef<HTMLDivElement>(null);
 
   const {
     register,
@@ -113,11 +121,56 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
         followUpNotes: defaultValues.followUpNotes ?? '',
         tagIds: (defaultValues as any)?.tags?.map((lt: any) => lt.tagId ?? lt.id) ?? [],
       });
+      setDestQuery(defaultValues.destination ?? '');
     }
   }, [defaultValues, reset]);
 
-  const campaigns = campaignsData?.data ?? [];
+  const allCampaigns = campaignsData?.data ?? [];
   const employees = usersData?.data ?? [];
+  const masterDestinations = destinationsData?.data ?? [];
+
+  // Campaign filtering: only show campaigns whose destination matches the selected destination
+  const selectedDestination = watch('destination');
+  const filteredCampaigns = selectedDestination
+    ? allCampaigns.filter((c) => c.destination.toLowerCase() === selectedDestination.toLowerCase())
+    : allCampaigns;
+
+  // Clear campaign if selected destination no longer has it
+  useEffect(() => {
+    const currentCampaignId = watch('campaignId');
+    if (currentCampaignId && selectedDestination) {
+      const stillValid = filteredCampaigns.some((c) => c.id === currentCampaignId);
+      if (!stillValid) setValue('campaignId', '');
+    }
+  }, [selectedDestination]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Destination combobox: filtered suggestions
+  const destSuggestions = masterDestinations.filter((d) =>
+    d.name.toLowerCase().includes(destQuery.toLowerCase())
+  );
+
+  // Close destination dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (destRef.current && !destRef.current.contains(e.target as Node)) setDestOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Status options based on role + edit mode
+  const getStatusOptions = (): LeadStatus[] => {
+    if (isConfirmedLead) return ['CONFIRMED', 'LOST'];
+    const currentIdx = STATUS_ORDER.indexOf((defaultValues?.status as LeadStatus) ?? 'NEW');
+    if (isEmployee && isEditMode) {
+      // Employees can only move forward, never backward, never set CONFIRMED directly
+      return STATUS_ORDER.slice(currentIdx).filter((s) => s !== 'CONFIRMED');
+    }
+    // Admins and new-lead creation: all except CONFIRMED (that goes through booking flow)
+    return STATUS_ORDER.filter((s) => s !== 'CONFIRMED');
+  };
+
+  const statusOptions = getStatusOptions();
 
   const messageText = watch('message') ?? '';
   const wordCount = messageText.trim() ? messageText.trim().split(/\s+/).length : 0;
@@ -257,25 +310,22 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
           <div>
             <label className="label">Status <span className="text-red-500">*</span></label>
             <select {...register('status', { required: true })} className="input">
-              {isConfirmedLead ? (
-                // Once confirmed, can only stay confirmed or mark lost
-                <>
-                  <option value="CONFIRMED">Confirmed ✓</option>
-                  <option value="LOST">Lost</option>
-                </>
-              ) : (
-                // CONFIRMED must go through the BookingConfirmModal — not available here
-                <>
-                  <option value="NEW">New</option>
-                  <option value="CONTACTED">Contacted</option>
-                  <option value="INTERESTED">Interested</option>
-                  <option value="FOLLOW_UP_SCHEDULED">Follow-up Scheduled</option>
-                  <option value="LOST">Lost</option>
-                </>
-              )}
+              {statusOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s === 'NEW' ? 'New'
+                    : s === 'CONTACTED' ? 'Contacted'
+                    : s === 'INTERESTED' ? 'Interested'
+                    : s === 'FOLLOW_UP_SCHEDULED' ? 'Follow-up Scheduled'
+                    : s === 'CONFIRMED' ? 'Confirmed ✓'
+                    : 'Lost'}
+                </option>
+              ))}
             </select>
             {isConfirmedLead && (
               <p className="text-xs text-amber-600 mt-1">Confirmed bookings can only be marked as Lost from here.</p>
+            )}
+            {isEmployee && isEditMode && !isConfirmedLead && (
+              <p className="text-xs text-slate-400 mt-1">Status can only move forward in the workflow.</p>
             )}
           </div>
           <div>
@@ -301,19 +351,68 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Destination combobox */}
           <div>
             <label className="label">Destination</label>
-            <input {...register('destination')} className="input" placeholder="e.g. Kedarnath, Manaslu" list="destinations-list" />
-            <datalist id="destinations-list">
-              {(settings?.destinations ?? []).map((d) => <option key={d} value={d} />)}
-            </datalist>
+            <div ref={destRef} className="relative">
+              <input
+                {...register('destination')}
+                value={destQuery}
+                onChange={(e) => {
+                  setDestQuery(e.target.value);
+                  setValue('destination', e.target.value);
+                  setDestOpen(true);
+                }}
+                onFocus={() => setDestOpen(true)}
+                className="input"
+                placeholder="Type or select a destination"
+                autoComplete="off"
+              />
+              {destOpen && (destSuggestions.length > 0) && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {destSuggestions.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between gap-2"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setDestQuery(d.name);
+                        setValue('destination', d.name);
+                        setDestOpen(false);
+                      }}
+                    >
+                      <span className="font-medium text-slate-800">{d.name}</span>
+                      <span className="text-xs text-slate-400 shrink-0">{d.state ? `${d.state}, ` : ''}{d.country}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Campaign — filtered by destination */}
           <div>
             <label className="label">Campaign</label>
-            <select {...register('campaignId')} className="input">
-              <option value="">No Campaign</option>
-              {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            {!selectedDestination ? (
+              <div className="input bg-slate-50 text-slate-400 text-sm cursor-not-allowed select-none">
+                Select a destination first
+              </div>
+            ) : filteredCampaigns.length === 0 ? (
+              <div className="input bg-slate-50 text-slate-400 text-sm cursor-not-allowed select-none">
+                No active campaigns for this destination
+              </div>
+            ) : (
+              <select {...register('campaignId')} className="input">
+                <option value="">No Campaign</option>
+                {filteredCampaigns.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
+            {selectedDestination && filteredCampaigns.length > 0 && (
+              <p className="text-xs text-slate-400 mt-1">{filteredCampaigns.length} campaign{filteredCampaigns.length !== 1 ? 's' : ''} for this destination</p>
+            )}
           </div>
         </div>
 

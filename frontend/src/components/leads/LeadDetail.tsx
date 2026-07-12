@@ -87,25 +87,37 @@ function InfoCell({ icon: Icon, label, value }: { icon: React.ElementType; label
 
 // ─── Status Quick-Update Bar ──────────────────────────────────────────────────
 
-function StatusBar({ current, onUpdate, disabled }: { current: LeadStatus; onUpdate: (s: LeadStatus) => void; disabled: boolean }) {
+function StatusBar({ current, onUpdate, disabled, isEmployee }: { current: LeadStatus; onUpdate: (s: LeadStatus) => void; disabled: boolean; isEmployee: boolean }) {
+  const currentIdx = statusOrder.indexOf(current);
   return (
     <div className="flex flex-wrap gap-1.5">
-      {statusOrder.map((s) => {
+      {statusOrder.map((s, idx) => {
         const cfg = leadStatusConfig[s];
         const isCurrent = current === s;
-        // Once a booking is confirmed, only LOST is the allowed forward transition
+        // Once confirmed: only CONFIRMED (current) and LOST are valid
         const isLocked = current === 'CONFIRMED' && s !== 'CONFIRMED' && s !== 'LOST';
+        // Employees cannot set CONFIRMED directly (booking flow handles it) or go backward
+        const isHiddenForEmployee = isEmployee && (
+          s === 'CONFIRMED' && !isCurrent ||   // hide CONFIRMED button (use booking flow)
+          (current === 'CONFIRMED' && isLocked)  // hide backward options on confirmed leads
+        );
+        // For employees: backward statuses are also locked (forward-only workflow)
+        const isBackward = isEmployee && idx < currentIdx && s !== 'LOST';
+
+        if (isHiddenForEmployee) return null;
+
+        const inactive = isLocked || isBackward;
         return (
           <button
             key={s}
-            onClick={() => !isCurrent && !isLocked && onUpdate(s)}
-            disabled={isCurrent || disabled || isLocked}
-            title={isLocked ? 'Cannot revert a confirmed booking' : undefined}
+            onClick={() => !isCurrent && !inactive && onUpdate(s)}
+            disabled={isCurrent || disabled || inactive}
+            title={isLocked ? 'Cannot revert a confirmed booking' : isBackward ? 'Cannot move status backward' : undefined}
             className={cn(
               'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap',
               isCurrent
                 ? `${cfg.bg} ${cfg.color} border-transparent ring-2 ring-offset-1 ring-current shadow-sm`
-                : isLocked
+                : inactive
                   ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
                   : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-800 hover:bg-slate-50 disabled:cursor-default'
             )}
@@ -762,6 +774,7 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
                     current={lead.status}
                     onUpdate={handleStatusChange}
                     disabled={updateLead.isPending}
+                    isEmployee={user?.role === 'EMPLOYEE'}
                   />
                 </div>
               )}
