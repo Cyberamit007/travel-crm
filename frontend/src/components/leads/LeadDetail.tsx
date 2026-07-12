@@ -3,12 +3,13 @@ import {
   Phone, Mail, Calendar, User, Megaphone, DollarSign,
   Users, MapPin, MessageSquare, Clock, CheckCircle, Edit, ArrowRightLeft,
   Star, Save, FileText, Activity, X, Utensils, BedDouble, Package,
-  IndianRupee, ChevronRight, CreditCard, Trash2, Plus,
+  IndianRupee, ChevronRight, CreditCard, Trash2, Plus, CheckSquare, AlertTriangle,
 } from 'lucide-react';
-import { Lead, LeadStatus, Booking, Payment } from '../../types/index';
+import { Lead, LeadStatus, Booking, Payment, BookingTask, TaskStatus, TaskType, TaskDepartment } from '../../types/index';
 import { useLead, useUpdateLead, useTransferLead } from '../../hooks/useLeads';
 import { useBookingByLead } from '../../hooks/useBookings';
 import { useBookingPayments, useRecordPayment, useDeletePayment } from '../../hooks/usePayments';
+import { useBookingTasks, useUpdateTask, useCreateTask } from '../../hooks/useTasks';
 import { useUsers } from '../../hooks/useUsers';
 import BookingConfirmModal from './BookingConfirmModal';
 import Badge from '../ui/Badge';
@@ -32,7 +33,7 @@ interface LeadDetailProps {
   onToggleStar?: () => void;
 }
 
-type WorkspaceTab = 'overview' | 'notes' | 'activity' | 'comments' | 'payments';
+type WorkspaceTab = 'overview' | 'notes' | 'activity' | 'comments' | 'payments' | 'tasks';
 
 const statusOrder: LeadStatus[] = ['NEW', 'CONTACTED', 'INTERESTED', 'FOLLOW_UP_SCHEDULED', 'CONFIRMED', 'LOST'];
 
@@ -366,6 +367,191 @@ function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => v
   );
 }
 
+// ─── Tasks Tab ────────────────────────────────────────────────────────────────
+
+const TASK_STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
+  PENDING:     { label: 'Pending',     color: 'text-amber-700',  bg: 'bg-amber-100' },
+  IN_PROGRESS: { label: 'In Progress', color: 'text-blue-700',   bg: 'bg-blue-100' },
+  DONE:        { label: 'Done',        color: 'text-emerald-700', bg: 'bg-emerald-100' },
+  SKIPPED:     { label: 'Skipped',    color: 'text-slate-500',  bg: 'bg-slate-100' },
+};
+const PRIORITY_DOT: Record<string, string> = { HIGH: 'bg-red-500', MEDIUM: 'bg-amber-400', LOW: 'bg-slate-300' };
+const DEPT_BADGE: Record<string, string> = {
+  SALES: 'bg-blue-50 text-blue-700', OPERATIONS: 'bg-purple-50 text-purple-700',
+  CUSTOMER_CARE: 'bg-emerald-50 text-emerald-700', ALL: 'bg-slate-100 text-slate-600',
+};
+
+function TasksTab({ booking }: { booking: Booking }) {
+  const { data, isLoading } = useBookingTasks(booking.id);
+  const updateTask = useUpdateTask();
+  const createTask = useCreateTask(booking.id);
+  const { user } = useAuthStore();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: '', dueDate: '', department: 'SALES' as TaskDepartment, taskType: 'GENERAL' as TaskType, priority: 'MEDIUM' });
+
+  // Fall back to tasks already included in booking data while the dedicated query loads
+  const tasks: BookingTask[] = data?.data ?? (booking.tasks as BookingTask[] | undefined) ?? [];
+  const now = new Date();
+
+  const active = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'SKIPPED');
+  const done   = tasks.filter((t) => t.status === 'DONE'  || t.status === 'SKIPPED');
+  const overdueCount = active.filter((t) => t.dueDate && new Date(t.dueDate) < now).length;
+
+  const handleCreate = () => {
+    if (!form.title.trim()) return;
+    createTask.mutate({
+      title: form.title,
+      dueDate: form.dueDate || undefined,
+      department: form.department,
+      taskType: form.taskType,
+      priority: form.priority as any,
+    }, {
+      onSuccess: () => {
+        setShowForm(false);
+        setForm({ title: '', dueDate: '', department: 'SALES', taskType: 'GENERAL', priority: 'MEDIUM' });
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-slate-700">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</p>
+          {overdueCount > 0 && (
+            <span className="flex items-center gap-1 text-xs text-red-600 font-medium bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+              <AlertTriangle className="w-3 h-3" /> {overdueCount} overdue
+            </span>
+          )}
+        </div>
+        {!showForm && (
+          <button onClick={() => setShowForm(true)} className="btn-primary text-xs gap-1.5">
+            <Plus className="w-3.5 h-3.5" /> Add Task
+          </button>
+        )}
+      </div>
+
+      {/* Create form */}
+      {showForm && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="label text-xs">Title *</label>
+              <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} className="input text-sm" placeholder="e.g. Collect passport copies" />
+            </div>
+            <div>
+              <label className="label text-xs">Due Date</label>
+              <input type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} className="input text-sm" />
+            </div>
+            <div>
+              <label className="label text-xs">Priority</label>
+              <select value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))} className="input text-sm">
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+            </div>
+            <div>
+              <label className="label text-xs">Department</label>
+              <select value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value as TaskDepartment }))} className="input text-sm">
+                <option value="SALES">Sales</option>
+                <option value="OPERATIONS">Operations</option>
+                <option value="CUSTOMER_CARE">Customer Care</option>
+                <option value="ALL">All</option>
+              </select>
+            </div>
+            <div>
+              <label className="label text-xs">Task Type</label>
+              <select value={form.taskType} onChange={(e) => setForm((f) => ({ ...f, taskType: e.target.value as TaskType }))} className="input text-sm">
+                <option value="GENERAL">General</option>
+                <option value="COLLECT_DOCS">Collect Docs</option>
+                <option value="COLLECT_PAYMENT">Collect Payment</option>
+                <option value="CONFIRM_HOTEL">Confirm Hotel</option>
+                <option value="CONFIRM_VEHICLE">Confirm Vehicle</option>
+                <option value="SEND_REMINDER">Send Reminder</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowForm(false)} className="btn-secondary text-xs">Cancel</button>
+            <button onClick={handleCreate} disabled={createTask.isPending || !form.title.trim()} className="btn-primary text-xs">
+              {createTask.isPending ? 'Adding…' : 'Add Task'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Empty / Loading */}
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1,2,3].map((i) => <div key={i} className="h-14 bg-slate-100 rounded-xl animate-pulse" />)}
+        </div>
+      ) : tasks.length === 0 ? (
+        <div className="text-center py-8 text-slate-400">
+          <CheckSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">No tasks yet</p>
+          <p className="text-xs mt-1">Tasks auto-generate when a package with itinerary is linked to the booking</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {active.map((task) => <TaskRow key={task.id} task={task} onStatusChange={(id, s) => updateTask.mutate({ id, status: s as TaskStatus })} />)}
+          {done.length > 0 && (
+            <>
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider pt-2">Completed ({done.length})</p>
+              {done.map((task) => <TaskRow key={task.id} task={task} onStatusChange={(id, s) => updateTask.mutate({ id, status: s as TaskStatus })} />)}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TaskRow({ task, onStatusChange }: { task: BookingTask; onStatusChange: (id: string, s: string) => void }) {
+  const now = new Date();
+  const isOverdue = task.status !== 'DONE' && task.status !== 'SKIPPED' && task.dueDate && new Date(task.dueDate) < now;
+  const isDone = task.status === 'DONE';
+  const cfg = TASK_STATUS_CFG[task.status] ?? TASK_STATUS_CFG.PENDING;
+
+  return (
+    <div className={cn('flex items-center gap-3 p-3 border rounded-xl transition-colors', isDone ? 'bg-slate-50 border-slate-100 opacity-60' : isOverdue ? 'bg-red-50/50 border-red-200' : 'bg-white border-slate-200 hover:border-slate-300')}>
+      {/* Quick complete */}
+      <button
+        onClick={() => onStatusChange(task.id, isDone ? 'PENDING' : 'DONE')}
+        className={cn('w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors', isDone ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 hover:border-primary-400')}
+      >
+        {isDone && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+      </button>
+
+      <div className="flex-1 min-w-0">
+        <p className={cn('text-sm font-medium text-slate-800 truncate', isDone && 'line-through text-slate-400')}>{task.title}</p>
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          {task.dueDate && (
+            <span className={cn('text-[10px] font-medium flex items-center gap-1', isOverdue ? 'text-red-600' : 'text-slate-500')}>
+              <Clock className="w-3 h-3" />
+              {isOverdue ? 'Overdue · ' : ''}{formatDate(task.dueDate)}
+            </span>
+          )}
+          <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', DEPT_BADGE[task.department])}>{task.department.replace('_', ' ')}</span>
+          <span className={cn('w-2 h-2 rounded-full', PRIORITY_DOT[task.priority])} title={task.priority} />
+        </div>
+      </div>
+
+      <select
+        value={task.status}
+        onChange={(e) => onStatusChange(task.id, e.target.value)}
+        className={cn('text-[10px] font-bold px-2 py-1 rounded-lg border-0 cursor-pointer outline-none flex-shrink-0', cfg.bg, cfg.color)}
+      >
+        <option value="PENDING">Pending</option>
+        <option value="IN_PROGRESS">In Progress</option>
+        <option value="DONE">Done</option>
+        <option value="SKIPPED">Skipped</option>
+      </select>
+    </div>
+  );
+}
+
 // ─── Payments Tab ─────────────────────────────────────────────────────────────
 
 function PaymentsTab({ booking }: { booking: Booking }) {
@@ -671,6 +857,7 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
     { key: 'notes', label: 'Notes', icon: FileText },
     { key: 'activity', label: 'Activity', icon: Activity },
     { key: 'comments', label: 'Comments', icon: MessageSquare },
+    ...(hasBooking ? [{ key: 'tasks' as WorkspaceTab, label: 'Tasks', icon: CheckSquare }] : []),
     ...(hasBooking ? [{ key: 'payments' as WorkspaceTab, label: 'Payments', icon: CreditCard }] : []),
   ];
 
@@ -819,6 +1006,9 @@ export default function LeadDetail({ leadId, open, onClose, isStarred, onToggleS
               )}
               {activeTab === 'comments' && (
                 <CommentsSection leadId={lead.id} />
+              )}
+              {activeTab === 'tasks' && booking && (
+                <TasksTab booking={booking} />
               )}
               {activeTab === 'payments' && booking && (
                 <PaymentsTab booking={booking} />
