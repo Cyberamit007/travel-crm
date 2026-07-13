@@ -263,6 +263,7 @@ function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => v
   const roomLabel: Record<string, string> = {
     SINGLE: 'Single Occupancy', DOUBLE: 'Double Sharing', TRIPLE: 'Triple Sharing', QUAD: 'Quad Sharing',
   };
+  const pendingPayments = booking.payments?.filter((p) => p.status === 'PENDING' || p.status === 'CORRECTION_REQUESTED') ?? [];
 
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50 overflow-hidden">
@@ -279,6 +280,18 @@ function BookingSummary({ booking, onEdit }: { booking: Booking; onEdit: () => v
           <Edit className="w-3 h-3" /> Edit
         </button>
       </div>
+
+      {pendingPayments.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200">
+          <Clock className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+          <p className="text-xs text-amber-800">
+            <span className="font-semibold">
+              {formatCurrency(pendingPayments.reduce((sum, p) => sum + p.amount, 0))} awaiting Finance approval
+            </span>
+            {pendingPayments.some((p) => p.status === 'CORRECTION_REQUESTED') && ' — correction requested on one entry'}
+          </p>
+        </div>
+      )}
 
       {/* Content */}
       <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">

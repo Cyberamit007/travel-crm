@@ -493,6 +493,12 @@ export const approveTraveler = async (req: AuthenticatedRequest, res: Response):
     if (!traveler) return;
     if (traveler.verificationStatus === 'VERIFIED') { res.status(400).json({ success: false, error: 'Traveler already verified' }); return; }
 
+    const hasRealName = !!traveler.name?.trim() && !/^Traveler \d+$/.test(traveler.name.trim());
+    if (!hasRealName || !traveler.gender) {
+      res.status(400).json({ success: false, error: 'Cannot verify — Name and Gender must be filled in before approval.' });
+      return;
+    }
+
     const updated = await prisma.traveler.update({
       where: { id },
       data: { verificationStatus: 'VERIFIED', verifiedById: req.user!.id, verifiedAt: new Date(), verificationNote: null },

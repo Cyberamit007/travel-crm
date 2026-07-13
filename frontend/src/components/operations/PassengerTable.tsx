@@ -251,9 +251,27 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
   };
   const handleCopyPortalLink = () => {
     regenerateLink.mutate(booking.id, {
-      onSuccess: (data) => {
-        navigator.clipboard.writeText(`${window.location.origin}/traveller/${data.travelerPortalToken}`);
-        toast.success('Portal link copied — share it with the customer');
+      onSuccess: async (data) => {
+        const link = `${window.location.origin}/traveller/${data.travelerPortalToken}`;
+        try {
+          if (!navigator.clipboard || !window.isSecureContext) throw new Error('Clipboard API unavailable');
+          await navigator.clipboard.writeText(link);
+          toast.success('Portal link copied — share it with the customer');
+        } catch {
+          // Clipboard API can silently fail (no focus, blocked permission, insecure
+          // context) — fall back to the legacy textarea+execCommand copy path.
+          const textarea = document.createElement('textarea');
+          textarea.value = link;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.focus();
+          textarea.select();
+          const copied = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          if (copied) toast.success('Portal link copied — share it with the customer');
+          else toast.error(`Couldn't copy automatically. Link: ${link}`, { duration: 8000 });
+        }
       },
     });
   };
@@ -356,9 +374,9 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
                           <>
                             <button
                               onClick={() => approveTraveler.mutate(t.id)}
-                              disabled={approveTraveler.isPending}
-                              title="Verify traveler"
-                              className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600"
+                              disabled={approveTraveler.isPending || !t.name?.trim() || /^Traveler \d+$/.test(t.name.trim()) || !t.gender}
+                              title={!t.name?.trim() || /^Traveler \d+$/.test(t.name.trim()) || !t.gender ? 'Name and Gender are required before verifying' : 'Verify traveler'}
+                              className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                             >
                               <Check className="w-3 h-3" />
                             </button>

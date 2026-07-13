@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { IndianRupee, Users, MapPin, Package, Utensils, BedDouble, Calendar, FileText } from 'lucide-react';
 import Modal from '../ui/Modal';
@@ -51,6 +51,18 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
   const { data: packagesData } = usePackages({ status: 'ACTIVE' });
   const packages = packagesData?.data ?? [];
 
+  // Packages whose master destination matches the destination/campaign chosen
+  // when this lead was created — surfaced first so Ops doesn't have to hunt
+  // through every active package. Ops can still see everything via the toggle.
+  const matchingPackages = useMemo(
+    () => (lead.destination
+      ? packages.filter((p) => p.destination?.name?.toLowerCase() === lead.destination!.toLowerCase())
+      : []),
+    [packages, lead.destination]
+  );
+  const [showAllPackages, setShowAllPackages] = useState(false);
+  const displayedPackages = matchingPackages.length > 0 && !showAllPackages ? matchingPackages : packages;
+
   const { register, handleSubmit, control, setValue, formState: { errors } } = useForm<BookingForm>({
     defaultValues: {
       travelerName: existingBooking?.travelerName ?? lead.name,
@@ -58,7 +70,7 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
       aadharNumber: existingBooking?.aadharNumber ?? '',
       foodPreference: existingBooking?.foodPreference ?? 'NO_PREFERENCE',
       roomSharing: existingBooking?.roomSharing ?? 'DOUBLE',
-      departureLocation: existingBooking?.departureLocation ?? '',
+      departureLocation: existingBooking?.departureLocation ?? lead.destination ?? '',
       departurePackage: existingBooking?.departurePackage ?? '',
       tourType: existingBooking?.tourType ?? 'GIT',
       specialRequest: existingBooking?.specialRequest ?? '',
@@ -78,6 +90,27 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
   const amountPaid = useWatch({ control, name: 'amountPaid' });
   const balanceAmount = Math.max(0, Number(finalPrice || 0) - Number(amountPaid || 0));
 
+  const packageId = useWatch({ control, name: 'packageId' });
+  const departureDate = useWatch({ control, name: 'departureDate' });
+  const selectedPackage = packages.find((p) => p.id === packageId);
+
+  // Linking a package makes it the source of truth for the trip's destination —
+  // matches booking.controller.ts, which overrides departureLocation with the
+  // package's destination when both are present, so this keeps the form in
+  // sync with what will actually be saved.
+  useEffect(() => {
+    if (selectedPackage?.destination?.name) setValue('departureLocation', selectedPackage.destination.name);
+  }, [selectedPackage, setValue]);
+
+  // Return date = departure date + package nights, recalculated whenever
+  // either changes. Still a plain input afterward, so Ops can override it.
+  useEffect(() => {
+    if (!departureDate || !selectedPackage) return;
+    const d = new Date(departureDate);
+    d.setDate(d.getDate() + selectedPackage.nights);
+    setValue('returnDate', d.toISOString().split('T')[0]);
+  }, [departureDate, selectedPackage, setValue]);
+
   useEffect(() => {
     if (open) {
       setValue('travelerName', existingBooking?.travelerName ?? lead.name);
@@ -85,7 +118,7 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
       setValue('aadharNumber', existingBooking?.aadharNumber ?? '');
       setValue('foodPreference', existingBooking?.foodPreference ?? 'NO_PREFERENCE');
       setValue('roomSharing', existingBooking?.roomSharing ?? 'DOUBLE');
-      setValue('departureLocation', existingBooking?.departureLocation ?? '');
+      setValue('departureLocation', existingBooking?.departureLocation ?? lead.destination ?? '');
       setValue('departurePackage', existingBooking?.departurePackage ?? '');
       setValue('tourType', existingBooking?.tourType ?? 'GIT');
       setValue('specialRequest', existingBooking?.specialRequest ?? '');
@@ -165,11 +198,22 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
               <label className="label">Tour Package</label>
               <select {...register('packageId')} className="input">
                 <option value="">-- No package linked --</option>
-                {packages.map((p) => (
+                {displayedPackages.map((p) => (
                   <option key={p.id} value={p.id}>{p.code} — {p.name} ({p.nights}N/{p.days}D)</option>
                 ))}
               </select>
-              <p className="text-[10px] text-slate-400 mt-0.5">Linking a package auto-generates workflow tasks on departure date</p>
+              <div className="flex items-center justify-between mt-0.5">
+                <p className="text-[10px] text-slate-400">Linking a package auto-generates workflow tasks on departure date</p>
+                {matchingPackages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllPackages((v) => !v)}
+                    className="text-[10px] font-medium text-primary-600 hover:text-primary-700 flex-shrink-0"
+                  >
+                    {showAllPackages ? `Show only ${lead.destination} packages` : 'Show all packages'}
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="label">Departure Date</label>
