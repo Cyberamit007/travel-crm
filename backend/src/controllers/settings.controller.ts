@@ -3,8 +3,8 @@ import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 
 const DEFAULT_SETTINGS = {
-  sources: ['WHATSAPP', 'INSTAGRAM', 'MANUAL', 'WEBSITE'],
-  destinations: ['Kedarnath', 'Badrinath', 'Char Dham', 'Vaishno Devi', 'Manali', 'Shimla', 'Goa', 'Kerala', 'Rajasthan', 'Andaman'],
+  sources: ['WHATSAPP', 'INSTAGRAM', 'MANUAL', 'WEBSITE', 'META_ADS'],
+  destinations: ['Kedarnath', 'Badrinath', 'Char Dham', 'Vaishno Devi', 'Manali', 'Shimla', 'Goa', 'Kerala', 'Rajasthan', 'Andaman', 'Kashmir', 'Spiti', 'Ladakh'],
   lostReasons: ['Budget Issue', 'No Response', 'Booked Elsewhere', 'Date Not Suitable', 'Cancelled Trip', 'Not Interested', 'Other'],
   companyName: '',
   companyPhone: '',

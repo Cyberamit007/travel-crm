@@ -20,6 +20,7 @@ export const leadSourceConfig: Record<LeadSource, { label: string; color: string
   INSTAGRAM: { label: 'Instagram', color: 'text-pink-700',   bg: 'bg-pink-100',   icon: '📸' },
   MANUAL:    { label: 'Manual',    color: 'text-slate-700',  bg: 'bg-slate-100',  icon: '✏️' },
   WEBSITE:   { label: 'Website',   color: 'text-blue-700',   bg: 'bg-blue-100',   icon: '🌐' },
+  META_ADS:  { label: 'Meta Ads',  color: 'text-indigo-700', bg: 'bg-indigo-100', icon: '📢' },
 };
 
 export const campaignStatusConfig: Record<CampaignStatus, { label: string; color: string; bg: string }> = {

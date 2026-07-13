@@ -1,7 +1,66 @@
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
+import prisma from '../lib/prisma.js';
+import { linkBookingToDeparture } from '../controllers/departure.controller.js';
+import { notifyFinanceTeam, updateDepartureStatuses } from '../services/notification.service.js';
 
-const prisma = new PrismaClient();
+// ─── Small random-data helpers (used by the bulk demo generator below) ──────
+
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+function pick<T>(arr: T[]): T {
+  return arr[randomInt(0, arr.length - 1)];
+}
+function pickWeighted<T>(weights: Array<[T, number]>): T {
+  const sumW = weights.reduce((a, [, w]) => a + w, 0);
+  let r = Math.random() * sumW;
+  for (const [label, w] of weights) { if (r < w) return label; r -= w; }
+  return weights[weights.length - 1][0];
+}
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function partitionCounts(total: number, buckets: number, min: number, max: number): number[] {
+  const raw = Array.from({ length: buckets }, () => min + Math.random() * (max - min));
+  const sum = raw.reduce((a, b) => a + b, 0);
+  const scaled = raw.map((v) => Math.round((v * total) / sum));
+  let diff = total - scaled.reduce((a, b) => a + b, 0);
+  let i = 0;
+  while (diff !== 0) { scaled[i % buckets] += diff > 0 ? 1 : -1; diff += diff > 0 ? -1 : 1; i++; }
+  return scaled;
+}
+function weightedFill<T>(total: number, weights: Array<[T, number]>): T[] {
+  const sumW = weights.reduce((a, [, w]) => a + w, 0);
+  const counts = weights.map(([label, w]) => [label, Math.round((w / sumW) * total)] as [T, number]);
+  let diff = total - counts.reduce((a, [, c]) => a + c, 0);
+  let i = 0;
+  while (diff !== 0) { counts[i % counts.length][1] += diff > 0 ? 1 : -1; diff += diff > 0 ? -1 : 1; i++; }
+  const out: T[] = [];
+  for (const [label, c] of counts) for (let k = 0; k < c; k++) out.push(label);
+  return shuffle(out);
+}
+function randomMobile(used: Set<string>): string {
+  let phone = '';
+  do {
+    const first = pick(['6', '7', '8', '9']);
+    let rest = '';
+    for (let i = 0; i < 9; i++) rest += randomInt(0, 9);
+    phone = `+91-${first}${rest}`;
+  } while (used.has(phone));
+  used.add(phone);
+  return phone;
+}
+function addDays(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function isoDate(d: Date): string { return d.toISOString().split('T')[0]; }
+function avatarFor(name: string): string {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff`;
+}
 
 async function upsertDestination(organizationId: string, data: {
   name: string; country: string; state?: string; city?: string;
@@ -30,6 +89,33 @@ async function findOrCreateCampaign(name: string, data: Record<string, unknown>)
   return prisma.campaign.create({ data: data as any });
 }
 
+async function upsertDepartment(organizationId: string, code: string, name: string) {
+  return prisma.department.upsert({
+    where: { code_organizationId: { code, organizationId } },
+    update: { name },
+    create: { organizationId, code, name, status: 'ACTIVE' },
+  });
+}
+
+async function findOrCreateDesignation(departmentId: string, name: string) {
+  const existing = await prisma.designation.findFirst({ where: { departmentId, name } });
+  if (existing) return existing;
+  return prisma.designation.create({ data: { departmentId, name, status: 'ACTIVE' } });
+}
+
+// Only backfills fields that are currently null — never overwrites a name,
+// phone, or other field a real user may have already edited via the app.
+async function backfillEmployeeProfile(userId: string, fields: { employeeId: string; departmentId: string; designationId: string; avatarName: string }) {
+  const existing = await prisma.user.findUnique({ where: { id: userId }, select: { employeeId: true, departmentId: true, designationId: true, avatar: true } });
+  if (!existing) return;
+  const data: Record<string, unknown> = {};
+  if (!existing.employeeId) data.employeeId = fields.employeeId;
+  if (!existing.departmentId) data.departmentId = fields.departmentId;
+  if (!existing.designationId) data.designationId = fields.designationId;
+  if (!existing.avatar) data.avatar = avatarFor(fields.avatarName);
+  if (Object.keys(data).length > 0) await prisma.user.update({ where: { id: userId }, data });
+}
+
 async function main() {
   console.log('Seeding database...');
 
@@ -46,8 +132,12 @@ async function main() {
   const OID = org.id;
 
   // ── 2. Users ──────────────────────────────────────────────────────────────
+  // Existing accounts are matched by email and NEVER have name/phone overwritten
+  // here — an admin may have already renamed/edited them via the Employees UI.
   const adminPw = await bcrypt.hash('admin123', 12);
   const empPw   = await bcrypt.hash('emp123', 12);
+  const opsPw   = await bcrypt.hash('ops123', 12);
+  const financePw = await bcrypt.hash('finance123', 12);
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@travelcrm.com' },
@@ -56,38 +146,79 @@ async function main() {
   });
   const emp1 = await prisma.user.upsert({
     where: { email: 'amit@travelcrm.com' },
-    update: { name: 'Amit Kumar', organizationId: OID },
+    update: { organizationId: OID },
     create: { name: 'Amit Kumar', email: 'amit@travelcrm.com', password: empPw, role: 'EMPLOYEE', phone: '+91-9876543211', organizationId: OID },
   });
   const emp2 = await prisma.user.upsert({
     where: { email: 'kaptan@travelcrm.com' },
-    update: { name: 'Kaptan Singh', organizationId: OID },
+    update: { organizationId: OID },
     create: { name: 'Kaptan Singh', email: 'kaptan@travelcrm.com', password: empPw, role: 'EMPLOYEE', phone: '+91-9876543212', organizationId: OID },
   });
   const emp3 = await prisma.user.upsert({
     where: { email: 'biswas@travelcrm.com' },
-    update: { name: 'Biswas Dey', organizationId: OID },
+    update: { organizationId: OID },
     create: { name: 'Biswas Dey', email: 'biswas@travelcrm.com', password: empPw, role: 'EMPLOYEE', phone: '+91-9876543213', organizationId: OID },
   });
   const emp4 = await prisma.user.upsert({
     where: { email: 'abhay@travelcrm.com' },
-    update: { name: 'Abhay Verma', organizationId: OID },
+    update: { organizationId: OID },
     create: { name: 'Abhay Verma', email: 'abhay@travelcrm.com', password: empPw, role: 'EMPLOYEE', phone: '+91-9876543214', organizationId: OID },
   });
   const emp5 = await prisma.user.upsert({
     where: { email: 'priya@travelcrm.com' },
-    update: { name: 'Priya Sharma', organizationId: OID },
+    update: { organizationId: OID },
     create: { name: 'Priya Sharma', email: 'priya@travelcrm.com', password: empPw, role: 'EMPLOYEE', phone: '+91-9876543215', organizationId: OID },
   });
-  const opsPw = await bcrypt.hash('ops123', 12);
   const ops1 = await prisma.user.upsert({
     where: { email: 'ops@travelcrm.com' },
-    update: { name: 'Rohan Bisht', organizationId: OID },
+    update: { organizationId: OID },
     create: { name: 'Rohan Bisht', email: 'ops@travelcrm.com', password: opsPw, role: 'OPERATIONS', phone: '+91-9876543216', organizationId: OID },
+  });
+  const ops2 = await prisma.user.upsert({
+    where: { email: 'ops2@travelcrm.com' },
+    update: { organizationId: OID },
+    create: { name: 'Simran Kaur', email: 'ops2@travelcrm.com', password: opsPw, role: 'OPERATIONS', phone: '+91-9876543217', organizationId: OID },
+  });
+  const fin1 = await prisma.user.upsert({
+    where: { email: 'finance1@travelcrm.com' },
+    update: { organizationId: OID },
+    create: { name: 'Ananya Iyer', email: 'finance1@travelcrm.com', password: financePw, role: 'FINANCE', phone: '+91-9876543218', organizationId: OID },
+  });
+  const fin2 = await prisma.user.upsert({
+    where: { email: 'finance2@travelcrm.com' },
+    update: { organizationId: OID },
+    create: { name: 'Rahul Deshmukh', email: 'finance2@travelcrm.com', password: financePw, role: 'FINANCE', phone: '+91-9876543219', organizationId: OID },
   });
 
   await prisma.user.updateMany({ where: { organizationId: null }, data: { organizationId: OID } });
-  console.log('  ~ Users ready: admin, amit, kaptan, biswas, abhay, priya, ops');
+
+  // Departments / Designations + additive employee-profile backfill (employeeId,
+  // department, designation, avatar placeholder) — only fills fields left null.
+  const deptAdmin = await upsertDepartment(OID, 'ADMIN', 'Administration');
+  const deptSales = await upsertDepartment(OID, 'SALES', 'Sales');
+  const deptOps = await upsertDepartment(OID, 'OPS', 'Operations');
+  const deptFinance = await upsertDepartment(OID, 'FINANCE', 'Finance');
+  const desigAdmin = await findOrCreateDesignation(deptAdmin.id, 'Administrator');
+  const desigSales = await findOrCreateDesignation(deptSales.id, 'Sales Executive');
+  const desigOps = await findOrCreateDesignation(deptOps.id, 'Operations Executive');
+  const desigFinance = await findOrCreateDesignation(deptFinance.id, 'Finance Executive');
+
+  const employeeProfiles: Array<{ user: { id: string; name: string }; employeeId: string; departmentId: string; designationId: string }> = [
+    { user: admin, employeeId: 'EMP-ADM-001', departmentId: deptAdmin.id, designationId: desigAdmin.id },
+    { user: emp1, employeeId: 'EMP-SLS-001', departmentId: deptSales.id, designationId: desigSales.id },
+    { user: emp2, employeeId: 'EMP-SLS-002', departmentId: deptSales.id, designationId: desigSales.id },
+    { user: emp3, employeeId: 'EMP-SLS-003', departmentId: deptSales.id, designationId: desigSales.id },
+    { user: emp4, employeeId: 'EMP-SLS-004', departmentId: deptSales.id, designationId: desigSales.id },
+    { user: emp5, employeeId: 'EMP-SLS-005', departmentId: deptSales.id, designationId: desigSales.id },
+    { user: ops1, employeeId: 'EMP-OPS-001', departmentId: deptOps.id, designationId: desigOps.id },
+    { user: ops2, employeeId: 'EMP-OPS-002', departmentId: deptOps.id, designationId: desigOps.id },
+    { user: fin1, employeeId: 'EMP-FIN-001', departmentId: deptFinance.id, designationId: desigFinance.id },
+    { user: fin2, employeeId: 'EMP-FIN-002', departmentId: deptFinance.id, designationId: desigFinance.id },
+  ];
+  for (const p of employeeProfiles) {
+    await backfillEmployeeProfile(p.user.id, { employeeId: p.employeeId, departmentId: p.departmentId, designationId: p.designationId, avatarName: p.user.name });
+  }
+  console.log('  ~ Users ready: 1 Admin, 5 Sales, 2 Operations, 2 Finance');
 
   // ── 3. Destinations ───────────────────────────────────────────────────────
   const destKed  = await upsertDestination(OID, { name: 'Kedarnath', country: 'India', state: 'Uttarakhand', type: 'DOMESTIC', isPopular: true, description: 'Sacred Shiva temple at 3,583m in the Himalayas' });
@@ -100,10 +231,12 @@ async function main() {
   const destSpit = await upsertDestination(OID, { name: 'Spiti Valley', country: 'India', state: 'Himachal Pradesh', type: 'DOMESTIC', isPopular: true, description: 'Cold desert mountain valley, "The Middle Land"' });
   const destLeh  = await upsertDestination(OID, { name: 'Leh-Ladakh', country: 'India', state: 'Ladakh', type: 'DOMESTIC', isPopular: true, description: 'Land of high passes — stunning Buddhist culture and landscapes' });
   const destVof  = await upsertDestination(OID, { name: 'Valley of Flowers', country: 'India', state: 'Uttarakhand', type: 'DOMESTIC', description: 'UNESCO World Heritage Site, bloom season Jul-Sep' });
-  const destMan  = await upsertDestination(OID, { name: 'Manali', country: 'India', state: 'Himachal Pradesh', type: 'DOMESTIC', description: 'Popular hill station and gateway to Lahaul-Spiti' });
+  const destMan  = await upsertDestination(OID, { name: 'Manali', country: 'India', state: 'Himachal Pradesh', type: 'DOMESTIC', isPopular: true, description: 'Popular hill station and gateway to Lahaul-Spiti' });
   const destHar  = await upsertDestination(OID, { name: 'Haridwar-Rishikesh', country: 'India', state: 'Uttarakhand', type: 'DOMESTIC', description: 'Gateway to Char Dham, sacred Ganga ghats' });
   const destNep  = await upsertDestination(OID, { name: 'Nepal Pashupatinath', country: 'Nepal', city: 'Kathmandu', type: 'INTERNATIONAL', description: 'Sacred Hindu temple complex in Kathmandu' });
   const destBhu  = await upsertDestination(OID, { name: 'Bhutan', country: 'Bhutan', city: 'Thimphu', type: 'INTERNATIONAL', description: 'Kingdom of Happiness, Tiger\'s Nest monastery' });
+  const destKash = await upsertDestination(OID, { name: 'Kashmir', country: 'India', state: 'Jammu & Kashmir', city: 'Srinagar', type: 'DOMESTIC', isPopular: true, description: 'Paradise on Earth — Dal Lake shikara rides, Gulmarg, Pahalgam and Sonmarg' });
+  const destRaj  = await upsertDestination(OID, { name: 'Rajasthan', country: 'India', state: 'Rajasthan', city: 'Jaipur', type: 'DOMESTIC', isPopular: true, description: 'Land of Kings — forts, palaces, desert safaris and vibrant culture' });
 
   console.log('  ~ Destinations ready');
 
@@ -116,6 +249,7 @@ async function main() {
   const catWildlife  = await upsertCategory(OID, { name: 'Wildlife', icon: '🦁', sortOrder: 6, description: 'National parks and wildlife safaris' });
   const catIntl      = await upsertCategory(OID, { name: 'International', icon: '✈️', sortOrder: 7, description: 'International religious and leisure tours' });
   const catWeekend   = await upsertCategory(OID, { name: 'Weekend Getaway', icon: '🌄', sortOrder: 8, description: 'Short 2-3 day trips from metro cities' });
+  const catLeisure   = await upsertCategory(OID, { name: 'Leisure', icon: '🏖️', sortOrder: 9, description: 'Relaxed sightseeing and leisure holidays' });
 
   console.log('  ~ Tour Categories ready');
 
@@ -227,6 +361,26 @@ async function main() {
       exclusions: JSON.stringify(['Personal expenses', 'Meals unless stated', 'Travel insurance', 'Tipping']),
       highlights: JSON.stringify(['Pashupatinath Temple (UNESCO)', 'Swayambhunath Stupa', 'Boudhanath — largest stupa', 'Janakpur Dham', 'Lumbini — Buddha birthplace']),
     },
+    {
+      id: 'pkg-kashmir-6n7d', name: 'Kashmir Paradise 6N7D', code: 'KASH-6N7D-SRI',
+      description: 'Srinagar, Gulmarg, Pahalgam and Sonmarg — houseboat stay, shikara ride and the best of the valley.',
+      destinationId: destKash.id, tourCategoryId: catLeisure.id,
+      nights: 6, days: 7, pricePerPerson: 22000, priceSingle: 28000, priceDouble: 22000, priceTriple: 19500,
+      isPopular: true,
+      inclusions: JSON.stringify(['Airport/rail transfers', 'Houseboat stay on Dal Lake (1 night)', 'Hotel accommodation (4★) rest of trip', 'Breakfast & Dinner daily', 'Shikara ride', 'Private cab for sightseeing', 'Gondola ride (Phase 1)']),
+      exclusions: JSON.stringify(['Airfare / train tickets', 'Gondola Phase 2 charges', 'Pony/sledge charges at Gulmarg', 'Personal expenses', 'Travel insurance']),
+      highlights: JSON.stringify(['Dal Lake shikara ride & houseboat stay', 'Gulmarg gondola & meadows', 'Betaab Valley, Pahalgam', 'Sonmarg glacier point', 'Mughal Gardens, Srinagar']),
+    },
+    {
+      id: 'pkg-rajasthan-7n8d', name: 'Rajasthan Royal Heritage 7N8D', code: 'RAJ-7N8D-JAI',
+      description: 'Jaipur, Jodhpur, Udaipur and Jaisalmer — forts, palaces, desert safari and royal heritage.',
+      destinationId: destRaj.id, tourCategoryId: catHeritage.id,
+      nights: 7, days: 8, pricePerPerson: 26000, priceSingle: 33000, priceDouble: 26000, priceTriple: 23000,
+      isPopular: true,
+      inclusions: JSON.stringify(['AC vehicle for entire circuit', 'Heritage hotel accommodation', 'Breakfast daily', 'Desert safari & camel ride in Jaisalmer', 'Fort & palace entry fees', 'Local heritage guide']),
+      exclusions: JSON.stringify(['Airfare / train tickets', 'Lunch & dinner (except desert camp)', 'Camera fees at monuments', 'Personal expenses', 'Travel insurance']),
+      highlights: JSON.stringify(['Amber Fort & City Palace, Jaipur', 'Mehrangarh Fort, Jodhpur', 'Lake Pichola, Udaipur', 'Jaisalmer desert safari & camp', 'Sam Sand Dunes sunset']),
+    },
   ];
 
   for (const pkg of packages) {
@@ -262,6 +416,49 @@ async function main() {
       { dayOffset: 3, title: 'Zanskar River canyon trek', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 6 },
       { dayOffset: 6, title: 'Phuktal Monastery visit', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 7 },
       { dayOffset: 10, title: 'Return journey to Leh', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 8 },
+    ],
+    'pkg-kashmir-6n7d': [
+      { dayOffset: -5, title: 'Collect traveler documents', taskType: 'COLLECT_DOCS', department: 'SALES', sortOrder: 1 },
+      { dayOffset: -3, title: 'Confirm houseboat & hotel booking', taskType: 'CONFIRM_HOTEL', department: 'OPERATIONS', sortOrder: 2 },
+      { dayOffset: -2, title: 'Confirm cab & driver', taskType: 'CONFIRM_VEHICLE', department: 'OPERATIONS', sortOrder: 3 },
+      { dayOffset: -1, title: 'Send packing checklist & itinerary', taskType: 'SEND_REMINDER', department: 'ALL', sortOrder: 4 },
+      { dayOffset: 0, title: 'Arrival in Srinagar, houseboat check-in', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 5 },
+      { dayOffset: 2, title: 'Gulmarg gondola excursion', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 6 },
+      { dayOffset: 6, title: 'Departure transfer', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 7 },
+      { dayOffset: 8, title: 'Collect review & feedback', taskType: 'COLLECT_REVIEW', department: 'SALES', sortOrder: 8 },
+    ],
+    'pkg-manali-3n4d': [
+      { dayOffset: -3, title: 'Collect traveler documents', taskType: 'COLLECT_DOCS', department: 'SALES', sortOrder: 1 },
+      { dayOffset: -1, title: 'Confirm hotel & Volvo booking', taskType: 'CONFIRM_HOTEL', department: 'OPERATIONS', sortOrder: 2 },
+      { dayOffset: 0, title: 'Departure from Delhi', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 3 },
+      { dayOffset: 1, title: 'Rohtang Pass / Solang Valley excursion', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 4 },
+      { dayOffset: 3, title: 'Return journey to Delhi', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 5 },
+    ],
+    'pkg-spiti-8n9d': [
+      { dayOffset: -6, title: 'Collect traveler documents', taskType: 'COLLECT_DOCS', department: 'SALES', sortOrder: 1 },
+      { dayOffset: -3, title: 'Confirm homestay & permits', taskType: 'CONFIRM_HOTEL', department: 'OPERATIONS', sortOrder: 2 },
+      { dayOffset: -2, title: 'Confirm Tempo Traveller', taskType: 'CONFIRM_VEHICLE', department: 'OPERATIONS', sortOrder: 3 },
+      { dayOffset: 0, title: 'Departure from Manali', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 4 },
+      { dayOffset: 4, title: 'Key & Tabo Monastery visit', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 5 },
+      { dayOffset: 8, title: 'Return journey to Manali', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 6 },
+    ],
+    'pkg-leh-ladakh-7n8d': [
+      { dayOffset: -5, title: 'Collect traveler documents & inner line permits', taskType: 'COLLECT_DOCS', department: 'SALES', sortOrder: 1 },
+      { dayOffset: -2, title: 'Confirm hotel booking', taskType: 'CONFIRM_HOTEL', department: 'OPERATIONS', sortOrder: 2 },
+      { dayOffset: -1, title: 'Confirm Innova/Tempo Traveller', taskType: 'CONFIRM_VEHICLE', department: 'OPERATIONS', sortOrder: 3 },
+      { dayOffset: 0, title: 'Arrival in Leh, acclimatization day', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 4 },
+      { dayOffset: 3, title: 'Pangong Tso excursion', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 5 },
+      { dayOffset: 5, title: 'Nubra Valley & Khardung La', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 6 },
+      { dayOffset: 7, title: 'Departure transfer', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 7 },
+    ],
+    'pkg-rajasthan-7n8d': [
+      { dayOffset: -5, title: 'Collect traveler documents', taskType: 'COLLECT_DOCS', department: 'SALES', sortOrder: 1 },
+      { dayOffset: -2, title: 'Confirm heritage hotel booking', taskType: 'CONFIRM_HOTEL', department: 'OPERATIONS', sortOrder: 2 },
+      { dayOffset: -1, title: 'Confirm AC vehicle for circuit', taskType: 'CONFIRM_VEHICLE', department: 'OPERATIONS', sortOrder: 3 },
+      { dayOffset: 0, title: 'Arrival in Jaipur, City Palace visit', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 4 },
+      { dayOffset: 3, title: 'Mehrangarh Fort, Jodhpur', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 5 },
+      { dayOffset: 5, title: 'Jaisalmer desert safari & camp', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 6 },
+      { dayOffset: 7, title: 'Departure transfer', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 7 },
     ],
   };
 
@@ -336,250 +533,486 @@ async function main() {
       { campaignId: campaign5.id, userId: emp5.id },
     ],
   });
-  console.log('  ~ Campaigns ready');
 
-  // ── 7. Leads ──────────────────────────────────────────────────────────────
-  await prisma.lead.updateMany({ where: { organizationId: null }, data: { organizationId: OID } });
-
-  const today = new Date().toISOString().split('T')[0];
-  const nextWeek  = new Date(Date.now() + 7  * 86400000).toISOString().split('T')[0];
-  const in2Weeks  = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
-  const in1Month  = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
-  const in45Days  = new Date(Date.now() + 45 * 86400000).toISOString().split('T')[0];
-  const in2Months = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0];
-  const in3Months = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
-
-  const demoLeads = [
-    // === CRM Leads (various statuses) ===
-    { phone: '+91-9811223344', name: 'Deepak Verma',   email: 'deepak@gmail.com',    source: 'WHATSAPP',  status: 'INTERESTED',          destination: 'Kedarnath',    campaignId: campaign1.id, assignedToId: emp1.id, groupSize: 4,  budget: 48000,  preferredDate: nextWeek,  isRead: true,  notes: 'Family of 4, wants helicopter option' },
-    { phone: '+91-9922334455', name: 'Sunita Patel',   email: 'sunita.p@gmail.com',  source: 'INSTAGRAM', status: 'FOLLOW_UP_SCHEDULED',  destination: 'Zanskar Valley', campaignId: campaign2.id, assignedToId: emp2.id, groupSize: 2,  budget: 44000,  followUpDate: new Date(Date.now() + 2 * 86400000), followUpNotes: 'Call to discuss Zanskar pricing', isRead: true },
-    { phone: '+91-9833445566', name: 'Rajesh Gupta',   source: 'WHATSAPP',           status: 'NEW',         destination: 'Kedarnath',    campaignId: campaign1.id, assignedToId: emp1.id, isRead: false },
-    { phone: '+91-9744556677', name: 'Meera Joshi',    email: 'meera.j@gmail.com',   source: 'INSTAGRAM', status: 'CONTACTED',           destination: 'Char Dham',    campaignId: campaign3.id, assignedToId: emp3.id, groupSize: 6,  budget: 150000, isRead: true },
-    { phone: '+91-9566778899', name: 'Anita Sharma',   email: 'anita.s@gmail.com',   source: 'INSTAGRAM', status: 'LOST',   lostReason: 'PRICE',    destination: 'Kedarnath',    campaignId: campaign1.id, assignedToId: emp2.id, notes: 'Budget constraint', isRead: true },
-    { phone: '+91-9477889900', name: 'Suresh Nair',    source: 'WHATSAPP',           status: 'NEW',         destination: 'Char Dham',    campaignId: campaign3.id, assignedToId: emp1.id, isRead: false },
-    { phone: '+91-9388990011', name: 'Kavita Reddy',   email: 'kavita.r@gmail.com',  source: 'MANUAL',    status: 'INTERESTED',          destination: 'Spiti Valley', campaignId: campaign4.id, assignedToId: emp4.id, groupSize: 5,  budget: 90000,  isRead: true },
-    { phone: '+91-9299001122', name: 'Pradeep Mishra', source: 'WHATSAPP',           status: 'FOLLOW_UP_SCHEDULED', destination: 'Kedarnath', campaignId: campaign1.id, assignedToId: emp1.id, followUpDate: new Date(Date.now() - 1 * 86400000), followUpNotes: 'Send price quote', groupSize: 5, isRead: true },
-    { phone: '+91-9100112233', name: 'Lakshmi Devi',   email: 'lakshmi@yahoo.com',   source: 'INSTAGRAM', status: 'NEW',                 destination: 'Char Dham',    campaignId: campaign3.id, assignedToId: emp4.id, isRead: false },
-    { phone: '+91-9011223300', name: 'Arjun Mehta',    email: 'arjun.m@gmail.com',   source: 'WHATSAPP',  status: 'INTERESTED',          destination: 'Leh-Ladakh',   campaignId: campaign5.id, assignedToId: emp5.id, groupSize: 3,  budget: 84000,  isRead: true },
-    { phone: '+91-8922334411', name: 'Pooja Agarwal',  email: 'pooja.a@gmail.com',   source: 'INSTAGRAM', status: 'CONTACTED',           destination: 'Valley of Flowers', assignedToId: emp3.id, groupSize: 2, budget: 22000, isRead: true },
-    { phone: '+91-8833445522', name: 'Dinesh Puri',    source: 'WHATSAPP',           status: 'NEW',         destination: 'Amarnath',     assignedToId: emp2.id, isRead: false },
-    { phone: '+91-8744556633', name: 'Ritu Kapoor',    email: 'ritu.k@gmail.com',    source: 'MANUAL',    status: 'INTERESTED',          destination: 'Nepal Pashupatinath', assignedToId: emp5.id, groupSize: 4, budget: 72000, isRead: true },
-
-    // === CONFIRMED leads (will get bookings below) ===
-    { phone: '+91-9655667788', name: 'Vikram Singh',   source: 'WHATSAPP',  status: 'CONFIRMED', destination: 'Zanskar Valley', campaignId: campaign2.id, assignedToId: emp2.id, groupSize: 3,  budget: 66000,  preferredDate: nextWeek,  isRead: true },
-    { phone: '+91-9001122334', name: 'Ravi Sharma',    email: 'ravi.s@gmail.com',  source: 'INSTAGRAM', status: 'CONFIRMED', destination: 'Kedarnath', campaignId: campaign1.id, assignedToId: emp1.id, groupSize: 5, budget: 60000, preferredDate: in2Weeks, isRead: true },
-    { phone: '+91-8901122335', name: 'Nisha Patel',    email: 'nisha.p@gmail.com', source: 'MANUAL',    status: 'CONFIRMED', destination: 'Char Dham',    campaignId: campaign3.id, assignedToId: emp3.id, groupSize: 4, budget: 100000, preferredDate: in1Month, isRead: true },
-    { phone: '+91-8801122336', name: 'Sanjay Tiwari',  email: 'sanjay.t@gmail.com', source: 'WHATSAPP', status: 'CONFIRMED', destination: 'Leh-Ladakh',  campaignId: campaign5.id, assignedToId: emp5.id, groupSize: 2, budget: 56000, preferredDate: in2Weeks, isRead: true },
-    { phone: '+91-8701122337', name: 'Geeta Malhotra', source: 'INSTAGRAM', status: 'CONFIRMED', destination: 'Vaishno Devi', assignedToId: emp2.id, groupSize: 6, budget: 48000, preferredDate: nextWeek, isRead: true },
-    { phone: '+91-8601122338', name: 'Sunil Rawat',    email: 'sunil.r@gmail.com', source: 'WHATSAPP', status: 'CONFIRMED', destination: 'Spiti Valley', campaignId: campaign4.id, assignedToId: emp4.id, groupSize: 4, budget: 72000, preferredDate: in45Days, isRead: true },
-    { phone: '+91-8501122339', name: 'Kavya Nair',     email: 'kavya.n@gmail.com', source: 'INSTAGRAM', status: 'CONFIRMED', destination: 'Kedarnath', campaignId: campaign1.id, assignedToId: emp1.id, groupSize: 2, budget: 24000, preferredDate: in2Months, isRead: true },
-    { phone: '+91-8401122330', name: 'Harish Bhat',    source: 'MANUAL',   status: 'CONFIRMED', destination: 'Amarnath', assignedToId: emp3.id, groupSize: 3, budget: 45000, preferredDate: in3Months, isRead: true },
-    { phone: '+91-8301122331', name: 'Mamta Soni',     email: 'mamta.s@gmail.com', source: 'WHATSAPP', status: 'CONFIRMED', destination: 'Nepal Pashupatinath', assignedToId: emp5.id, groupSize: 4, budget: 72000, preferredDate: in1Month, isRead: true },
+  // Meta Ads campaigns for the 5 headline destinations — the source for all
+  // demo leads generated below, so Campaign Management shows real spend context.
+  const now0 = new Date();
+  const metaCampaignStart = addDays(now0, -15);
+  const metaCampaigns: Record<string, Awaited<ReturnType<typeof findOrCreateCampaign>>> = {};
+  const metaCampaignDefs = [
+    { key: 'Kashmir', name: 'Kashmir Paradise — Meta Ads', destination: 'Kashmir', budget: 220000 },
+    { key: 'Manali', name: 'Manali Weekend — Meta Ads', destination: 'Manali', budget: 140000 },
+    { key: 'Spiti', name: 'Spiti Valley — Meta Ads', destination: 'Spiti', budget: 180000 },
+    { key: 'Ladakh', name: 'Leh-Ladakh Explorer — Meta Ads', destination: 'Ladakh', budget: 260000 },
+    { key: 'Rajasthan', name: 'Rajasthan Royal Heritage — Meta Ads', destination: 'Rajasthan', budget: 200000 },
   ];
-
-  let inserted = 0; let skipped = 0;
-  const leadMap: Record<string, string> = {};
-
-  for (const lead of demoLeads) {
-    const exists = await prisma.lead.findFirst({ where: { phone: lead.phone, deletedAt: null } });
-    if (!exists) {
-      const created = await prisma.lead.create({ data: { ...lead, organizationId: OID } as any });
-      leadMap[lead.phone] = created.id;
-      inserted++;
-    } else {
-      leadMap[lead.phone] = exists.id;
-      skipped++;
-    }
+  for (const c of metaCampaignDefs) {
+    metaCampaigns[c.key] = await findOrCreateCampaign(c.name, {
+      name: c.name, destination: c.destination, status: 'ACTIVE',
+      description: `Meta (Facebook/Instagram) lead-generation campaign for ${c.destination}.`,
+      startDate: metaCampaignStart, endDate: addDays(now0, 45),
+      targetLeads: 100, budget: c.budget, isFromMeta: true, utmSource: 'meta',
+      utmCampaign: `${c.key.toLowerCase()}-meta-ads`,
+      organizationId: OID,
+    });
   }
-  console.log(`  ~ Demo leads: ${inserted} inserted, ${skipped} already exist`);
+  await prisma.campaignEmployee.createMany({
+    skipDuplicates: true,
+    data: Object.values(metaCampaigns).flatMap((c) => [emp1, emp2, emp3, emp4, emp5].map((e) => ({ campaignId: c.id, userId: e.id }))),
+  });
+  console.log('  ~ Campaigns ready (incl. 5 Meta Ads campaigns)');
 
-  // ── 8. Bookings for confirmed leads ───────────────────────────────────────
-  const confirmedBookings = [
-    {
-      phone: '+91-9655667788', // Vikram Singh — Zanskar
-      travelerName: 'Vikram Singh', numberOfTravelers: 3, tourType: 'GIT',
-      foodPreference: 'VEG', roomSharing: 'TRIPLE', departureLocation: 'Delhi',
-      departurePackage: 'ZAN-10N11D-DEL', finalPrice: 66000, amountPaid: 66000,
-      packageId: 'pkg-zanskar-10n11d', departureDate: new Date(nextWeek),
-    },
-    {
-      phone: '+91-9001122334', // Ravi Sharma — Kedarnath
-      travelerName: 'Ravi Sharma', numberOfTravelers: 5, tourType: 'GIT',
-      foodPreference: 'VEG', roomSharing: 'TRIPLE', departureLocation: 'Delhi',
-      departurePackage: 'KED-6N7D-DEL', finalPrice: 60000, amountPaid: 36000,
-      balanceDueDate: new Date(Date.now() + 10 * 86400000),
-      packageId: 'pkg-kedarnath-6n7d', departureDate: new Date(in2Weeks),
-    },
-    {
-      phone: '+91-8901122335', // Nisha Patel — Char Dham
-      travelerName: 'Nisha Patel', numberOfTravelers: 4, tourType: 'GIT',
-      foodPreference: 'JAIN', roomSharing: 'DOUBLE', departureLocation: 'Haridwar',
-      departurePackage: 'CHAR-12N13D', finalPrice: 100000, amountPaid: 50000,
-      balanceDueDate: new Date(Date.now() + 20 * 86400000),
-      specialRequest: 'Jain food strictly required. No root vegetables.',
-    },
-    {
-      phone: '+91-8801122336', // Sanjay Tiwari — Leh
-      travelerName: 'Sanjay Tiwari', numberOfTravelers: 2, tourType: 'FIT',
-      foodPreference: 'NON_VEG', roomSharing: 'DOUBLE', departureLocation: 'Delhi',
-      departurePackage: 'LEH-7N8D-DEL', finalPrice: 56000, amountPaid: 56000,
-    },
-    {
-      phone: '+91-8701122337', // Geeta Malhotra — Vaishno Devi
-      travelerName: 'Geeta Malhotra', numberOfTravelers: 6, tourType: 'GIT',
-      foodPreference: 'VEG', roomSharing: 'TRIPLE', departureLocation: 'Delhi',
-      departurePackage: 'VAIS-2N3D-DEL', finalPrice: 48000, amountPaid: 20000,
-      balanceDueDate: new Date(Date.now() - 5 * 86400000), // OVERDUE
-      specialRequest: 'Senior citizens in group — need slow-pace route',
-    },
-    {
-      phone: '+91-8601122338', // Sunil Rawat — Spiti
-      travelerName: 'Sunil Rawat', numberOfTravelers: 4, tourType: 'GIT',
-      foodPreference: 'NO_PREFERENCE', roomSharing: 'DOUBLE', departureLocation: 'Manali',
-      departurePackage: 'SPIT-8N9D-MAN', finalPrice: 72000, amountPaid: 35000,
-      balanceDueDate: new Date(Date.now() + 35 * 86400000),
-    },
-    {
-      phone: '+91-8501122339', // Kavya Nair — Kedarnath
-      travelerName: 'Kavya Nair', numberOfTravelers: 2, tourType: 'FIT',
-      foodPreference: 'VEG', roomSharing: 'DOUBLE', departureLocation: 'Delhi',
-      departurePackage: 'KED-6N7D-DEL', finalPrice: 24000, amountPaid: 24000,
-    },
-    {
-      phone: '+91-8401122330', // Harish Bhat — Amarnath
-      travelerName: 'Harish Bhat', numberOfTravelers: 3, tourType: 'GIT',
-      foodPreference: 'VEG', roomSharing: 'TRIPLE', departureLocation: 'Jammu',
-      departurePackage: 'AMAR-5N6D-JAM', finalPrice: 45000, amountPaid: 22500,
-      balanceDueDate: new Date(Date.now() + 60 * 86400000),
-    },
-    {
-      phone: '+91-8301122331', // Mamta Soni — Nepal
-      travelerName: 'Mamta Soni', numberOfTravelers: 4, tourType: 'GIT',
-      foodPreference: 'VEG', roomSharing: 'DOUBLE', departureLocation: 'Delhi',
-      departurePackage: 'NEP-5N6D-DEL', finalPrice: 72000, amountPaid: 30000,
-      balanceDueDate: new Date(Date.now() + 25 * 86400000),
-      specialRequest: 'Birthday celebration for one traveler',
-    },
+  // ── 7. Vendors (shared Operations/Finance master list) ───────────────────
+  const vendorDefs = [
+    { id: 'vendor-himalayan-stays', name: 'Himalayan Stays', type: 'HOTEL', contact: '+91-9412034567', notes: 'Preferred hotel vendor for Uttarakhand routes.' },
+    { id: 'vendor-ladakh-camps', name: 'Ladakh Camps Co.', type: 'VEHICLE', contact: '+91-9419012345', notes: 'Camping + transport vendor for Ladakh/Zanskar treks.' },
+    { id: 'vendor-kashmir-hotels', name: 'Kashmir Heritage Hotels', type: 'HOTEL', contact: '+91-9906112233', notes: 'Houseboats and hotels across Srinagar, Gulmarg, Pahalgam.' },
+    { id: 'vendor-kashmir-cabs', name: 'Kashmir Valley Cabs', type: 'VEHICLE', contact: '+91-9906223344', notes: 'Private cabs for Kashmir sightseeing circuit.' },
+    { id: 'vendor-manali-hotels', name: 'Manali Hotels Co.', type: 'HOTEL', contact: '+91-9816112233', notes: 'Budget to premium hotels across Manali.' },
+    { id: 'vendor-manali-travels', name: 'Manali Volvo Travels', type: 'VEHICLE', contact: '+91-9816223344', notes: 'Volvo & Tempo Traveller fleet for Manali routes.' },
+    { id: 'vendor-spiti-homestays', name: 'Spiti Homestays Network', type: 'HOTEL', contact: '+91-9805112233', notes: 'Homestay + guesthouse network across Spiti villages.' },
+    { id: 'vendor-spiti-transport', name: 'Spiti Adventure Transport', type: 'VEHICLE', contact: '+91-9805223344', notes: 'High-altitude rated Tempo Travellers for Spiti circuit.' },
+    { id: 'vendor-leh-hotels', name: 'Leh Palace Hotels', type: 'HOTEL', contact: '+91-9419334455', notes: 'Hotels across Leh town for Ladakh tours.' },
+    { id: 'vendor-rajasthan-hotels', name: 'Rajasthan Heritage Hotels', type: 'HOTEL', contact: '+91-9829112233', notes: 'Heritage havelis and forts converted to hotels.' },
+    { id: 'vendor-rajasthan-cabs', name: 'Rajasthan Desert Cabs', type: 'VEHICLE', contact: '+91-9829223344', notes: 'AC vehicles for the Jaipur-Jodhpur-Udaipur-Jaisalmer circuit.' },
+    { id: 'vendor-trip-captains-guild', name: 'Himalayan Trip Captains Guild', type: 'LOCAL_GUIDE', contact: '+91-9412998877', notes: 'Freelance trip captains / tour leaders pool used across destinations.' },
   ];
-
-  let bookingsCreated = 0;
-  const bookingMap: Record<string, string> = {};
-  for (const b of confirmedBookings) {
-    const leadId = leadMap[b.phone];
-    if (!leadId) continue;
-    const exists = await prisma.booking.findFirst({ where: { leadId } });
-    if (!exists) {
-      const paid = Number(b.amountPaid);
-      const price = Number(b.finalPrice);
-      const balance = Math.max(0, price - paid);
-      const created = await prisma.booking.create({
-        data: {
-          leadId,
-          organizationId: OID,
-          travelerName: b.travelerName,
-          numberOfTravelers: b.numberOfTravelers,
-          tourType: b.tourType,
-          foodPreference: b.foodPreference,
-          roomSharing: b.roomSharing,
-          departureLocation: b.departureLocation,
-          departurePackage: b.departurePackage,
-          packageId: (b as any).packageId || null,
-          departureDate: (b as any).departureDate || null,
-          finalPrice: price,
-          amountPaid: paid,
-          balanceAmount: balance,
-          balanceDueDate: (b as any).balanceDueDate || null,
-          specialRequest: (b as any).specialRequest || null,
-          status: 'ACTIVE',
-        },
-      });
-      bookingMap[b.phone] = created.id;
-      bookingsCreated++;
-    } else {
-      bookingMap[b.phone] = exists.id;
-    }
+  const vendors: Record<string, Awaited<ReturnType<typeof prisma.vendor.upsert>>> = {};
+  for (const v of vendorDefs) {
+    vendors[v.id] = await prisma.vendor.upsert({
+      where: { id: v.id },
+      update: { organizationId: OID },
+      create: { ...v, organizationId: OID },
+    });
   }
-  console.log(`  ~ ${bookingsCreated} bookings created`);
+  console.log(`  ~ ${vendorDefs.length} vendors ready`);
 
-  // ── 9b. Operations demo data (Departures/Hotels/Vehicles/Travelers) ──────
-  // Mirrors what linkBookingToDeparture() does automatically at runtime when
-  // Sales confirms a booking through the app — done directly here since seeding
-  // bypasses the HTTP layer.
-  const opsDemo: Array<{ phone: string; packageId: string; destination: string; departureDate: Date; hotel: Record<string, unknown>; vehicle: Record<string, unknown> }> = [
-    {
-      phone: '+91-9655667788', packageId: 'pkg-zanskar-10n11d', destination: 'Zanskar Valley', departureDate: new Date(nextWeek),
-      hotel: { name: 'Zanskar Base Camp', location: 'Padum', numberOfRooms: 2, roomAllocation: '1 Triple, extra mattress', vendorName: 'Ladakh Camps Co.', vendorContact: '+91-9419012345', confirmationNumber: 'ZBC-2026-0714', status: 'CONFIRMED' },
-      vehicle: { vehicleType: 'Tempo Traveller', vehicleNumber: 'JK10-A-4521', driverName: 'Tenzin Norbu', driverMobile: '+91-9419098765', pickupLocation: 'Leh Bus Stand', status: 'CONFIRMED' },
-    },
-    {
-      phone: '+91-9001122334', packageId: 'pkg-kedarnath-6n7d', destination: 'Kedarnath', departureDate: new Date(in2Weeks),
-      hotel: { name: 'Hotel Mandakini Heights', location: 'Guptkashi', numberOfRooms: 3, roomAllocation: null, vendorName: 'Himalayan Stays', vendorContact: '+91-9412034567', status: 'PENDING' },
-      vehicle: { vehicleType: 'AC Bus', vehicleNumber: null, driverName: null, status: 'PENDING' },
-    },
-  ];
+  // ── 8. Bulk demo generator: 500 leads / 150 confirmed bookings ───────────
+  // Guarded so re-running the seed never duplicates the bulk demo dataset —
+  // it only generates once (checked via the META_ADS source marker, which
+  // this generator is the sole producer of).
+  const existingBulkLeads = await prisma.lead.count({ where: { organizationId: OID, source: 'META_ADS' } });
+  if (existingBulkLeads >= 400) {
+    console.log(`  ~ Bulk demo dataset already present (${existingBulkLeads} Meta Ads leads) — skipping generation`);
+  } else {
+    console.log('  + Generating bulk demo dataset (500 leads / 150 confirmed bookings)...');
+    const now = new Date();
+    const salesUsers = [emp1, emp2, emp3, emp4, emp5];
+    const financeUsers = [fin1, fin2];
 
-  let departuresCreated = 0;
-  for (const d of opsDemo) {
-    const bookingId = bookingMap[d.phone];
-    if (!bookingId) continue;
+    const maleFirstNames = ['Rahul', 'Amit', 'Rohit', 'Vikas', 'Sanjay', 'Deepak', 'Anil', 'Suresh', 'Manoj', 'Ravi', 'Ajay', 'Vinod', 'Rajesh', 'Naveen', 'Pankaj', 'Arvind', 'Ashok', 'Gaurav', 'Nitin', 'Sandeep', 'Vikram', 'Sunil', 'Praveen', 'Yogesh', 'Dinesh', 'Mahesh', 'Ramesh', 'Sachin', 'Vivek', 'Alok', 'Harish', 'Rajeev', 'Anand', 'Manish', 'Kunal', 'Siddharth', 'Abhishek', 'Karan', 'Varun', 'Aditya'];
+    const femaleFirstNames = ['Priya', 'Neha', 'Pooja', 'Anjali', 'Kavita', 'Sunita', 'Meena', 'Rekha', 'Anita', 'Sneha', 'Divya', 'Shweta', 'Ritu', 'Nisha', 'Swati', 'Aarti', 'Kiran', 'Preeti', 'Deepika', 'Anu', 'Geeta', 'Lata', 'Radha', 'Seema', 'Vandana', 'Jyoti', 'Manisha', 'Suman', 'Usha', 'Bharti', 'Kavya', 'Ishita', 'Tanya', 'Simran', 'Payal', 'Komal', 'Shalini', 'Vidya', 'Meera', 'Archana'];
+    const lastNames = ['Sharma', 'Verma', 'Gupta', 'Kumar', 'Singh', 'Patel', 'Yadav', 'Mishra', 'Jain', 'Agarwal', 'Reddy', 'Nair', 'Iyer', 'Menon', 'Rao', 'Chaudhary', 'Malhotra', 'Kapoor', 'Chopra', 'Bhatia', 'Saxena', 'Tiwari', 'Pandey', 'Dubey', 'Joshi', 'Desai', 'Shah', 'Mehta', 'Bose', 'Chatterjee', 'Banerjee', 'Mukherjee', 'Das', 'Ghosh', 'Naidu', 'Pillai', 'Rawat', 'Bisht', 'Negi', 'Thakur'];
+    const cities = ['Delhi', 'Mumbai', 'Bangalore', 'Pune', 'Chennai', 'Hyderabad', 'Kolkata', 'Ahmedabad', 'Jaipur', 'Lucknow', 'Chandigarh', 'Surat', 'Indore', 'Nagpur', 'Bhopal', 'Patna', 'Kanpur', 'Gurgaon', 'Noida', 'Ludhiana', 'Coimbatore', 'Vadodara', 'Nashik', 'Rajkot', 'Kochi'];
 
-    let departure = await prisma.departure.findFirst({ where: { packageId: d.packageId, departureDate: d.departureDate } });
-    if (!departure) {
-      departure = await prisma.departure.create({
-        data: { organizationId: OID, packageId: d.packageId, destination: d.destination, departureDate: d.departureDate, status: 'UPCOMING' },
-      });
-      departuresCreated++;
+    const leadNotesPool = [
+      'Interested in family package, asked for discount on group booking',
+      'Requested callback after 6 PM due to work schedule',
+      'Compared prices with another travel agency, wants best rate',
+      'Wants a fully customized itinerary with extra sightseeing days',
+      'Group booking — college friends reunion trip',
+      'Honeymoon couple — looking for premium hotel upgrade',
+      'Asked about EMI / installment payment options',
+      'Senior citizens in group — requested slow-paced itinerary',
+      'Wants to know about travel insurance coverage',
+      'Referred by a previous customer',
+      'Asked for a private cab instead of shared transport',
+      'Interested but waiting on leave approval from office',
+      'Wants Jain food arrangements throughout the trip',
+      'Corporate group booking — requested GST invoice',
+      'Asked about photography/videography add-on package',
+      'First-time Himalayan traveler — has altitude sickness concerns',
+      'Wants to extend the trip by 2 extra days',
+      'Comparing helicopter vs road option',
+      'Repeat customer — booked with us before',
+      'Large family group with kids under 10 years',
+    ];
+    const followUpNotesPool = [
+      'Call to share final itinerary and pricing',
+      'Follow up on advance payment confirmation',
+      'Send updated package brochure via WhatsApp',
+      'Check if they have decided on travel dates',
+      'Confirm number of travelers before finalizing quote',
+      'Discuss room-sharing preferences and finalize booking',
+    ];
+    const lostReasonsPool = ['Budget Issue', 'No Response', 'Booked Elsewhere', 'Date Not Suitable', 'Cancelled Trip', 'Not Interested'];
+    const financeRejectReasons = ['Screenshot unclear, please re-upload payment proof', 'Amount does not match the UTR reference provided', 'Duplicate entry — already verified in an earlier submission', 'Transaction reference number missing, please provide UTR'];
+    const financeCorrectionNotes = ['Please confirm the correct payment mode used', 'Receipt number missing, kindly update and resubmit', 'Amount entered seems higher than the shared screenshot'];
+    const refundReasons = ['Trip date changed by customer', 'Medical emergency — cancellation', 'Duplicate payment entry', 'Customer cancelled due to personal reasons', 'Partial cancellation — one traveler dropped out'];
+    const tripCaptainPool = [
+      { name: 'Suraj Thapa', phone: '+91-9419087654' },
+      { name: 'Iqbal Ahmed', phone: '+91-9906123456' },
+      { name: 'Karma Namgyal', phone: '+91-9419234567' },
+      { name: 'Devendra Bhandari', phone: '+91-9816345678' },
+      { name: 'Ramlal Gujjar', phone: '+91-9799456789' },
+      { name: 'Sonam Wangchuk', phone: '+91-9419567890' },
+    ];
+    const driverPool = ['Mohd. Yasin', 'Bunty Thakur', 'Rinchen Dorjay', 'Gopal Meena', 'Fayaz Ahmed', 'Suresh Bhandari', 'Lakhvinder Singh', 'Om Prakash Sharma'];
+    const vehicleTypes = ['Tempo Traveller', 'AC Innova Crysta', 'AC Bus', 'Sumo/Xylo', 'Tata Winger'];
 
-      const items = itineraries[d.packageId]?.filter((i) => i.department === 'OPERATIONS' || i.department === 'ALL') ?? [];
-      if (items.length) {
-        await prisma.departureTask.createMany({
-          data: items.map((i) => ({ departureId: departure!.id, dayOffset: i.dayOffset, title: i.title, status: 'PENDING', sortOrder: i.sortOrder })),
+    type DestCfg = { label: string; packageId: string; packageCode: string; pricePerPerson: number; nights: number; departureLocation: string; destinationName: string; hotelVendorId: string; vehicleVendorId: string; hotelNames: string[] };
+    const destinationConfigs: DestCfg[] = [
+      { label: 'Kashmir', packageId: 'pkg-kashmir-6n7d', packageCode: 'KASH-6N7D-SRI', pricePerPerson: 22000, nights: 6, departureLocation: 'Delhi', destinationName: destKash.name, hotelVendorId: 'vendor-kashmir-hotels', vehicleVendorId: 'vendor-kashmir-cabs', hotelNames: ['Hotel Dal View', 'Heevan Retreat', 'Grand Mumtaz Srinagar', 'Hotel Gulmarg Heights'] },
+      { label: 'Manali', packageId: 'pkg-manali-3n4d', packageCode: 'MAN-3N4D-DEL', pricePerPerson: 9000, nights: 3, departureLocation: 'Delhi', destinationName: destMan.name, hotelVendorId: 'vendor-manali-hotels', vehicleVendorId: 'vendor-manali-travels', hotelNames: ['Hotel Snow Valley Resorts', 'The Himalayan', 'Manali River Retreat', 'Hotel Mount View'] },
+      { label: 'Spiti', packageId: 'pkg-spiti-8n9d', packageCode: 'SPIT-8N9D-MAN', pricePerPerson: 18000, nights: 8, departureLocation: 'Manali', destinationName: destSpit.name, hotelVendorId: 'vendor-spiti-homestays', vehicleVendorId: 'vendor-spiti-transport', hotelNames: ['Spiti Sarai Eco Lodge', 'Zostel Spiti', 'Kaza Continental Homestay', 'Grand Dewachen'] },
+      { label: 'Ladakh', packageId: 'pkg-leh-ladakh-7n8d', packageCode: 'LEH-7N8D-DEL', pricePerPerson: 28000, nights: 7, departureLocation: 'Delhi', destinationName: destLeh.name, hotelVendorId: 'vendor-leh-hotels', vehicleVendorId: 'vendor-ladakh-camps', hotelNames: ['Hotel Ladakh Greens', 'The Grand Dragon Ladakh', 'Lchang Nang Retreat', 'Hotel Singge Palace'] },
+      { label: 'Rajasthan', packageId: 'pkg-rajasthan-7n8d', packageCode: 'RAJ-7N8D-JAI', pricePerPerson: 26000, nights: 7, departureLocation: 'Delhi', destinationName: destRaj.name, hotelVendorId: 'vendor-rajasthan-hotels', vehicleVendorId: 'vendor-rajasthan-cabs', hotelNames: ['Hotel Pearl Palace', 'Fort Rajwada', 'Umaid Bhawan Heritage', 'The Rajasthan Haveli'] },
+    ];
+
+    const TOTAL_LEADS = 500;
+    const TOTAL_CONFIRMED = 150;
+    const DAYS = 15;
+
+    const dayCounts = partitionCounts(TOTAL_LEADS, DAYS, 20, 40); // index 0 = 14 days ago ... index 14 = today
+    const dayIndexPerSlot = shuffle(dayCounts.flatMap((count, d) => Array(count).fill(d)));
+    const statusPerSlot = shuffle([
+      ...Array(TOTAL_CONFIRMED).fill('CONFIRMED'),
+      ...weightedFill(TOTAL_LEADS - TOTAL_CONFIRMED, [
+        ['NEW', 24], ['CONTACTED', 22], ['INTERESTED', 20], ['FOLLOW_UP_SCHEDULED', 19], ['LOST', 15],
+      ]),
+    ]);
+    const destPerSlot = shuffle(destinationConfigs.flatMap((d) => Array(TOTAL_LEADS / destinationConfigs.length).fill(d)));
+    const salesPerSlot = weightedFill(TOTAL_LEADS, salesUsers.map((u, i) => [u, [1.3, 1.15, 1.0, 0.9, 0.75][i]] as [typeof u, number]));
+
+    const usedPhones = new Set<string>();
+    const usedBookingNumbers = new Set<string>();
+
+    const leadsCreateData: any[] = [];
+    const activityLogData: any[] = [];
+    type LeadPlan = { id: string; leadId: string; name: string; assignedToId: string; destCfg: DestCfg; groupSize: number; departureDate: Date; createdAt: Date };
+    const confirmedPlans: LeadPlan[] = [];
+
+    for (let i = 0; i < TOTAL_LEADS; i++) {
+      const dayIndex = dayIndexPerSlot[i];
+      const dayDate = addDays(now, -(DAYS - 1) + dayIndex);
+      const createdAt = new Date(dayDate);
+      createdAt.setHours(randomInt(9, 20), randomInt(0, 59), randomInt(0, 59), 0);
+      if (createdAt > now) createdAt.setTime(now.getTime() - randomInt(0, 3600000));
+
+      const status = statusPerSlot[i];
+      const destCfg = destPerSlot[i];
+      const assignedTo = salesPerSlot[i];
+      const isMale = Math.random() < 0.55;
+      const name = `${pick(isMale ? maleFirstNames : femaleFirstNames)} ${pick(lastNames)}`;
+      const phone = randomMobile(usedPhones);
+      const city = pick(cities);
+      const groupSize = pick([1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6]);
+      const travelDaysFromNow = randomInt(10, 120);
+      const preferredDate = isoDate(addDays(createdAt, travelDaysFromNow));
+      const budget = Math.round((groupSize * destCfg.pricePerPerson * (0.9 + Math.random() * 0.3)) / 500) * 500;
+      const leadId = randomUUID();
+
+      // Lead has no dedicated "city" column — folded into notes instead of a
+      // schema change (the repo's migration constraints just bit us once this
+      // session on Payment.updatedAt, so new required/queried columns are avoided).
+      const baseNote = Math.random() < 0.6 ? pick(leadNotesPool) : null;
+      const notes = baseNote ? `${baseNote} (from ${city})` : `Inquiry from ${city}`;
+
+      const leadData: any = {
+        id: leadId,
+        organizationId: OID,
+        name, phone,
+        source: 'META_ADS',
+        status,
+        destination: destCfg.label,
+        campaignId: metaCampaigns[destCfg.label].id,
+        assignedToId: assignedTo.id,
+        groupSize,
+        budget,
+        preferredDate,
+        notes,
+        isRead: dayIndex < DAYS - 2 ? true : Math.random() < 0.4,
+        createdAt,
+        updatedAt: createdAt,
+      };
+
+      if (status === 'LOST') {
+        leadData.lostReason = pick(lostReasonsPool);
+      }
+      if (status === 'FOLLOW_UP_SCHEDULED') {
+        const followUpOffset = randomInt(-3, 5);
+        leadData.followUpDate = addDays(now, followUpOffset);
+        leadData.followUpNotes = pick(followUpNotesPool);
+      }
+
+      leadsCreateData.push(leadData);
+      activityLogData.push({ action: 'Lead Created', details: `${name} — ${destCfg.label} inquiry via Meta Ads`, entityType: 'LEAD', entityId: leadId, userId: assignedTo.id, leadId, createdAt });
+
+      if (['CONTACTED', 'INTERESTED', 'FOLLOW_UP_SCHEDULED'].includes(status) && Math.random() < 0.4) {
+        const followUpAt = new Date(createdAt.getTime() + randomInt(3600000, (now.getTime() - createdAt.getTime()) || 3600000));
+        activityLogData.push({ action: 'Follow-up Call', details: pick(followUpNotesPool), entityType: 'LEAD', entityId: leadId, userId: assignedTo.id, leadId, createdAt: followUpAt > now ? now : followUpAt });
+      }
+      if (status === 'LOST') {
+        activityLogData.push({ action: 'Lead Marked Lost', details: `Reason: ${leadData.lostReason}`, entityType: 'LEAD', entityId: leadId, userId: assignedTo.id, leadId, createdAt });
+      }
+
+      if (status === 'CONFIRMED') {
+        const bookingConfirmedAt = new Date(createdAt.getTime() + randomInt(0, 3) * 86400000);
+        confirmedPlans.push({
+          id: randomUUID(), leadId, name, assignedToId: assignedTo.id, destCfg, groupSize,
+          departureDate: new Date(preferredDate), createdAt: bookingConfirmedAt > now ? now : bookingConfirmedAt,
         });
       }
-      await prisma.hotel.create({ data: { departureId: departure.id, ...(d.hotel as any) } });
-      await prisma.vehicle.create({ data: { departureId: departure.id, ...(d.vehicle as any) } });
     }
 
-    await prisma.booking.update({ where: { id: bookingId }, data: { departureId: departure.id } });
-  }
-  console.log(`  ~ ${departuresCreated} operations departures ready (with hotel/vehicle/timeline)`);
+    await prisma.lead.createMany({ data: leadsCreateData });
+    console.log(`  ~ ${leadsCreateData.length} leads created (${confirmedPlans.length} confirmed)`);
 
-  await prisma.vendor.upsert({
-    where: { id: 'vendor-himalayan-stays' },
-    update: { organizationId: OID },
-    create: { id: 'vendor-himalayan-stays', organizationId: OID, name: 'Himalayan Stays', type: 'HOTEL', contact: '+91-9412034567', notes: 'Preferred hotel vendor for Uttarakhand routes.' },
-  });
-  await prisma.vendor.upsert({
-    where: { id: 'vendor-ladakh-camps' },
-    update: { organizationId: OID },
-    create: { id: 'vendor-ladakh-camps', organizationId: OID, name: 'Ladakh Camps Co.', type: 'VEHICLE', contact: '+91-9419012345', notes: 'Camping + transport vendor for Ladakh/Zanskar treks.' },
-  });
+    // ── Bookings + Payments ─────────────────────────────────────────────────
+    const bookingsCreateData: any[] = [];
+    const paymentsCreateData: any[] = [];
+    const bookingLedger: Record<string, { finalPrice: number; amountPaid: number; leadId: string; assignedToId: string; departureDate: Date }> = {};
+    const financeNotifyQueue: Array<{ name: string; amount: number; bookingNumber: string }> = [];
 
-  // ── 9. Activity logs ──────────────────────────────────────────────────────
-  const logCount = await prisma.activityLog.count();
-  if (logCount === 0) {
-    await prisma.activityLog.createMany({
-      data: [
-        { action: 'Lead Created',        details: 'Deepak Verma — Kedarnath inquiry via WhatsApp', userId: admin.id },
-        { action: 'Status Updated',      details: 'Vikram Singh marked as Confirmed',              userId: emp2.id },
-        { action: 'Follow-up Scheduled', details: 'Follow-up set for Sunita Patel',                userId: emp2.id },
-        { action: 'Campaign Created',    details: 'Kedarnath July Batch campaign created',         userId: admin.id },
-        { action: 'Booking Confirmed',   details: 'Ravi Sharma — 5 pax, ₹60,000',                userId: emp1.id },
-        { action: 'Package Created',     details: 'Char Dham Yatra 12N13D package added',         userId: admin.id },
-        { action: 'Lead Confirmed',      details: 'Nisha Patel — Char Dham, 4 pax',              userId: emp3.id },
-      ],
+    for (const plan of confirmedPlans) {
+      const bucketRoll = Math.random();
+      let departureDate: Date;
+      let bucket: 'COMPLETED' | 'ACTIVE' | 'UPCOMING';
+      if (bucketRoll < 0.2) {
+        bucket = 'COMPLETED';
+        departureDate = addDays(now, -randomInt(5, 60));
+      } else if (bucketRoll < 0.3) {
+        bucket = 'ACTIVE';
+        departureDate = addDays(now, -randomInt(0, Math.min(3, plan.destCfg.nights - 1)));
+      } else {
+        bucket = 'UPCOMING';
+        departureDate = plan.departureDate < addDays(now, 3) ? addDays(now, randomInt(3, 100)) : plan.departureDate;
+      }
+      const returnDate = addDays(departureDate, plan.destCfg.nights);
+
+      const priceVariance = 0.92 + Math.random() * 0.16;
+      const finalPrice = Math.round((plan.groupSize * plan.destCfg.pricePerPerson * priceVariance) / 100) * 100;
+
+      let datePart = isoDate(plan.createdAt).replace(/-/g, '');
+      let bookingNumber = '';
+      do { bookingNumber = `BKG-${datePart}-${randomInt(1000, 9999)}`; } while (usedBookingNumbers.has(bookingNumber));
+      usedBookingNumbers.add(bookingNumber);
+
+      // Payment plan — mirrors booking.controller.ts's Finance-gated flow:
+      // amountPaid only reflects VERIFIED payments, never the raw advance.
+      const fullyPaidBucket = bucket === 'COMPLETED';
+      const payments: Array<{ amount: number; type: string; method: string; status: string; createdAt: Date; verifiedAt?: Date }> = [];
+      const methodPool: Array<[string, number]> = [['UPI', 45], ['BANK_TRANSFER', 25], ['CASH', 15], ['CHEQUE', 5], ['ONLINE', 10]];
+      const statusPool: Array<[string, number]> = fullyPaidBucket
+        ? [['VERIFIED', 96], ['PENDING', 4]]
+        : [['VERIFIED', 82], ['PENDING', 12], ['REJECTED', 3], ['CORRECTION_REQUESTED', 3]];
+
+      const advanceAmount = fullyPaidBucket ? finalPrice : Math.round((finalPrice * (0.3 + Math.random() * 0.3)) / 100) * 100;
+      payments.push({ amount: advanceAmount, type: 'ADVANCE', method: pickWeighted(methodPool), status: pickWeighted(statusPool), createdAt: plan.createdAt });
+
+      if (!fullyPaidBucket && advanceAmount < finalPrice && Math.random() < 0.35) {
+        const remaining = finalPrice - advanceAmount;
+        const secondAmount = bucket === 'ACTIVE' ? remaining : Math.round((remaining * (0.4 + Math.random() * 0.6)) / 100) * 100;
+        const secondCreatedAt = new Date(Math.min(plan.createdAt.getTime() + randomInt(3, 20) * 86400000, now.getTime()));
+        payments.push({ amount: secondAmount, type: secondAmount >= remaining ? 'FINAL' : 'PARTIAL', method: pickWeighted(methodPool), status: pickWeighted(statusPool), createdAt: secondCreatedAt });
+      } else if (bucket === 'ACTIVE' && advanceAmount < finalPrice && Math.random() < 0.8) {
+        const remaining = finalPrice - advanceAmount;
+        const secondCreatedAt = new Date(Math.min(plan.createdAt.getTime() + randomInt(3, 15) * 86400000, now.getTime()));
+        payments.push({ amount: remaining, type: 'FINAL', method: pickWeighted(methodPool), status: pickWeighted([['VERIFIED', 92], ['PENDING', 8]]), createdAt: secondCreatedAt });
+      }
+
+      let amountPaid = 0;
+      for (const p of payments) {
+        const verifiedAt = p.status === 'VERIFIED' ? new Date(Math.min(p.createdAt.getTime() + randomInt(1, 48) * 3600000, now.getTime())) : undefined;
+        if (p.status === 'VERIFIED') amountPaid += p.amount;
+        const financeUser = pick(financeUsers);
+        paymentsCreateData.push({
+          id: randomUUID(),
+          bookingId: plan.id,
+          amount: p.amount,
+          type: p.type,
+          method: p.method,
+          reference: p.method === 'UPI' ? `UPI${randomInt(100000000000, 999999999999)}` : (p.method === 'BANK_TRANSFER' || p.method === 'ONLINE') ? `UTR${randomInt(1000000000, 9999999999)}` : p.method === 'CHEQUE' ? `CHQ${randomInt(100000, 999999)}` : null,
+          proofUrl: Math.random() < 0.7 ? '/uploads/demo/payment-proof-placeholder.jpg' : null,
+          status: p.status,
+          financeNote: p.status === 'REJECTED' ? pick(financeRejectReasons) : p.status === 'CORRECTION_REQUESTED' ? pick(financeCorrectionNotes) : null,
+          verifiedById: p.status === 'VERIFIED' ? financeUser.id : null,
+          verifiedAt: verifiedAt ?? null,
+          recordedById: plan.assignedToId,
+          createdAt: p.createdAt,
+          updatedAt: verifiedAt ?? p.createdAt,
+        });
+        activityLogData.push({ action: 'Payment Submitted', details: `₹${p.amount.toLocaleString()} via ${p.method} — ${bookingNumber}`, entityType: 'PAYMENT', entityId: plan.id, userId: plan.assignedToId, leadId: plan.leadId, createdAt: p.createdAt });
+        if (p.status === 'VERIFIED') {
+          activityLogData.push({ action: 'Payment Verified', details: `₹${p.amount.toLocaleString()} verified — ${bookingNumber}`, entityType: 'PAYMENT', entityId: plan.id, userId: financeUser.id, leadId: plan.leadId, createdAt: verifiedAt! });
+        } else if (p.status === 'PENDING') {
+          financeNotifyQueue.push({ name: plan.name, amount: p.amount, bookingNumber });
+        } else if (p.status === 'REJECTED') {
+          activityLogData.push({ action: 'Payment Rejected', details: `₹${p.amount.toLocaleString()} rejected — ${bookingNumber}`, entityType: 'PAYMENT', entityId: plan.id, userId: financeUser.id, leadId: plan.leadId, createdAt: p.createdAt });
+        }
+      }
+
+      const balanceAmount = Math.max(0, finalPrice - amountPaid);
+      const balanceDueDate = balanceAmount > 0 ? addDays(departureDate, -7) : null;
+
+      bookingsCreateData.push({
+        id: plan.id,
+        organizationId: OID,
+        leadId: plan.leadId,
+        bookingNumber,
+        packageId: plan.destCfg.packageId,
+        travelerName: plan.name,
+        numberOfTravelers: plan.groupSize,
+        foodPreference: pickWeighted([['VEG', 55], ['NON_VEG', 30], ['JAIN', 8], ['NO_PREFERENCE', 7]]),
+        roomSharing: pickWeighted([['DOUBLE', 50], ['TRIPLE', 30], ['SINGLE', 12], ['QUAD', 8]]),
+        departureLocation: plan.destCfg.departureLocation,
+        departurePackage: plan.destCfg.packageCode,
+        tourType: Math.random() < 0.85 ? 'GIT' : 'FIT',
+        departureDate, returnDate,
+        finalPrice, amountPaid, balanceAmount, balanceDueDate,
+        status: bucket === 'COMPLETED' ? 'COMPLETED' : 'ACTIVE',
+        createdAt: plan.createdAt, updatedAt: plan.createdAt,
+      });
+      bookingLedger[plan.id] = { finalPrice, amountPaid, leadId: plan.leadId, assignedToId: plan.assignedToId, departureDate };
+      activityLogData.push({ action: 'Lead Confirmed', details: `Booking ${bookingNumber} created — ${plan.groupSize} traveler(s), ₹${finalPrice.toLocaleString()} finalised`, entityType: 'LEAD', entityId: plan.leadId, userId: plan.assignedToId, leadId: plan.leadId, createdAt: plan.createdAt });
+    }
+
+    await prisma.booking.createMany({ data: bookingsCreateData });
+    await prisma.payment.createMany({ data: paymentsCreateData });
+    console.log(`  ~ ${bookingsCreateData.length} bookings + ${paymentsCreateData.length} payments created`);
+
+    for (const item of financeNotifyQueue.slice(0, 40)) {
+      await notifyFinanceTeam(OID, 'NEW_PAYMENT_SUBMITTED', 'New Payment Awaiting Verification', `${item.name} — ₹${item.amount.toLocaleString()} payment needs verification (Booking ${item.bookingNumber}).`);
+    }
+
+    // ── Link every confirmed booking to its Departure (Operations Panel) ────
+    // Reuses the exact production function so Operations sees the same data
+    // Sales just confirmed, with no separate sync step.
+    for (const b of bookingsCreateData) {
+      await linkBookingToDeparture(b.id, OID, b.packageId, b.departureDate, destinationConfigs.find((d) => d.packageId === b.packageId)!.destinationName).catch(console.error);
+    }
+    console.log('  ~ Confirmed bookings linked to Departures');
+
+    // ── Hotels / Vehicles / Trip Captains per Departure ──────────────────────
+    const departures = await prisma.departure.findMany({
+      where: { organizationId: OID, packageId: { in: destinationConfigs.map((d) => d.packageId) } },
+      include: { bookings: { select: { numberOfTravelers: true } }, hotels: true, vehicles: true },
     });
+    const vendorPaymentsCreateData: any[] = [];
+    for (const dep of departures) {
+      const destCfg = destinationConfigs.find((d) => d.packageId === dep.packageId);
+      if (!destCfg) continue;
+      const totalTravelers = dep.bookings.reduce((s, b) => s + b.numberOfTravelers, 0) || 2;
+      const isPastOrActive = dep.departureDate <= now;
+      const confirmedChance = isPastOrActive ? 1 : 0.7;
+
+      if (dep.hotels.length === 0) {
+        const hotelStatus = Math.random() < confirmedChance ? 'CONFIRMED' : 'PENDING';
+        const rooms = Math.ceil(totalTravelers / 2);
+        await prisma.hotel.create({
+          data: {
+            departureId: dep.id, name: pick(destCfg.hotelNames), location: destCfg.destinationName,
+            checkInDate: dep.departureDate, checkOutDate: dep.returnDate ?? addDays(dep.departureDate, destCfg.nights),
+            numberOfRooms: rooms, roomAllocation: hotelStatus === 'CONFIRMED' ? `${Math.ceil(rooms * 0.6)} Double, ${Math.floor(rooms * 0.4)} Triple` : null,
+            vendorName: vendors[destCfg.hotelVendorId].name, vendorContact: vendors[destCfg.hotelVendorId].contact,
+            confirmationNumber: hotelStatus === 'CONFIRMED' ? `${destCfg.label.slice(0, 3).toUpperCase()}-${randomInt(1000, 9999)}` : null,
+            status: hotelStatus,
+          },
+        });
+        const hotelRate = Math.round(destCfg.pricePerPerson * 0.35);
+        const hotelTotal = hotelRate * rooms;
+        const hotelAdvance = hotelStatus === 'CONFIRMED' ? Math.round(hotelTotal * (0.5 + Math.random() * 0.5)) : Math.round(hotelTotal * Math.random() * 0.3);
+        vendorPaymentsCreateData.push({
+          id: randomUUID(), organizationId: OID, vendorId: destCfg.hotelVendorId, departureId: dep.id,
+          serviceType: 'HOTEL', totalAmount: hotelTotal, advancePaid: hotelAdvance, balanceAmount: Math.max(0, hotelTotal - hotelAdvance),
+          dueDate: addDays(dep.departureDate, -3),
+          status: hotelAdvance >= hotelTotal ? 'PAID' : hotelAdvance > 0 ? 'PARTIAL' : (addDays(dep.departureDate, -3) < now ? 'OVERDUE' : 'PENDING'),
+          invoiceUrl: Math.random() < 0.6 ? '/uploads/demo/invoice-placeholder.pdf' : null,
+          notes: `Room booking for ${dep.destination} departure on ${isoDate(dep.departureDate)}`,
+          createdById: pick(financeUsers).id, createdAt: dep.createdAt, updatedAt: dep.createdAt,
+        });
+      }
+      if (dep.vehicles.length === 0) {
+        const vehicleStatus = Math.random() < confirmedChance ? 'CONFIRMED' : 'PENDING';
+        await prisma.vehicle.create({
+          data: {
+            departureId: dep.id, vehicleType: pick(vehicleTypes),
+            vehicleNumber: vehicleStatus === 'CONFIRMED' ? `${['DL', 'HP', 'JK', 'RJ'][randomInt(0, 3)]}${randomInt(1, 14)}-${['A', 'B', 'C'][randomInt(0, 2)]}-${randomInt(1000, 9999)}` : null,
+            driverName: vehicleStatus === 'CONFIRMED' ? pick(driverPool) : null,
+            driverMobile: vehicleStatus === 'CONFIRMED' ? `+91-9${randomInt(100000000, 999999999)}` : null,
+            pickupLocation: destCfg.departureLocation,
+            vendorName: vendors[destCfg.vehicleVendorId].name, vendorContact: vendors[destCfg.vehicleVendorId].contact,
+            status: vehicleStatus,
+          },
+        });
+        const vehicleTotal = Math.round(destCfg.pricePerPerson * 0.25 * Math.max(1, Math.ceil(totalTravelers / 6)));
+        const vehicleAdvance = vehicleStatus === 'CONFIRMED' ? Math.round(vehicleTotal * (0.5 + Math.random() * 0.5)) : Math.round(vehicleTotal * Math.random() * 0.3);
+        vendorPaymentsCreateData.push({
+          id: randomUUID(), organizationId: OID, vendorId: destCfg.vehicleVendorId, departureId: dep.id,
+          serviceType: 'VEHICLE', totalAmount: vehicleTotal, advancePaid: vehicleAdvance, balanceAmount: Math.max(0, vehicleTotal - vehicleAdvance),
+          dueDate: addDays(dep.departureDate, -3),
+          status: vehicleAdvance >= vehicleTotal ? 'PAID' : vehicleAdvance > 0 ? 'PARTIAL' : (addDays(dep.departureDate, -3) < now ? 'OVERDUE' : 'PENDING'),
+          invoiceUrl: Math.random() < 0.6 ? '/uploads/demo/invoice-placeholder.pdf' : null,
+          notes: `Transport for ${dep.destination} departure on ${isoDate(dep.departureDate)}`,
+          createdById: pick(financeUsers).id, createdAt: dep.createdAt, updatedAt: dep.createdAt,
+        });
+      }
+
+      // Trip captain assignment
+      const captainChance = isPastOrActive ? 0.9 : 0.55;
+      if (Math.random() < captainChance) {
+        const captain = pick(tripCaptainPool);
+        await prisma.departure.update({
+          where: { id: dep.id },
+          data: { tripCaptainName: captain.name, tripCaptainPhone: captain.phone, tripCaptainStatus: isPastOrActive || Math.random() < 0.5 ? 'CONFIRMED' : 'ASSIGNED' },
+        });
+        if (Math.random() < 0.3) {
+          vendorPaymentsCreateData.push({
+            id: randomUUID(), organizationId: OID, vendorId: 'vendor-trip-captains-guild', departureId: dep.id,
+            serviceType: 'TRIP_CAPTAIN', totalAmount: 5000, advancePaid: isPastOrActive ? 5000 : 2500, balanceAmount: isPastOrActive ? 0 : 2500,
+            dueDate: addDays(dep.departureDate, -1), status: isPastOrActive ? 'PAID' : 'PARTIAL',
+            notes: `Trip captain fee — ${captain.name} for ${dep.destination}`,
+            createdById: pick(financeUsers).id, createdAt: dep.createdAt, updatedAt: dep.createdAt,
+          });
+        }
+      }
+    }
+    await prisma.vendorPayment.createMany({ data: vendorPaymentsCreateData });
+    console.log(`  ~ ${departures.length} departures enriched with hotels/vehicles/trip captains, ${vendorPaymentsCreateData.length} vendor payments created`);
+
+    // Auto-transition UPCOMING → ACTIVE → COMPLETED based on real dates —
+    // same logic the production cron runs every few minutes.
+    await updateDepartureStatuses();
+
+    // ── Refunds — a handful of sample bookings ────────────────────────────
+    const refundCandidates = shuffle(bookingsCreateData.filter((b) => bookingLedger[b.id].amountPaid > 0)).slice(0, 8);
+    for (const b of refundCandidates) {
+      const ledgerRow = bookingLedger[b.id];
+      const amount = Math.round((ledgerRow.amountPaid * (0.2 + Math.random() * 0.4)) / 100) * 100;
+      const status = pickWeighted<'PAID' | 'APPROVED' | 'REQUESTED' | 'REJECTED'>([['PAID', 40], ['APPROVED', 20], ['REQUESTED', 25], ['REJECTED', 15]]);
+      const requestedAt = new Date(Math.min(ledgerRow.departureDate.getTime() - randomInt(1, 10) * 86400000, now.getTime()));
+      const approver = pick(financeUsers);
+      await prisma.refund.create({
+        data: {
+          organizationId: OID, bookingId: b.id, amount, reason: pick(refundReasons), status,
+          requestedById: ledgerRow.assignedToId,
+          approvedById: status === 'REQUESTED' ? null : approver.id,
+          refundDate: status === 'PAID' ? new Date(Math.min(requestedAt.getTime() + randomInt(1, 5) * 86400000, now.getTime())) : null,
+          transactionId: status === 'PAID' ? `RFND${randomInt(100000, 999999)}` : null,
+          createdAt: requestedAt, updatedAt: requestedAt,
+        },
+      });
+      activityLogData.push({ action: 'Refund Requested', details: `₹${amount.toLocaleString()} refund — ${pick(refundReasons)}`, entityType: 'REFUND', entityId: b.id, userId: ledgerRow.assignedToId, leadId: ledgerRow.leadId, createdAt: requestedAt });
+      if (status === 'PAID') {
+        const newAmountPaid = Math.max(0, ledgerRow.amountPaid - amount);
+        await prisma.booking.update({ where: { id: b.id }, data: { amountPaid: newAmountPaid, balanceAmount: Math.max(0, ledgerRow.finalPrice - newAmountPaid) } });
+        activityLogData.push({ action: 'Refund Paid', details: `₹${amount.toLocaleString()} refunded`, entityType: 'REFUND', entityId: b.id, userId: approver.id, leadId: ledgerRow.leadId, createdAt: requestedAt });
+      }
+    }
+    console.log(`  ~ ${refundCandidates.length} sample refunds created`);
+
+    if (activityLogData.length > 0) {
+      await prisma.activityLog.createMany({ data: activityLogData });
+    }
+    console.log(`  ~ ${activityLogData.length} activity log entries created`);
   }
 
   console.log('\n✅ Database seeded successfully!\n');
   console.log('Login Credentials:');
-  console.log('  Admin:   admin@travelcrm.com  / admin123');
-  console.log('  Amit:    amit@travelcrm.com   / emp123');
-  console.log('  Kaptan:  kaptan@travelcrm.com / emp123');
-  console.log('  Biswas:  biswas@travelcrm.com / emp123');
-  console.log('  Abhay:   abhay@travelcrm.com  / emp123');
-  console.log('  Priya:   priya@travelcrm.com  / emp123');
-  console.log('  Ops:     ops@travelcrm.com    / ops123\n');
+  console.log('  Admin:     admin@travelcrm.com     / admin123');
+  console.log('  Sales:     amit@travelcrm.com       / emp123  (+ kaptan, biswas, abhay, priya @travelcrm.com)');
+  console.log('  Ops:       ops@travelcrm.com        / ops123  (+ ops2@travelcrm.com)');
+  console.log('  Finance:   finance1@travelcrm.com   / finance123  (+ finance2@travelcrm.com)\n');
 }
 
 main()

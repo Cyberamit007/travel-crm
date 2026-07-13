@@ -248,7 +248,7 @@ export default function LeadForm({ defaultValues, onSubmit, isLoading, onCancel 
   const inputClass = (hasError: boolean) =>
     cn('input', hasError && 'border-red-500 focus:ring-red-500 focus:border-red-500');
 
-  const sources = settings?.sources ?? ['MANUAL', 'WHATSAPP', 'INSTAGRAM', 'WEBSITE'];
+  const sources = settings?.sources ?? ['MANUAL', 'WHATSAPP', 'INSTAGRAM', 'WEBSITE', 'META_ADS'];
 
   return (
     <>

@@ -20,7 +20,7 @@ export default function Badge({ status, source, campaignStatus, className, child
   }
 
   if (source) {
-    const cfg = leadSourceConfig[source];
+    const cfg = leadSourceConfig[source] ?? { label: source, color: 'text-slate-700', bg: 'bg-slate-100', icon: '🔗' };
     return (
       <span className={cn('badge', cfg.bg, cfg.color, className)}>
         <span className="mr-1">{cfg.icon}</span>
