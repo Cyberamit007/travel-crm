@@ -589,6 +589,22 @@ export interface Traveler {
   updatedAt: string;
 }
 
+// ─── Traveler Portal (public, token-gated) ───────────────────────────────────
+
+export interface PortalBooking {
+  bookingNumber?: string;
+  customerName: string;
+  destination?: string;
+  package?: { name: string; code: string; nights: number; days: number };
+  departureDate?: string;
+  returnDate?: string;
+  numberOfTravelers: number;
+  finalPrice: number;
+  amountPaid: number;
+  balanceAmount: number;
+  travelers: Traveler[];
+}
+
 export interface Hotel {
   id: string;
   departureId: string;

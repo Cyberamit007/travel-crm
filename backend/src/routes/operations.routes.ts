@@ -4,6 +4,7 @@ import { upload } from '../middleware/upload.js';
 import {
   getDashboardStats, listDepartures, getDepartureDetail, updateDeparture,
   createTraveler, updateTraveler, deleteTraveler,
+  approveTraveler, rejectTraveler, requestTravelerCorrection, regenerateTravelerPortalLink,
 } from '../controllers/departure.controller.js';
 import { createHotel, updateHotel, deleteHotel } from '../controllers/hotel.controller.js';
 import { createVehicle, updateVehicle, deleteVehicle } from '../controllers/vehicle.controller.js';
@@ -27,6 +28,12 @@ router.put('/departures/:id', updateDeparture);
 router.post('/bookings/:bookingId/travelers', createTraveler);
 router.put('/travelers/:id', updateTraveler);
 router.delete('/travelers/:id', deleteTraveler);
+
+// Traveler Portal — Ops review actions + link regeneration
+router.put('/travelers/:id/approve', approveTraveler);
+router.put('/travelers/:id/reject', rejectTraveler);
+router.put('/travelers/:id/request-correction', requestTravelerCorrection);
+router.post('/bookings/:bookingId/travelers/portal-link/regenerate', regenerateTravelerPortalLink);
 
 // Hotels
 router.post('/departures/:departureId/hotels', createHotel);

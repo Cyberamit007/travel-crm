@@ -6,6 +6,7 @@ import OperationsLayout from './components/layout/OperationsLayout';
 import FinanceLayout from './components/layout/FinanceLayout';
 import LoginPage from './pages/LoginPage';
 import WelcomePage from './pages/WelcomePage';
+import TravelerPortalPage from './pages/portal/TravelerPortalPage';
 import AdminDashboard from './components/dashboard/AdminDashboard';
 import EmployeeDashboard from './components/dashboard/EmployeeDashboard';
 import AdminLeadsPage from './pages/admin/LeadsPage';
@@ -58,6 +59,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/Website" element={<WelcomePage />} />
+      <Route path="/traveller/:token" element={<TravelerPortalPage />} />
       <Route path="/" element={<RoleRedirect />} />
 
       <Route

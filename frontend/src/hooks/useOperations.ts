@@ -107,6 +107,54 @@ export function useDeleteTraveler(departureId: string) {
   });
 }
 
+// ─── Traveler Portal review actions ─────────────────────────────────────────────
+
+export function useApproveTraveler(departureId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => (await api.put(`/operations/travelers/${id}/approve`)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operations', 'departure', departureId] });
+      toast.success('Traveler verified');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to verify traveler'),
+  });
+}
+
+export function useRejectTraveler(departureId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) =>
+      (await api.put(`/operations/travelers/${id}/reject`, { reason })).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operations', 'departure', departureId] });
+      toast.success('Traveler rejected');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to reject traveler'),
+  });
+}
+
+export function useRequestTravelerCorrection(departureId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, note }: { id: string; note: string }) =>
+      (await api.put(`/operations/travelers/${id}/request-correction`, { note })).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operations', 'departure', departureId] });
+      toast.success('Correction requested');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to request correction'),
+  });
+}
+
+export function useRegeneratePortalLink() {
+  return useMutation({
+    mutationFn: async (bookingId: string) =>
+      (await api.post(`/operations/bookings/${bookingId}/travelers/portal-link/regenerate`)).data.data as { travelerPortalToken: string },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to generate portal link'),
+  });
+}
+
 // ─── Hotels ──────────────────────────────────────────────────────────────────
 
 export function useCreateHotel(departureId: string) {

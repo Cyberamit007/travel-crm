@@ -2,9 +2,13 @@ import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   ChevronDown, ChevronUp, Phone, Plus, Pencil, Trash2, IndianRupee,
-  AlertCircle, CheckCircle, Search,
+  AlertCircle, CheckCircle, Search, Check, X, MessageSquareWarning, Link2, Copy,
 } from 'lucide-react';
-import { useCreateTraveler, useUpdateTraveler, useDeleteTraveler } from '../../hooks/useOperations';
+import toast from 'react-hot-toast';
+import {
+  useCreateTraveler, useUpdateTraveler, useDeleteTraveler,
+  useApproveTraveler, useRejectTraveler, useRequestTravelerCorrection, useRegeneratePortalLink,
+} from '../../hooks/useOperations';
 import { Departure, DepartureBooking, Traveler } from '../../types/index';
 import Modal from '../ui/Modal';
 import { formatCurrency, cn } from '../../utils/helpers';
@@ -217,10 +221,18 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
   const [addOpen, setAddOpen] = useState(false);
   const [editTraveler, setEditTraveler] = useState<Traveler | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<Traveler | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [correctionTarget, setCorrectionTarget] = useState<Traveler | null>(null);
+  const [correctionNote, setCorrectionNote] = useState('');
 
   const createTraveler = useCreateTraveler(departureId);
   const updateTraveler = useUpdateTraveler(departureId);
   const deleteTraveler = useDeleteTraveler(departureId);
+  const approveTraveler = useApproveTraveler(departureId);
+  const rejectTraveler = useRejectTraveler(departureId);
+  const requestCorrection = useRequestTravelerCorrection(departureId);
+  const regenerateLink = useRegeneratePortalLink();
 
   const handleAdd = (data: TravelerForm) => {
     createTraveler.mutate({ bookingId: booking.id, ...data, age: data.age ? Number(data.age) : undefined } as any, {
@@ -236,6 +248,14 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
   const handleDelete = () => {
     if (!deleteId) return;
     deleteTraveler.mutate(deleteId, { onSuccess: () => setDeleteId(null) });
+  };
+  const handleCopyPortalLink = () => {
+    regenerateLink.mutate(booking.id, {
+      onSuccess: (data) => {
+        navigator.clipboard.writeText(`${window.location.origin}/traveller/${data.travelerPortalToken}`);
+        toast.success('Portal link copied — share it with the customer');
+      },
+    });
   };
 
   return (
@@ -254,6 +274,15 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
           <span className={cn('badge', BOOKING_STATUS_BADGE[booking.status])}>{booking.status}</span>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); handleCopyPortalLink(); }}
+            disabled={regenerateLink.isPending}
+            title="Copy Traveler Portal link to share with the customer"
+            className="flex items-center gap-1 text-[10px] font-medium text-primary-600 hover:text-primary-700 bg-primary-50 px-2 py-1 rounded-lg"
+          >
+            {regenerateLink.isPending ? <Copy className="w-3 h-3 animate-pulse" /> : <Link2 className="w-3 h-3" />}
+            Portal Link
+          </button>
           <div className="text-right">
             <p className="text-xs font-semibold text-slate-700 flex items-center gap-0.5 justify-end"><IndianRupee className="w-3 h-3" />{formatCurrency(booking.amountPaid)} paid</p>
             {booking.balanceAmount > 0 ? (
@@ -315,11 +344,40 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
                       <td className="px-2 py-2 text-slate-500">{t.roomSharing || booking.roomSharing}</td>
                       <td className="px-2 py-2 text-slate-500">{t.foodPreference || booking.foodPreference}</td>
                       <td className="px-2 py-2">
-                        <span className={cn('badge text-[10px]', VERIFICATION_STATUS_BADGE[t.verificationStatus])}>
+                        <span
+                          className={cn('badge text-[10px]', VERIFICATION_STATUS_BADGE[t.verificationStatus])}
+                          title={t.verificationNote || undefined}
+                        >
                           {VERIFICATION_STATUS_LABEL[t.verificationStatus] ?? t.verificationStatus}
                         </span>
                       </td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">
+                        {t.verificationStatus !== 'VERIFIED' && (
+                          <>
+                            <button
+                              onClick={() => approveTraveler.mutate(t.id)}
+                              disabled={approveTraveler.isPending}
+                              title="Verify traveler"
+                              className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => setRejectTarget(t)}
+                              title="Reject"
+                              className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => setCorrectionTarget(t)}
+                              title="Request correction"
+                              className="p-1 rounded hover:bg-orange-50 text-slate-400 hover:text-orange-500"
+                            >
+                              <MessageSquareWarning className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
                         <button onClick={() => setEditTraveler(t)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-primary-600">
                           <Pencil className="w-3 h-3" />
                         </button>
@@ -351,6 +409,38 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
         </>}
       >
         <p className="text-sm text-slate-600">Remove this traveler from the passenger list?</p>
+      </Modal>
+
+      <Modal
+        open={!!rejectTarget} onClose={() => { setRejectTarget(null); setRejectReason(''); }} title="Reject Traveler Details" size="sm"
+        footer={<>
+          <button onClick={() => { setRejectTarget(null); setRejectReason(''); }} className="btn-secondary">Cancel</button>
+          <button
+            onClick={() => rejectTarget && rejectTraveler.mutate({ id: rejectTarget.id, reason: rejectReason }, { onSuccess: () => { setRejectTarget(null); setRejectReason(''); } })}
+            disabled={rejectTraveler.isPending || !rejectReason.trim()} className="btn-danger"
+          >
+            {rejectTraveler.isPending ? 'Rejecting…' : 'Reject'}
+          </button>
+        </>}
+      >
+        <label className="label">Rejection Reason *</label>
+        <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={3} className="input" placeholder="Explain why these details are being rejected..." />
+      </Modal>
+
+      <Modal
+        open={!!correctionTarget} onClose={() => { setCorrectionTarget(null); setCorrectionNote(''); }} title="Request Correction" size="sm"
+        footer={<>
+          <button onClick={() => { setCorrectionTarget(null); setCorrectionNote(''); }} className="btn-secondary">Cancel</button>
+          <button
+            onClick={() => correctionTarget && requestCorrection.mutate({ id: correctionTarget.id, note: correctionNote }, { onSuccess: () => { setCorrectionTarget(null); setCorrectionNote(''); } })}
+            disabled={requestCorrection.isPending || !correctionNote.trim()} className="btn-primary"
+          >
+            {requestCorrection.isPending ? 'Sending…' : 'Send to Customer'}
+          </button>
+        </>}
+      >
+        <label className="label">What needs correcting? *</label>
+        <textarea value={correctionNote} onChange={(e) => setCorrectionNote(e.target.value)} rows={3} className="input" placeholder="e.g. Government ID number doesn't match the document..." />
       </Modal>
     </div>
   );

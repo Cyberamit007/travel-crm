@@ -70,6 +70,14 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeade
 });
 app.use('/api/auth/login', authLimiter);
 
+// Traveler Portal — the app's only unauthenticated data-bearing surface, so
+// it gets a tighter limit than the general API even though the token itself
+// is a 192-bit random value (effectively unguessable on its own).
+const portalLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+  message: { success: false, error: 'Too many requests — please try again in a few minutes' },
+});
+app.use('/api/portal', portalLimiter);
+
 app.use('/api', routes);
 app.use('/api/uploads', express.static(UPLOAD_DIR_PATH));
 

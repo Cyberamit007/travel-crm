@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { randomBytes, createHash } from 'node:crypto';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
-import { emitOperationsUpdated, notifyOperationsTeam } from '../services/notification.service.js';
+import { emitOperationsUpdated, notifyOperationsTeam, createNotification } from '../services/notification.service.js';
 import { generateOpsTasksFromItinerary } from './departureTask.controller.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
@@ -470,6 +470,141 @@ export const deleteTraveler = async (req: AuthenticatedRequest, res: Response): 
     res.json({ success: true, data: { id } });
   } catch (e) {
     console.error('[operations] deleteTraveler error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// ─── Traveler Portal review actions ──────────────────────────────────────────
+// Mirrors payment.controller.ts's approve/reject/requestCorrection shape exactly.
+// Operations only ever reviews what the customer submitted via the portal —
+// Sales never manually enters traveler details after booking confirmation.
+
+async function findTravelerOrFail(req: AuthenticatedRequest, res: Response, id: string) {
+  const traveler = await prisma.traveler.findUnique({ where: { id }, include: { booking: { include: { lead: true } } } });
+  if (!traveler) { res.status(404).json({ success: false, error: 'Traveler not found' }); return null; }
+  if (orgId(req) && traveler.booking.organizationId !== orgId(req)) { res.status(404).json({ success: false, error: 'Traveler not found' }); return null; }
+  return traveler;
+}
+
+export const approveTraveler = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const traveler = await findTravelerOrFail(req, res, id);
+    if (!traveler) return;
+    if (traveler.verificationStatus === 'VERIFIED') { res.status(400).json({ success: false, error: 'Traveler already verified' }); return; }
+
+    const updated = await prisma.traveler.update({
+      where: { id },
+      data: { verificationStatus: 'VERIFIED', verifiedById: req.user!.id, verifiedAt: new Date(), verificationNote: null },
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'Traveler Verified',
+        details: `${traveler.name} verified by ${req.user?.name}`,
+        entityType: 'TRAVELER', entityId: id, userId: req.user!.id, leadId: traveler.booking.leadId,
+      },
+    });
+    if (traveler.booking.departureId) emitOperationsUpdated(traveler.booking.departureId);
+
+    res.json({ success: true, data: updated });
+  } catch (e) {
+    console.error('[operations] approveTraveler error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const rejectTraveler = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    if (!reason?.trim()) { res.status(400).json({ success: false, error: 'Rejection reason is required' }); return; }
+
+    const traveler = await findTravelerOrFail(req, res, id);
+    if (!traveler) return;
+    if (traveler.verificationStatus === 'VERIFIED') { res.status(400).json({ success: false, error: 'Cannot reject an already-verified traveler' }); return; }
+
+    const updated = await prisma.traveler.update({
+      where: { id },
+      data: { verificationStatus: 'REJECTED', verificationNote: reason.trim() },
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'Traveler Rejected',
+        details: `${traveler.name} rejected by ${req.user?.name}: ${reason.trim()}`,
+        entityType: 'TRAVELER', entityId: id, userId: req.user!.id, leadId: traveler.booking.leadId,
+      },
+    });
+    if (traveler.booking.lead.assignedToId) {
+      await createNotification(traveler.booking.lead.assignedToId, 'TRAVELER_REJECTED', 'Traveler Details Rejected',
+        `${traveler.name}'s submitted details for ${traveler.booking.lead.name} were rejected: ${reason.trim()}`, traveler.booking.leadId);
+    }
+    if (traveler.booking.departureId) emitOperationsUpdated(traveler.booking.departureId);
+
+    res.json({ success: true, data: updated });
+  } catch (e) {
+    console.error('[operations] rejectTraveler error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const requestTravelerCorrection = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { note } = req.body;
+    if (!note?.trim()) { res.status(400).json({ success: false, error: 'A note explaining the correction needed is required' }); return; }
+
+    const traveler = await findTravelerOrFail(req, res, id);
+    if (!traveler) return;
+    if (traveler.verificationStatus === 'VERIFIED') { res.status(400).json({ success: false, error: 'Cannot request correction on an already-verified traveler' }); return; }
+
+    const updated = await prisma.traveler.update({
+      where: { id },
+      data: { verificationStatus: 'CORRECTION_REQUESTED', verificationNote: note.trim() },
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'Traveler Correction Requested',
+        details: `Correction requested for ${traveler.name} by ${req.user?.name}: ${note.trim()}`,
+        entityType: 'TRAVELER', entityId: id, userId: req.user!.id, leadId: traveler.booking.leadId,
+      },
+    });
+    if (traveler.booking.lead.assignedToId) {
+      await createNotification(traveler.booking.lead.assignedToId, 'TRAVELER_CORRECTION_REQUESTED', 'Traveler Correction Requested',
+        `Operations requested a correction on ${traveler.name}'s details for ${traveler.booking.lead.name}: ${note.trim()}`, traveler.booking.leadId);
+    }
+    if (traveler.booking.departureId) emitOperationsUpdated(traveler.booking.departureId);
+
+    res.json({ success: true, data: updated });
+  } catch (e) {
+    console.error('[operations] requestTravelerCorrection error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// Ops needs a way to re-view/resend the link if it wasn't copied the first
+// time, or to invalidate a compromised one — always issues a fresh token.
+export const regenerateTravelerPortalLink = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+    const booking = await prisma.booking.findFirst({ where: { id: bookingId, ...orgFilter(req) } });
+    if (!booking) { res.status(404).json({ success: false, error: 'Booking not found' }); return; }
+
+    const travelerPortalToken = await issueTravelerPortalToken(booking.id, booking.departureDate);
+
+    await prisma.activityLog.create({
+      data: {
+        action: 'Traveler Portal Link Regenerated',
+        details: `Portal link regenerated by ${req.user?.name}`,
+        entityType: 'TRAVELER_PORTAL', entityId: booking.id, userId: req.user!.id, leadId: booking.leadId,
+      },
+    });
+
+    res.json({ success: true, data: { travelerPortalToken } });
+  } catch (e) {
+    console.error('[operations] regenerateTravelerPortalLink error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
