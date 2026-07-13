@@ -550,13 +550,20 @@ export type VendorType = 'HOTEL' | 'VEHICLE' | 'LOCAL_GUIDE' | 'LOCAL_VENDOR' | 
 export type OpsDocumentType = 'HOTEL_VOUCHER' | 'VEHICLE_VOUCHER' | 'CUSTOMER_LIST' | 'ROOMING_LIST' | 'TRIP_CAPTAIN_SHEET' | 'EMERGENCY_CONTACT_LIST' | 'VENDOR_BILL' | 'OTHER';
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
 
+export type TravelerVerificationStatus = 'PENDING' | 'SUBMITTED' | 'VERIFIED' | 'REJECTED' | 'CORRECTION_REQUESTED';
+export type GovIdType = 'AADHAR' | 'PASSPORT' | 'VOTER_ID' | 'DRIVING_LICENSE';
+
 export interface Traveler {
   id: string;
   bookingId: string;
   name: string;
   mobile?: string;
+  email?: string;
   gender?: Gender;
+  dob?: string;
   age?: number;
+  bloodGroup?: string;
+  nationality?: string;
   seatNumber?: string;
   pickupPoint?: string;
   emergencyContactName?: string;
@@ -567,6 +574,17 @@ export interface Traveler {
   isSeniorCitizen: boolean;
   needsExtraMattress: boolean;
   specialNotes?: string;
+  govIdType?: GovIdType;
+  govIdNumber?: string;
+  govIdDocumentUrl?: string;
+  medicalConditions?: string;
+  arrivalDetails?: string;
+  departureDetails?: string;
+  verificationStatus: TravelerVerificationStatus;
+  verificationNote?: string;
+  submittedAt?: string;
+  verifiedAt?: string;
+  verifiedById?: string;
   createdAt: string;
   updatedAt: string;
 }

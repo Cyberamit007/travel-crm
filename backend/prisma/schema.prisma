@@ -84,6 +84,8 @@ model User {
   requestedRefunds     Refund[]         @relation("RefundRequester")
   approvedRefunds      Refund[]         @relation("RefundApprover")
   createdVendorPayments VendorPayment[] @relation("VendorPaymentCreator")
+  verifiedTravelers     Traveler[]      @relation("TravelerVerifier")
+  uploadedVendorDocuments VendorDocument[] @relation("VendorDocumentUploader")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -388,7 +390,7 @@ model ActivityLog {
   id         String  @id @default(uuid())
   action     String
   details    String?
-  entityType String? // LEAD | CAMPAIGN | USER | LEAVE | DEPARTURE | HOTEL | VEHICLE | VENDOR | TRAVELER | PAYMENT | REFUND | VENDOR_PAYMENT
+  entityType String? // LEAD | CAMPAIGN | USER | LEAVE | DEPARTURE | HOTEL | VEHICLE | VENDOR | TRAVELER | PAYMENT | REFUND | VENDOR_PAYMENT | TRAVELER_PORTAL | VENDOR_DOCUMENT
   entityId   String?
 
   user   User   @relation(fields: [userId], references: [id])
@@ -599,6 +601,16 @@ model Booking {
   departureId String?
   departure   Departure? @relation(fields: [departureId], references: [id], onDelete: SetNull)
 
+  // Traveler Portal — a per-booking secure link letting the customer submit
+  // their own traveler details. Raw token is only ever returned once at
+  // generation time; only its hash is stored (same idiom as RefreshToken).
+  travelerPortalTokenHash      String?   @unique
+  travelerPortalTokenExpiresAt DateTime?
+
+  // Customer Journey Tracker terminal stages with no other backing field.
+  reviewSubmittedAt   DateTime?
+  referralReceivedAt  DateTime?
+
   status    String   @default("ACTIVE")  // ACTIVE | CANCELLED | COMPLETED
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -626,8 +638,12 @@ model Traveler {
 
   name                  String
   mobile                String?
+  email                 String?
   gender                String?   // MALE | FEMALE | OTHER
+  dob                   DateTime?
   age                   Int?
+  bloodGroup            String?
+  nationality           String?
   seatNumber            String?
   pickupPoint           String?
   emergencyContactName  String?
@@ -639,10 +655,27 @@ model Traveler {
   needsExtraMattress    Boolean  @default(false)
   specialNotes          String?
 
+  // Government ID — collected by the traveler themselves via the Traveler Portal
+  govIdType             String?   // AADHAR | PASSPORT | VOTER_ID | DRIVING_LICENSE
+  govIdNumber           String?
+  govIdDocumentUrl      String?
+  medicalConditions     String?
+  arrivalDetails        String?   // free-text: flight/train number, arrival time
+  departureDetails      String?   // free-text: return flight/train number, departure time
+
+  // Traveler Portal verification workflow — Ops reviews what the customer submits.
+  verificationStatus    String    @default("PENDING") // PENDING | SUBMITTED | VERIFIED | REJECTED | CORRECTION_REQUESTED
+  verificationNote      String?
+  submittedAt           DateTime?
+  verifiedAt            DateTime?
+  verifiedById          String?
+  verifiedBy            User?     @relation("TravelerVerifier", fields: [verifiedById], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([bookingId])
+  @@index([verificationStatus])
   @@map("travelers")
 }
 
@@ -822,6 +855,11 @@ model Departure {
   tripCaptainPhone  String?
   tripCaptainStatus String  @default("UNASSIGNED") // UNASSIGNED | ASSIGNED | CONFIRMED
 
+  // Checklist Engine — only holds the handful of items with no natural backing
+  // field (welcome kit, passenger list printed, emergency contacts, medical kit).
+  // Every other checklist item is computed live from existing fields.
+  manualChecklist Json @default("{}")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -851,8 +889,10 @@ model Hotel {
   checkOutDate       DateTime?
   numberOfRooms      Int?
   roomAllocation     String?                      // free-text summary, e.g. "5 Double, 2 Triple"
-  vendorName         String?
+  vendorName         String?                      // legacy free-text — kept for backward compatibility
   vendorContact      String?
+  vendorId           String?                      // optional FK to the Vendor master list (Vendor Workspace)
+  vendor             Vendor? @relation("VendorHotels", fields: [vendorId], references: [id], onDelete: SetNull)
   confirmationNumber String?
   status             String  @default("PENDING")  // PENDING | CONFIRMED | CANCELLED
   voucherUrl         String?
@@ -861,6 +901,7 @@ model Hotel {
   updatedAt DateTime @updatedAt
 
   @@index([departureId])
+  @@index([vendorId])
   @@map("operations_hotels")
 }
 
@@ -875,14 +916,17 @@ model Vehicle {
   driverMobile   String?
   pickupTime     DateTime?
   pickupLocation String?
-  vendorName     String?
+  vendorName     String?                          // legacy free-text — kept for backward compatibility
   vendorContact  String?
+  vendorId       String?                          // optional FK to the Vendor master list (Vendor Workspace)
+  vendor         Vendor? @relation("VendorVehicles", fields: [vendorId], references: [id], onDelete: SetNull)
   status         String  @default("PENDING")      // PENDING | CONFIRMED | CANCELLED
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([departureId])
+  @@index([vendorId])
   @@map("operations_vehicles")
 }
 
@@ -896,15 +940,42 @@ model Vendor {
   contact String?
   notes   String?
   status  String  @default("ACTIVE") // ACTIVE | INACTIVE
+  rating      Float?
+  ratingCount Int    @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  payments VendorPayment[]
+  payments  VendorPayment[]
+  hotels    Hotel[]         @relation("VendorHotels")
+  vehicles  Vehicle[]       @relation("VendorVehicles")
+  documents VendorDocument[]
 
   @@index([organizationId])
   @@index([type])
   @@map("operations_vendors")
+}
+
+// Vendor-level documents (contracts, licenses, agreements) — distinct from
+// OperationsDocument, which is scoped to a Departure, not a Vendor.
+model VendorDocument {
+  id       String @id @default(uuid())
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  name     String
+  type     String  @default("OTHER") // CONTRACT | LICENSE | AGREEMENT | OTHER
+  fileUrl  String
+  fileSize Int
+  mimeType String
+
+  uploadedById String
+  uploadedBy   User   @relation("VendorDocumentUploader", fields: [uploadedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([vendorId])
+  @@map("vendor_documents")
 }
 
 model OperationsDocument {

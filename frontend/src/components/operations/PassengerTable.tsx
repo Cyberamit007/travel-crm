@@ -15,11 +15,30 @@ const BOOKING_STATUS_BADGE: Record<string, string> = {
   COMPLETED: 'bg-slate-100 text-slate-600',
 };
 
+const VERIFICATION_STATUS_BADGE: Record<string, string> = {
+  PENDING: 'bg-slate-100 text-slate-500',
+  SUBMITTED: 'bg-amber-50 text-amber-700',
+  VERIFIED: 'bg-emerald-50 text-emerald-700',
+  REJECTED: 'bg-red-50 text-red-600',
+  CORRECTION_REQUESTED: 'bg-orange-50 text-orange-700',
+};
+const VERIFICATION_STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Not Submitted',
+  SUBMITTED: 'Pending Review',
+  VERIFIED: 'Verified',
+  REJECTED: 'Rejected',
+  CORRECTION_REQUESTED: 'Correction Requested',
+};
+
 interface TravelerForm {
   name: string;
   mobile?: string;
+  email?: string;
   gender?: string;
+  dob?: string;
   age?: number;
+  bloodGroup?: string;
+  nationality?: string;
   seatNumber?: string;
   pickupPoint?: string;
   emergencyContactName?: string;
@@ -30,6 +49,9 @@ interface TravelerForm {
   isSeniorCitizen?: boolean;
   needsExtraMattress?: boolean;
   specialNotes?: string;
+  govIdType?: string;
+  govIdNumber?: string;
+  medicalConditions?: string;
 }
 
 function TravelerFormModal({
@@ -42,8 +64,12 @@ function TravelerFormModal({
     defaultValues: {
       name: defaultValues?.name ?? '',
       mobile: defaultValues?.mobile ?? '',
+      email: defaultValues?.email ?? '',
       gender: defaultValues?.gender ?? '',
+      dob: defaultValues?.dob ? defaultValues.dob.slice(0, 10) : '',
       age: defaultValues?.age,
+      bloodGroup: defaultValues?.bloodGroup ?? '',
+      nationality: defaultValues?.nationality ?? '',
       seatNumber: defaultValues?.seatNumber ?? '',
       pickupPoint: defaultValues?.pickupPoint ?? '',
       emergencyContactName: defaultValues?.emergencyContactName ?? '',
@@ -54,6 +80,9 @@ function TravelerFormModal({
       isSeniorCitizen: defaultValues?.isSeniorCitizen ?? false,
       needsExtraMattress: defaultValues?.needsExtraMattress ?? false,
       specialNotes: defaultValues?.specialNotes ?? '',
+      govIdType: defaultValues?.govIdType ?? '',
+      govIdNumber: defaultValues?.govIdNumber ?? '',
+      medicalConditions: defaultValues?.medicalConditions ?? '',
     },
   });
 
@@ -79,6 +108,10 @@ function TravelerFormModal({
           <input {...register('mobile')} className="input" placeholder="+91-" />
         </div>
         <div>
+          <label className="label">Email</label>
+          <input type="email" {...register('email')} className="input" placeholder="traveler@email.com" />
+        </div>
+        <div>
           <label className="label">Gender</label>
           <select {...register('gender')} className="input">
             <option value="">—</option>
@@ -88,8 +121,37 @@ function TravelerFormModal({
           </select>
         </div>
         <div>
+          <label className="label">Date of Birth</label>
+          <input type="date" {...register('dob')} className="input" />
+        </div>
+        <div>
           <label className="label">Age</label>
           <input type="number" {...register('age')} className="input" placeholder="Age" />
+        </div>
+        <div>
+          <label className="label">Blood Group</label>
+          <select {...register('bloodGroup')} className="input">
+            <option value="">—</option>
+            {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => <option key={bg} value={bg}>{bg}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Nationality</label>
+          <input {...register('nationality')} className="input" placeholder="e.g. Indian" />
+        </div>
+        <div>
+          <label className="label">Government ID Type</label>
+          <select {...register('govIdType')} className="input">
+            <option value="">—</option>
+            <option value="AADHAR">Aadhar</option>
+            <option value="PASSPORT">Passport</option>
+            <option value="VOTER_ID">Voter ID</option>
+            <option value="DRIVING_LICENSE">Driving License</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">Government ID Number</label>
+          <input {...register('govIdNumber')} className="input" placeholder="ID number" />
         </div>
         <div>
           <label className="label">Seat Number</label>
@@ -136,6 +198,10 @@ function TravelerFormModal({
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" {...register('needsExtraMattress')} className="rounded border-slate-300" /> Needs Extra Mattress
           </label>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="label">Medical Conditions</label>
+          <textarea {...register('medicalConditions')} className="input" rows={2} placeholder="Allergies, medication, conditions to be aware of..." />
         </div>
         <div className="sm:col-span-2">
           <label className="label">Special Notes</label>
@@ -225,6 +291,7 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
                     <th className="text-left px-2 py-1.5">Emergency Contact</th>
                     <th className="text-left px-2 py-1.5">Room</th>
                     <th className="text-left px-2 py-1.5">Food</th>
+                    <th className="text-left px-2 py-1.5">Verification</th>
                     <th className="px-2 py-1.5" />
                   </tr>
                 </thead>
@@ -247,6 +314,11 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
                       <td className="px-2 py-2 text-slate-500">{t.emergencyContactName ? `${t.emergencyContactName} (${t.emergencyContactPhone || '—'})` : '—'}</td>
                       <td className="px-2 py-2 text-slate-500">{t.roomSharing || booking.roomSharing}</td>
                       <td className="px-2 py-2 text-slate-500">{t.foodPreference || booking.foodPreference}</td>
+                      <td className="px-2 py-2">
+                        <span className={cn('badge text-[10px]', VERIFICATION_STATUS_BADGE[t.verificationStatus])}>
+                          {VERIFICATION_STATUS_LABEL[t.verificationStatus] ?? t.verificationStatus}
+                        </span>
+                      </td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">
                         <button onClick={() => setEditTraveler(t)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-primary-600">
                           <Pencil className="w-3 h-3" />

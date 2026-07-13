@@ -2,7 +2,7 @@ import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { generateTasksFromItinerary } from './bookingTask.controller.js';
-import { linkBookingToDeparture } from './departure.controller.js';
+import { linkBookingToDeparture, createPlaceholderTravelers, issueTravelerPortalToken } from './departure.controller.js';
 import { notifyFinanceTeam } from '../services/notification.service.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
@@ -177,6 +177,15 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
       await linkBookingToDeparture(booking.id, orgId(req), packageId || null, depDate, destination).catch(console.error);
     }
 
+    // Materialize the headcount into real per-traveler placeholder records,
+    // and issue a Traveler Portal link (only if this booking doesn't already
+    // have one) so the customer can submit their own details.
+    await createPlaceholderTravelers(booking.id, Number(numberOfTravelers)).catch(console.error);
+    let travelerPortalToken: string | null = null;
+    if (!booking.travelerPortalTokenHash) {
+      travelerPortalToken = await issueTravelerPortalToken(booking.id, depDate).catch(() => null);
+    }
+
     // Return the full booking with relations
     const fullBooking = await prisma.booking.findUnique({
       where: { id: booking.id },
@@ -187,7 +196,9 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
       },
     });
 
-    res.status(201).json({ success: true, data: fullBooking });
+    // travelerPortalToken is only ever present in this one response — only its
+    // hash is persisted, so this is Operations' one chance to copy the link.
+    res.status(201).json({ success: true, data: { ...fullBooking, travelerPortalToken } });
   } catch (e) {
     console.error('[bookings] createBooking error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -268,7 +279,15 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
       await linkBookingToDeparture(booking.id, orgId(req), booking.packageId || null, booking.departureDate, destination).catch(console.error);
     }
 
-    res.json({ success: true, data: booking });
+    // Top up traveler placeholders if the headcount grew, and back-fill a
+    // Traveler Portal link for any booking confirmed before this feature shipped.
+    await createPlaceholderTravelers(booking.id, booking.numberOfTravelers).catch(console.error);
+    let travelerPortalToken: string | null = null;
+    if (!booking.travelerPortalTokenHash) {
+      travelerPortalToken = await issueTravelerPortalToken(booking.id, booking.departureDate).catch(() => null);
+    }
+
+    res.json({ success: true, data: { ...booking, travelerPortalToken } });
   } catch {
     res.status(500).json({ success: false, error: 'Internal server error' });
   }

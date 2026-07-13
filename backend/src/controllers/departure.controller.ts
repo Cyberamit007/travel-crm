@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { randomBytes, createHash } from 'node:crypto';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { emitOperationsUpdated, notifyOperationsTeam } from '../services/notification.service.js';
@@ -6,6 +7,55 @@ import { generateOpsTasksFromItinerary } from './departureTask.controller.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 const orgFilter = (req: AuthenticatedRequest) => (orgId(req) ? { organizationId: orgId(req) } : {});
+
+function ageFromDob(dob: Date): number {
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+// ─── Traveler placeholder records ────────────────────────────────────────────
+// A confirmed booking only stores a headcount — this materializes it into real
+// per-traveler rows ("Traveler 1"..."Traveler N") for the customer to fill in
+// via the Traveler Portal, or Operations to edit directly. Idempotent: only
+// tops up the count, never duplicates travelers that already exist (so it's
+// safe to call again from updateBooking if numberOfTravelers changes).
+export async function createPlaceholderTravelers(bookingId: string, numberOfTravelers: number): Promise<void> {
+  const existingCount = await prisma.traveler.count({ where: { bookingId } });
+  if (existingCount >= numberOfTravelers) return;
+
+  const toCreate = numberOfTravelers - existingCount;
+  await prisma.traveler.createMany({
+    data: Array.from({ length: toCreate }, (_, i) => ({
+      bookingId,
+      name: `Traveler ${existingCount + i + 1}`,
+      verificationStatus: 'PENDING',
+    })),
+  });
+}
+
+// ─── Traveler Portal token ────────────────────────────────────────────────────
+// Generates a random link token, stores only its SHA-256 hash (never the raw
+// value — same idiom as RefreshToken), and returns the raw token once so the
+// caller can hand it to Operations to copy/share. Idempotent per-call: always
+// issues a fresh token (invalidating any previous one), since re-confirming a
+// booking is a reasonable moment to also refresh an expired link.
+export async function issueTravelerPortalToken(bookingId: string, departureDate: Date | null): Promise<string> {
+  const rawToken = randomBytes(24).toString('base64url');
+  const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = departureDate
+    ? new Date(departureDate.getTime() + 7 * 86400000)
+    : new Date(Date.now() + 180 * 86400000);
+
+  await prisma.booking.update({
+    where: { id: bookingId },
+    data: { travelerPortalTokenHash: tokenHash, travelerPortalTokenExpiresAt: expiresAt },
+  });
+
+  return rawToken;
+}
 
 // ─── Auto-link a confirmed booking to its Departure ──────────────────────────
 // Called from booking.controller.ts whenever Sales confirms a booking. Finds an
@@ -299,19 +349,27 @@ export const createTraveler = async (req: AuthenticatedRequest, res: Response): 
     if (!booking) { res.status(404).json({ success: false, error: 'Booking not found' }); return; }
 
     const {
-      name, mobile, gender, age, seatNumber, pickupPoint,
+      name, mobile, email, gender, dob, age, bloodGroup, nationality, seatNumber, pickupPoint,
       emergencyContactName, emergencyContactPhone, roomSharing, foodPreference,
       isChild, isSeniorCitizen, needsExtraMattress, specialNotes,
+      govIdType, govIdNumber, govIdDocumentUrl, medicalConditions, arrivalDetails, departureDetails,
     } = req.body;
     if (!name?.trim()) { res.status(400).json({ success: false, error: 'Traveler name is required' }); return; }
+
+    const dobDate = dob ? new Date(dob) : null;
+    const resolvedAge = age !== undefined && age !== null && age !== '' ? Number(age) : (dobDate ? ageFromDob(dobDate) : null);
 
     const traveler = await prisma.traveler.create({
       data: {
         bookingId,
         name: name.trim(),
         mobile: mobile?.trim() || null,
+        email: email?.trim() || null,
         gender: gender || null,
-        age: age !== undefined && age !== null && age !== '' ? Number(age) : null,
+        dob: dobDate,
+        age: resolvedAge,
+        bloodGroup: bloodGroup?.trim() || null,
+        nationality: nationality?.trim() || null,
         seatNumber: seatNumber?.trim() || null,
         pickupPoint: pickupPoint?.trim() || null,
         emergencyContactName: emergencyContactName?.trim() || null,
@@ -322,6 +380,12 @@ export const createTraveler = async (req: AuthenticatedRequest, res: Response): 
         isSeniorCitizen: !!isSeniorCitizen,
         needsExtraMattress: !!needsExtraMattress,
         specialNotes: specialNotes?.trim() || null,
+        govIdType: govIdType || null,
+        govIdNumber: govIdNumber?.trim() || null,
+        govIdDocumentUrl: govIdDocumentUrl?.trim() || null,
+        medicalConditions: medicalConditions?.trim() || null,
+        arrivalDetails: arrivalDetails?.trim() || null,
+        departureDetails: departureDetails?.trim() || null,
       },
     });
 
@@ -351,13 +415,22 @@ export const updateTraveler = async (req: AuthenticatedRequest, res: Response): 
     if (orgId(req) && existing.booking.organizationId !== orgId(req)) { res.status(404).json({ success: false, error: 'Traveler not found' }); return; }
 
     const b = req.body;
+    const dobDate = b.dob !== undefined ? (b.dob ? new Date(b.dob) : null) : existing.dob;
+    const resolvedAge = b.age !== undefined
+      ? (b.age === null || b.age === '' ? null : Number(b.age))
+      : (b.dob !== undefined && dobDate ? ageFromDob(dobDate) : existing.age);
+
     const traveler = await prisma.traveler.update({
       where: { id },
       data: {
         name: b.name !== undefined ? String(b.name).trim() : existing.name,
         mobile: b.mobile !== undefined ? b.mobile?.trim() || null : existing.mobile,
+        email: b.email !== undefined ? b.email?.trim() || null : existing.email,
         gender: b.gender !== undefined ? b.gender || null : existing.gender,
-        age: b.age !== undefined ? (b.age === null || b.age === '' ? null : Number(b.age)) : existing.age,
+        dob: dobDate,
+        age: resolvedAge,
+        bloodGroup: b.bloodGroup !== undefined ? b.bloodGroup?.trim() || null : existing.bloodGroup,
+        nationality: b.nationality !== undefined ? b.nationality?.trim() || null : existing.nationality,
         seatNumber: b.seatNumber !== undefined ? b.seatNumber?.trim() || null : existing.seatNumber,
         pickupPoint: b.pickupPoint !== undefined ? b.pickupPoint?.trim() || null : existing.pickupPoint,
         emergencyContactName: b.emergencyContactName !== undefined ? b.emergencyContactName?.trim() || null : existing.emergencyContactName,
@@ -368,6 +441,12 @@ export const updateTraveler = async (req: AuthenticatedRequest, res: Response): 
         isSeniorCitizen: b.isSeniorCitizen !== undefined ? !!b.isSeniorCitizen : existing.isSeniorCitizen,
         needsExtraMattress: b.needsExtraMattress !== undefined ? !!b.needsExtraMattress : existing.needsExtraMattress,
         specialNotes: b.specialNotes !== undefined ? b.specialNotes?.trim() || null : existing.specialNotes,
+        govIdType: b.govIdType !== undefined ? b.govIdType || null : existing.govIdType,
+        govIdNumber: b.govIdNumber !== undefined ? b.govIdNumber?.trim() || null : existing.govIdNumber,
+        govIdDocumentUrl: b.govIdDocumentUrl !== undefined ? b.govIdDocumentUrl?.trim() || null : existing.govIdDocumentUrl,
+        medicalConditions: b.medicalConditions !== undefined ? b.medicalConditions?.trim() || null : existing.medicalConditions,
+        arrivalDetails: b.arrivalDetails !== undefined ? b.arrivalDetails?.trim() || null : existing.arrivalDetails,
+        departureDetails: b.departureDetails !== undefined ? b.departureDetails?.trim() || null : existing.departureDetails,
       },
     });
 
