@@ -735,6 +735,27 @@ function OverviewTab({ lead, canAct, onUpdateLead, booking, onEditBooking }: {
         <BookingSummary booking={booking} onEdit={onEditBooking} />
       )}
 
+      {/* Confirm Booking prompt — the only entry point into the booking flow
+          for the assigned Sales employee (the status bar deliberately hides
+          the CONFIRMED option for employees so a booking is never confirmed
+          without the full form). */}
+      {lead.status !== 'CONFIRMED' && lead.status !== 'LOST' && canAct && (
+        <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+              <Package className="w-4 h-4 text-primary-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-primary-800">Ready to confirm this booking?</p>
+              <p className="text-xs text-primary-600 mt-0.5">Enter package, price and traveler details to confirm.</p>
+            </div>
+          </div>
+          <button onClick={onEditBooking} className="btn-primary py-1.5 px-3.5 text-xs flex items-center gap-1">
+            Confirm Booking <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Lost reason banner */}
       {lead.status === 'LOST' && (lead as any).lostReason && (
         <div className="flex items-start gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm">
