@@ -3,6 +3,7 @@ import { useAuthStore } from './store/authStore';
 import AdminLayout from './components/layout/AdminLayout';
 import EmployeeLayout from './components/layout/EmployeeLayout';
 import LoginPage from './pages/LoginPage';
+import WelcomePage from './pages/WelcomePage';
 import AdminDashboard from './components/dashboard/AdminDashboard';
 import EmployeeDashboard from './components/dashboard/EmployeeDashboard';
 import AdminLeadsPage from './pages/admin/LeadsPage';
@@ -44,6 +45,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/Website" element={<WelcomePage />} />
       <Route path="/" element={<RoleRedirect />} />
 
       <Route
