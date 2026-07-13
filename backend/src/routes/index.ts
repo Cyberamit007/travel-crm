@@ -22,6 +22,7 @@ import itineraryRoutes from './itinerary.routes.js';
 import paymentRoutes from './payment.routes.js';
 import bookingTaskRoutes from './bookingTask.routes.js';
 import operationsRoutes from './operations.routes.js';
+import financeRoutes from './finance.routes.js';
 
 const router = Router();
 
@@ -50,5 +51,6 @@ router.use('/bookings/:bookingId/tasks', bookingTaskRoutes);
 router.use('/tasks', bookingTaskRoutes);
 router.use('/erp', erpRoutes);
 router.use('/operations', operationsRoutes);
+router.use('/finance', financeRoutes);
 
 export default router;

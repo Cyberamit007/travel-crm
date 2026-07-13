@@ -3,6 +3,7 @@ import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { generateTasksFromItinerary } from './bookingTask.controller.js';
 import { linkBookingToDeparture } from './departure.controller.js';
+import { notifyFinanceTeam } from '../services/notification.service.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 
@@ -48,9 +49,12 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
     if (!numberOfTravelers || isNaN(Number(numberOfTravelers))) { res.status(400).json({ success: false, error: 'Number of travelers is required' }); return; }
     if (finalPrice === undefined || isNaN(Number(finalPrice))) { res.status(400).json({ success: false, error: 'Final price is required' }); return; }
 
+    // amountPaid is never credited directly — it only increases once Finance
+    // verifies a payment (see payment.controller.ts). The advance entered here
+    // becomes a PENDING Payment below, and the booking starts fully outstanding.
     const paid = Number(amountPaid ?? 0);
     const price = Number(finalPrice);
-    const balance = Math.max(0, price - paid);
+    const balance = price;
     const depDate = departureDate ? new Date(departureDate) : null;
 
     // Auto-generate booking number: BKG-YYYYMMDD-XXXX
@@ -78,7 +82,7 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
           specialRequest: specialRequest?.trim() || null,
           bookingNotes: bookingNotes?.trim() || null,
           finalPrice: price,
-          amountPaid: paid,
+          amountPaid: 0,
           balanceAmount: balance,
           balanceDueDate: balanceDueDate ? new Date(balanceDueDate) : null,
           departureDate: depDate,
@@ -97,8 +101,9 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
           specialRequest: specialRequest?.trim() || null,
           bookingNotes: bookingNotes?.trim() || null,
           finalPrice: price,
-          amountPaid: paid,
-          balanceAmount: balance,
+          // amountPaid/balanceAmount intentionally omitted here — re-submitting
+          // this form for an already-confirmed lead must not reset already
+          // Finance-verified collections back to 0.
           balanceDueDate: balanceDueDate ? new Date(balanceDueDate) : null,
           departureDate: depDate,
           returnDate: returnDate ? new Date(returnDate) : null,
@@ -110,18 +115,26 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
       }),
     ]);
 
-    // Record advance payment if provided
+    // Record advance payment as PENDING — it only credits amountPaid once
+    // Finance verifies it (see payment.controller.ts approvePayment).
     if (paid > 0) {
-      await (prisma as any).payment.create({
+      await prisma.payment.create({
         data: {
           bookingId: booking.id,
           amount: paid,
           type: 'ADVANCE',
           method: 'CASH',
           notes: 'Initial payment at booking',
+          status: 'PENDING',
           recordedById: req.user!.id,
         },
       });
+      await notifyFinanceTeam(
+        orgId(req),
+        'NEW_PAYMENT_SUBMITTED',
+        'New Payment Awaiting Verification',
+        `${travelerName.trim()} — ₹${paid.toLocaleString()} advance payment needs verification (Booking ${bookingNumber}).`
+      );
     }
 
     // Auto-generate tasks from package itinerary if package + departure date provided
@@ -194,12 +207,16 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
     const {
       travelerName, numberOfTravelers, aadharNumber,
       foodPreference, roomSharing, departureLocation, departurePackage,
-      tourType, specialRequest, bookingNotes, finalPrice, amountPaid,
+      tourType, specialRequest, bookingNotes, finalPrice,
       balanceDueDate, status, packageId, departureDate, returnDate,
     } = req.body;
 
+    // amountPaid is intentionally not accepted here — it only changes via
+    // Finance payment verification (payment.controller.ts) or a paid Refund.
+    // finalPrice can still change, so balance is recomputed against the
+    // existing (verified) amountPaid, not a client-supplied one.
     const price = finalPrice !== undefined ? Number(finalPrice) : existing.finalPrice;
-    const paid = amountPaid !== undefined ? Number(amountPaid) : existing.amountPaid;
+    const paid = existing.amountPaid;
     const balance = Math.max(0, price - paid);
 
     const booking = await prisma.booking.update({

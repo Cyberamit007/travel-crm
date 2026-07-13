@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'EMPLOYEE' | 'OPERATIONS';
+export type Role = 'ADMIN' | 'EMPLOYEE' | 'OPERATIONS' | 'FINANCE';
 export type LeadSource = 'WHATSAPP' | 'INSTAGRAM' | 'MANUAL' | 'WEBSITE';
 export type LeadStatus = 'NEW' | 'CONTACTED' | 'INTERESTED' | 'FOLLOW_UP_SCHEDULED' | 'CONFIRMED' | 'LOST';
 export type LeadPriority = 'HIGH' | 'MEDIUM' | 'LOW';
@@ -393,6 +393,8 @@ export interface PackageItinerary {
   updatedAt: string;
 }
 
+export type PaymentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED' | 'CORRECTION_REQUESTED';
+
 export interface Payment {
   id: string;
   bookingId: string;
@@ -402,9 +404,21 @@ export interface Payment {
   reference?: string;
   notes?: string;
   receiptNo?: string;
+  proofUrl?: string;
+  status: PaymentStatus;
+  financeNote?: string;
+  verifiedById?: string;
+  verifiedBy?: Pick<User, 'id' | 'name'>;
+  verifiedAt?: string;
   recordedById: string;
   recordedBy: Pick<User, 'id' | 'name'>;
   createdAt: string;
+  updatedAt: string;
+  booking?: {
+    id: string; bookingNumber?: string; travelerName: string; finalPrice: number;
+    lead: Pick<Lead, 'id' | 'name' | 'phone'> & { assignedTo?: Pick<User, 'id' | 'name'> };
+    departure?: { destination: string; departureDate: string };
+  };
 }
 
 export interface BookingTask {
@@ -716,4 +730,98 @@ export interface OpsDashboardStats {
   todaysTransfers: number;
   upcomingActivities: number;
   totalTravelersOnTour: number;
+}
+
+// ─── Finance Panel ───────────────────────────────────────────────────────────
+
+export type RefundStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
+export type VendorPaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE';
+export type VendorServiceType = 'HOTEL' | 'VEHICLE' | 'TRIP_CAPTAIN' | 'LOCAL_GUIDE' | 'LOCAL_VENDOR' | 'ACTIVITY';
+export type PendingIndicator = 'PAID' | 'DUE_SOON' | 'OVERDUE';
+
+export interface Refund {
+  id: string;
+  bookingId: string;
+  booking?: Booking & { lead: Pick<Lead, 'id' | 'name' | 'phone'> };
+  amount: number;
+  reason: string;
+  status: RefundStatus;
+  transactionId?: string;
+  remarks?: string;
+  requestedById: string;
+  requestedBy: Pick<User, 'id' | 'name'>;
+  approvedById?: string;
+  approvedBy?: Pick<User, 'id' | 'name'>;
+  refundDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VendorPayment {
+  id: string;
+  vendorId: string;
+  vendor: Pick<Vendor, 'id' | 'name' | 'type'>;
+  departureId?: string;
+  departure?: { id: string; destination: string; departureDate: string };
+  serviceType: VendorServiceType;
+  totalAmount: number;
+  advancePaid: number;
+  balanceAmount: number;
+  dueDate?: string;
+  status: VendorPaymentStatus;
+  invoiceUrl?: string;
+  paymentProofUrl?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceDashboardStats {
+  todaysCollections: number;
+  monthlyCollections: number;
+  totalRevenue: number;
+  pendingPaymentVerification: number;
+  pendingCustomerBalances: number;
+  upcomingDuePayments: number;
+  overduePayments: number;
+  refundRequests: number;
+  vendorPaymentsPending: number;
+  cashCollection: number;
+  onlineCollection: number;
+  upiCollection: number;
+  bankTransferCollection: number;
+  collectionTrend: Array<{ date: string; amount: number }>;
+  revenueByDestination: Array<{ destination: string; revenue: number }>;
+  revenueByDeparture: Array<{ id: string; label: string; revenue: number }>;
+}
+
+export interface PendingTrackerRow {
+  id: string;
+  bookingId: string;
+  customerName: string;
+  phone: string;
+  destination: string;
+  departureDate?: string;
+  pendingAmount: number;
+  dueDate?: string;
+  daysRemaining: number | null;
+  salesEmployee: string;
+  indicator: PendingIndicator;
+}
+
+export interface CustomerLedger extends Booking {
+  lead: Pick<Lead, 'id' | 'name' | 'phone' | 'email'> & { assignedTo?: Pick<User, 'id' | 'name'> };
+  package?: { id: string; name: string; code: string };
+  departure?: { id: string; destination: string; departureDate: string };
+  payments: Payment[];
+  refunds: Refund[];
+  ledger: {
+    packagePrice: number;
+    totalPayable: number;
+    advanceReceived: number;
+    verifiedPayments: number;
+    pendingAmount: number;
+    balanceDueDate?: string;
+    refunds: number;
+  };
 }

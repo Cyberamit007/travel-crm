@@ -187,4 +187,23 @@
   .ring-card {
     box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.04);
   }
+
+  /* Print-to-PDF via the browser's native print dialog — used for invoices
+     and receipts instead of a bundled PDF library. Toggle .printing on
+     <body> and wrap the printable content in .print-area. */
+  @media print {
+    body.printing * {
+      visibility: hidden;
+    }
+    body.printing .print-area,
+    body.printing .print-area * {
+      visibility: visible;
+    }
+    body.printing .print-area {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+    }
+  }
 }

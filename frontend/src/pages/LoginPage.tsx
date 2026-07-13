@@ -20,6 +20,7 @@ export default function LoginPage() {
   if (isAuthenticated && user) {
     if (user.role === 'ADMIN') navigate('/admin/dashboard', { replace: true });
     else if (user.role === 'OPERATIONS') navigate('/operations/dashboard', { replace: true });
+    else if (user.role === 'FINANCE') navigate('/finance/dashboard', { replace: true });
     else navigate('/employee/dashboard', { replace: true });
   }
 
@@ -36,6 +37,8 @@ export default function LoginPage() {
       login(userData, token);
       toast.success(`Welcome back, ${userData.name}!`);
       if (userData.role === 'ADMIN') navigate('/admin/dashboard');
+      else if (userData.role === 'OPERATIONS') navigate('/operations/dashboard');
+      else if (userData.role === 'FINANCE') navigate('/finance/dashboard');
       else navigate('/employee/dashboard');
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Invalid credentials. Please try again.');

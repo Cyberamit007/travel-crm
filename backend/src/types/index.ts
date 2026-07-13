@@ -1,6 +1,6 @@
 import { Request } from 'express';
 
-export type Role = 'ADMIN' | 'EMPLOYEE' | 'OPERATIONS';
+export type Role = 'ADMIN' | 'EMPLOYEE' | 'OPERATIONS' | 'FINANCE';
 
 export interface AuthenticatedRequest extends Request {
   user?: {

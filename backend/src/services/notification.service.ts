@@ -166,3 +166,60 @@ export const updateDepartureStatuses = async () => {
     await prisma.departure.updateMany({ where: { id: { in: toComplete } }, data: { status: 'COMPLETED' } });
   }
 };
+
+// ─── Finance Panel ───────────────────────────────────────────────────────────
+
+export const emitFinanceUpdated = () => {
+  if (io) io.to('admin').to('finance').emit('finance_updated', {});
+};
+
+export const notifyFinanceTeam = async (
+  organizationId: string | null,
+  type: string,
+  title: string,
+  message: string
+) => {
+  const team = await prisma.user.findMany({
+    where: { role: { in: ['ADMIN', 'FINANCE'] }, isActive: true, ...(organizationId ? { organizationId } : {}) },
+    select: { id: true },
+  });
+  for (const member of team) {
+    await createNotification(member.id, type, title, message);
+  }
+};
+
+export const sendFinanceReminders = async () => {
+  const now = new Date();
+  const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const dedupWindow = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  // Overdue customer balances
+  const overdueBookings = await prisma.booking.findMany({
+    where: { status: 'ACTIVE', balanceAmount: { gt: 0 }, balanceDueDate: { lt: now } },
+    include: { lead: { select: { name: true } } },
+  });
+  for (const b of overdueBookings) {
+    const message = `${b.lead.name} — ₹${b.balanceAmount.toLocaleString()} overdue since ${b.balanceDueDate!.toDateString()}.`;
+    const alreadyNotified = await prisma.notification.findFirst({
+      where: { type: 'OVERDUE_CUSTOMER_PAYMENT', message, createdAt: { gte: dedupWindow } },
+    });
+    if (!alreadyNotified) {
+      await notifyFinanceTeam(b.organizationId, 'OVERDUE_CUSTOMER_PAYMENT', 'Overdue Customer Payment', message);
+    }
+  }
+
+  // Vendor payments due within 7 days
+  const dueVendorPayments = await prisma.vendorPayment.findMany({
+    where: { status: { in: ['PENDING', 'PARTIAL'] }, dueDate: { gte: now, lte: in7Days } },
+    include: { vendor: { select: { name: true } } },
+  });
+  for (const vp of dueVendorPayments) {
+    const message = `${vp.vendor.name} — ₹${vp.balanceAmount.toLocaleString()} due ${vp.dueDate!.toDateString()}.`;
+    const alreadyNotified = await prisma.notification.findFirst({
+      where: { type: 'VENDOR_PAYMENT_DUE', message, createdAt: { gte: dedupWindow } },
+    });
+    if (!alreadyNotified) {
+      await notifyFinanceTeam(vp.organizationId, 'VENDOR_PAYMENT_DUE', 'Vendor Payment Due', message);
+    }
+  }
+};

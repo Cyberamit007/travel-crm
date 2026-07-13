@@ -1,0 +1,61 @@
+import { Router } from 'express';
+import { authenticate, requireFinanceOrAdmin } from '../middleware/auth.js';
+import { upload } from '../middleware/upload.js';
+import { getDashboardStats } from '../controllers/financeDashboard.controller.js';
+import { listPaymentsForVerification, approvePayment, rejectPayment, requestCorrection } from '../controllers/payment.controller.js';
+import { getCustomerLedger, getPendingTracker } from '../controllers/ledger.controller.js';
+import { listRefunds, createRefund, approveRefund, markRefundPaid, rejectRefund } from '../controllers/refund.controller.js';
+import {
+  listVendorPayments, createVendorPayment, updateVendorPayment, deleteVendorPayment, uploadVendorPaymentFile,
+} from '../controllers/vendorPayment.controller.js';
+import { listVendors } from '../controllers/vendor.controller.js';
+import {
+  getCollectionReport, getEmployeeCollectionReport, getDestinationRevenueReport, getDepartureRevenueReport,
+  getOutstandingReport, getVendorPaymentReport, getRefundReport, getProfitLossReport,
+} from '../controllers/financeReport.controller.js';
+
+const router = Router();
+router.use(authenticate, requireFinanceOrAdmin);
+
+// Dashboard
+router.get('/dashboard', getDashboardStats);
+
+// Payment verification
+router.get('/payments', listPaymentsForVerification);
+router.put('/payments/:id/approve', approvePayment);
+router.put('/payments/:id/reject', rejectPayment);
+router.put('/payments/:id/request-correction', requestCorrection);
+
+// Customer ledger + pending tracker
+router.get('/ledger/:bookingId', getCustomerLedger);
+router.get('/pending-tracker', getPendingTracker);
+
+// Refunds
+router.get('/refunds', listRefunds);
+router.post('/refunds', createRefund);
+router.put('/refunds/:id/approve', approveRefund);
+router.put('/refunds/:id/mark-paid', markRefundPaid);
+router.put('/refunds/:id/reject', rejectRefund);
+
+// Read-only access to the Vendor master list (owned/managed by Operations) —
+// Finance needs it to select which vendor a bill belongs to.
+router.get('/vendors', listVendors);
+
+// Vendor payments
+router.get('/vendor-payments', listVendorPayments);
+router.post('/vendor-payments', createVendorPayment);
+router.put('/vendor-payments/:id', updateVendorPayment);
+router.delete('/vendor-payments/:id', deleteVendorPayment);
+router.post('/vendor-payments/:id/upload', upload.single('file'), uploadVendorPaymentFile);
+
+// Reports
+router.get('/reports/collections', getCollectionReport);
+router.get('/reports/employee-collections', getEmployeeCollectionReport);
+router.get('/reports/destination-revenue', getDestinationRevenueReport);
+router.get('/reports/departure-revenue', getDepartureRevenueReport);
+router.get('/reports/outstanding', getOutstandingReport);
+router.get('/reports/vendor-payments', getVendorPaymentReport);
+router.get('/reports/refunds', getRefundReport);
+router.get('/reports/profit-loss', getProfitLossReport);
+
+export default router;

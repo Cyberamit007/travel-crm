@@ -31,6 +31,8 @@ model Organization {
   packages      Package[]
   departures    Departure[]
   vendors       Vendor[]
+  refunds       Refund[]
+  vendorPayments VendorPayment[]
 
   @@map("organizations")
 }
@@ -45,7 +47,7 @@ model User {
   name         String
   email        String   @unique
   password     String
-  role         String   @default("EMPLOYEE")   // ADMIN | EMPLOYEE | OPERATIONS
+  role         String   @default("EMPLOYEE")   // ADMIN | EMPLOYEE | OPERATIONS | FINANCE
   phone        String?
   avatar       String?
   isActive     Boolean  @default(true)
@@ -78,6 +80,10 @@ model User {
   uploadedOpsDocuments OperationsDocument[] @relation("OpsDocumentUploader")
   opsNotes            OperationsNote[]   @relation("OpsNoteAuthor")
   updatedDepartureTasks DepartureTask[]  @relation("DepartureTaskUpdater")
+  verifiedPayments     Payment[]        @relation("PaymentVerifier")
+  requestedRefunds     Refund[]         @relation("RefundRequester")
+  approvedRefunds      Refund[]         @relation("RefundApprover")
+  createdVendorPayments VendorPayment[] @relation("VendorPaymentCreator")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -382,7 +388,7 @@ model ActivityLog {
   id         String  @id @default(uuid())
   action     String
   details    String?
-  entityType String? // LEAD | CAMPAIGN | USER | LEAVE | DEPARTURE | HOTEL | VEHICLE | VENDOR | TRAVELER
+  entityType String? // LEAD | CAMPAIGN | USER | LEAVE | DEPARTURE | HOTEL | VEHICLE | VENDOR | TRAVELER | PAYMENT | REFUND | VENDOR_PAYMENT
   entityId   String?
 
   user   User   @relation(fields: [userId], references: [id])
@@ -600,6 +606,7 @@ model Booking {
   payments     Payment[]
   tasks        BookingTask[]
   travelers    Traveler[]
+  refunds      Refund[]
 
   @@index([organizationId])
   @@index([leadId])
@@ -740,14 +747,25 @@ model Payment {
   reference String?                           // UTR / cheque no / transaction ID
   notes     String?
   receiptNo String?
+  proofUrl  String?                           // payment screenshot / proof upload
+
+  // Finance verification workflow — a payment only credits booking.amountPaid
+  // once VERIFIED (see payment.controller.ts). Sales records it as PENDING.
+  status        String    @default("PENDING") // PENDING | VERIFIED | REJECTED | CORRECTION_REQUESTED
+  financeNote   String?                       // rejection reason / correction request note
+  verifiedById  String?
+  verifiedBy    User?     @relation("PaymentVerifier", fields: [verifiedById], references: [id])
+  verifiedAt    DateTime?
 
   recordedById String
   recordedBy   User   @relation("PaymentRecorder", fields: [recordedById], references: [id])
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([bookingId])
   @@index([createdAt])
+  @@index([status])
   @@map("payments")
 }
 
@@ -813,6 +831,7 @@ model Departure {
   documents OperationsDocument[]
   notes     OperationsNote[]
   timeline  DepartureTask[]
+  vendorPayments VendorPayment[]
 
   @@index([organizationId])
   @@index([packageId])
@@ -881,6 +900,8 @@ model Vendor {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  payments VendorPayment[]
+
   @@index([organizationId])
   @@index([type])
   @@map("operations_vendors")
@@ -941,4 +962,74 @@ model DepartureTask {
 
   @@index([departureId])
   @@map("departure_tasks")
+}
+
+// ─── Finance Panel ──────────────────────────────────────────────────────────
+// Refunds are a dedicated workflow (Requested → Approved → Paid/Rejected),
+// distinct from the ad-hoc Payment(type=REFUND) path — Finance uses this one.
+
+model Refund {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  amount        Float
+  reason        String
+  status        String    @default("REQUESTED") // REQUESTED | APPROVED | PAID | REJECTED
+  transactionId String?
+  remarks       String?
+
+  requestedById String
+  requestedBy   User    @relation("RefundRequester", fields: [requestedById], references: [id])
+  approvedById  String?
+  approvedBy    User?   @relation("RefundApprover", fields: [approvedById], references: [id])
+
+  refundDate DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([bookingId])
+  @@index([organizationId])
+  @@index([status])
+  @@map("refunds")
+}
+
+// Transactional vendor bills — a Vendor (master record) can have many of these
+// across many departures. Not fields on Vendor itself.
+
+model VendorPayment {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  departureId String?
+  departure   Departure? @relation(fields: [departureId], references: [id], onDelete: SetNull)
+
+  serviceType String                          // HOTEL | VEHICLE | TRIP_CAPTAIN | LOCAL_GUIDE | LOCAL_VENDOR | ACTIVITY
+  totalAmount Float
+  advancePaid Float    @default(0)
+  balanceAmount Float  @default(0)
+  dueDate     DateTime?
+  status      String   @default("PENDING")    // PENDING | PARTIAL | PAID | OVERDUE
+  invoiceUrl  String?
+  paymentProofUrl String?
+  notes       String?
+
+  createdById String
+  createdBy   User   @relation("VendorPaymentCreator", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vendorId])
+  @@index([departureId])
+  @@index([organizationId])
+  @@index([status])
+  @@map("vendor_payments")
 }

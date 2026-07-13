@@ -560,6 +560,7 @@ function PaymentsTab({ booking }: { booking: Booking }) {
   const deletePayment = useDeletePayment();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ amount: '', type: 'PARTIAL', method: 'CASH', reference: '', notes: '' });
+  const [proofFile, setProofFile] = useState<File | null>(null);
 
   const payments = data?.data ?? [];
 
@@ -572,6 +573,12 @@ function PaymentsTab({ booking }: { booking: Booking }) {
     FINAL: 'bg-emerald-100 text-emerald-700',
     REFUND: 'bg-red-100 text-red-700',
   };
+  const statusColors: Record<string, string> = {
+    PENDING: 'bg-amber-50 text-amber-700',
+    VERIFIED: 'bg-emerald-50 text-emerald-700',
+    REJECTED: 'bg-red-50 text-red-600',
+    CORRECTION_REQUESTED: 'bg-orange-50 text-orange-700',
+  };
 
   const handleRecord = () => {
     if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0) return;
@@ -582,10 +589,12 @@ function PaymentsTab({ booking }: { booking: Booking }) {
       method: form.method,
       reference: form.reference || undefined,
       notes: form.notes || undefined,
+      proof: proofFile ?? undefined,
     }, {
       onSuccess: () => {
         setShowForm(false);
         setForm({ amount: '', type: 'PARTIAL', method: 'CASH', reference: '', notes: '' });
+        setProofFile(null);
       },
     });
   };
@@ -651,11 +660,16 @@ function PaymentsTab({ booking }: { booking: Booking }) {
               <label className="label text-xs">Reference / UTR</label>
               <input value={form.reference} onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))} className="input text-sm" placeholder="Optional" />
             </div>
+            <div className="sm:col-span-2">
+              <label className="label text-xs">Payment Screenshot / Proof</label>
+              <input type="file" onChange={(e) => setProofFile(e.target.files?.[0] ?? null)} className="input text-sm" accept="image/*,.pdf" />
+            </div>
           </div>
+          <p className="text-xs text-slate-400">This payment will appear in the Finance Panel for verification before it's added to Collected.</p>
           <div className="flex items-center gap-2 justify-end">
             <button onClick={() => setShowForm(false)} className="btn-secondary text-xs">Cancel</button>
             <button onClick={handleRecord} disabled={recordPayment.isPending || !form.amount} className="btn-primary text-xs">
-              {recordPayment.isPending ? 'Saving…' : 'Record'}
+              {recordPayment.isPending ? 'Submitting…' : 'Submit for Verification'}
             </button>
           </div>
         </div>
@@ -677,23 +691,31 @@ function PaymentsTab({ booking }: { booking: Booking }) {
                 {p.type}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-bold text-slate-800">₹{p.amount.toLocaleString('en-IN')}</span>
                   <span className="text-xs text-slate-400">{methodLabel[p.method] ?? p.method}</span>
                   {p.reference && <span className="text-xs text-slate-400 font-mono truncate">• {p.reference}</span>}
+                  <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', statusColors[p.status] ?? 'bg-slate-100 text-slate-600')}>
+                    {p.status.replace('_', ' ')}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
                   <span>By {p.recordedBy?.name}</span>
                   <span>• {formatDateTime(p.createdAt)}</span>
                   {p.notes && <span>• {p.notes}</span>}
                 </div>
+                {p.financeNote && (
+                  <p className="text-[10px] text-orange-600 mt-1">{p.financeNote}</p>
+                )}
               </div>
-              <button
-                onClick={() => deletePayment.mutate({ bookingId: booking.id, id: p.id })}
-                className="p-1.5 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
+              {p.status !== 'VERIFIED' && (
+                <button
+                  onClick={() => deletePayment.mutate({ bookingId: booking.id, id: p.id })}
+                  className="p-1.5 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
             </div>
           ))}
         </div>

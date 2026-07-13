@@ -32,20 +32,24 @@ interface RecordPaymentPayload {
   reference?: string;
   notes?: string;
   receiptNo?: string;
+  proof?: File;
 }
 
 export function useRecordPayment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ bookingId, ...payload }: RecordPaymentPayload) => {
-      const { data } = await api.post(`/bookings/${bookingId}/payments`, payload);
+    mutationFn: async ({ bookingId, proof, ...payload }: RecordPaymentPayload) => {
+      const form = new FormData();
+      Object.entries(payload).forEach(([k, v]) => { if (v !== undefined && v !== '') form.append(k, String(v)); });
+      if (proof) form.append('proof', proof);
+      const { data } = await api.post(`/bookings/${bookingId}/payments`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
       return data;
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['payments', vars.bookingId] });
       qc.invalidateQueries({ queryKey: ['booking'] });
       qc.invalidateQueries({ queryKey: ['payments-summary'] });
-      toast.success('Payment recorded');
+      toast.success('Payment submitted for verification');
     },
     onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to record payment'),
   });

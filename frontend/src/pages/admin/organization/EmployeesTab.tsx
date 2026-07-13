@@ -23,7 +23,7 @@ interface UserForm {
   email: string;
   password?: string;
   phone?: string;
-  role: 'ADMIN' | 'EMPLOYEE' | 'OPERATIONS';
+  role: 'ADMIN' | 'EMPLOYEE' | 'OPERATIONS' | 'FINANCE';
   departmentId?: string;
   designationId?: string;
 }
@@ -100,6 +100,7 @@ function EmployeeFormModal({
             <select {...register('role')} className="input">
               <option value="EMPLOYEE">Employee (Sales)</option>
               <option value="OPERATIONS">Operations</option>
+              <option value="FINANCE">Finance</option>
               <option value="ADMIN">Admin</option>
             </select>
           </div>

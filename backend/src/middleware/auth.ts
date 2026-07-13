@@ -35,6 +35,14 @@ export const requireOperationsOrAdmin = (req: AuthenticatedRequest, res: Respons
   next();
 };
 
+export const requireFinanceOrAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  if (req.user?.role !== 'ADMIN' && req.user?.role !== 'FINANCE') {
+    res.status(403).json({ success: false, error: 'Finance or Admin access required' });
+    return;
+  }
+  next();
+};
+
 export const requireAdminOrSelf = (userIdParam: string) =>
   (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     const targetId = req.params[userIdParam];

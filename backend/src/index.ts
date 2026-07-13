@@ -12,7 +12,7 @@ import jwt from 'jsonwebtoken';
 import path from 'path';
 
 import routes from './routes/index.js';
-import { setSocketServer, sendFollowUpReminders, sendOperationsReminders, updateDepartureStatuses } from './services/notification.service.js';
+import { setSocketServer, sendFollowUpReminders, sendOperationsReminders, updateDepartureStatuses, sendFinanceReminders } from './services/notification.service.js';
 import { runMetaSync } from './services/metaSync.service.js';
 import logger from './utils/logger.js';
 import { JWTPayload } from './types/index.js';
@@ -95,6 +95,7 @@ io.on('connection', (socket) => {
   socket.join(`user:${user.id}`);
   if (user.role === 'ADMIN') socket.join('admin');
   if (user.role === 'OPERATIONS') socket.join('operations');
+  if (user.role === 'FINANCE') socket.join('finance');
 
   socket.on('disconnect', () => {
     logger.info(`Socket disconnected: ${user.name}`);
@@ -110,6 +111,11 @@ cron.schedule('*/30 * * * *', async () => {
   logger.info('Running operations reminder check...');
   await updateDepartureStatuses().catch((err) => logger.error('Departure status sweep error', err));
   await sendOperationsReminders().catch((err) => logger.error('Operations reminder cron error', err));
+});
+
+cron.schedule('*/30 * * * *', async () => {
+  logger.info('Running finance reminder check...');
+  await sendFinanceReminders().catch((err) => logger.error('Finance reminder cron error', err));
 });
 
 cron.schedule('*/15 * * * *', async () => {

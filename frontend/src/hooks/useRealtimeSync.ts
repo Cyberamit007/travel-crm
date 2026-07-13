@@ -35,6 +35,13 @@ export function useRealtimeSync() {
       queryClient.invalidateQueries({ queryKey: ['operations'] });
     });
 
+    socket.on('finance_updated', () => {
+      queryClient.invalidateQueries({ queryKey: ['finance'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['payments-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['booking'] });
+    });
+
     socket.on('connect_error', (err) => {
       console.warn('Socket connection error:', err.message);
     });
