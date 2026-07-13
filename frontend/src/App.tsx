@@ -2,13 +2,13 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import AdminLayout from './components/layout/AdminLayout';
 import EmployeeLayout from './components/layout/EmployeeLayout';
+import OperationsLayout from './components/layout/OperationsLayout';
 import LoginPage from './pages/LoginPage';
 import WelcomePage from './pages/WelcomePage';
 import AdminDashboard from './components/dashboard/AdminDashboard';
 import EmployeeDashboard from './components/dashboard/EmployeeDashboard';
 import AdminLeadsPage from './pages/admin/LeadsPage';
 import AdminCampaignsPage from './pages/admin/CampaignsPage';
-import AdminEmployeesPage from './pages/admin/EmployeesPage';
 import OrganizationPage from './pages/admin/OrganizationPage';
 import AdminSettingsPage from './pages/admin/SettingsPage';
 import AdminFeedbackPage from './pages/admin/FeedbackPage';
@@ -19,22 +19,26 @@ import PackagesPage from './pages/admin/PackagesPage';
 import BookingsPage from './pages/admin/BookingsPage';
 import CustomersPage from './pages/admin/CustomersPage';
 import FinancePage from './pages/admin/FinancePage';
-import OperationsPage from './pages/admin/OperationsPage';
 import EmployeeLeadsPage from './pages/employee/LeadsPage';
 import EmployeeFollowUpsPage from './pages/employee/FollowUpsPage';
 import EmployeeSettingsPage from './pages/employee/SettingsPage';
 import PackageCatalogPage from './pages/employee/PackageCatalogPage';
 import MyCustomersPage from './pages/employee/MyCustomersPage';
 import TasksPage from './pages/employee/TasksPage';
+import OperationsDashboardPage from './pages/operations/DashboardPage';
+import DeparturesPage from './pages/operations/DeparturesPage';
+import DepartureDetailPage from './pages/operations/DepartureDetailPage';
+import VendorsPage from './pages/operations/VendorsPage';
 
 function RoleRedirect() {
   const { user, isAuthenticated } = useAuthStore();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (user?.role === 'ADMIN') return <Navigate to="/admin/dashboard" replace />;
+  if (user?.role === 'OPERATIONS') return <Navigate to="/operations/dashboard" replace />;
   return <Navigate to="/employee/dashboard" replace />;
 }
 
-function RequireAuth({ children, role }: { children: React.ReactNode; role?: 'ADMIN' | 'EMPLOYEE' }) {
+function RequireAuth({ children, role }: { children: React.ReactNode; role?: 'ADMIN' | 'EMPLOYEE' | 'OPERATIONS' }) {
   const { isAuthenticated, user } = useAuthStore();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (role && user?.role !== role) return <Navigate to="/" replace />;
@@ -71,7 +75,27 @@ export default function App() {
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="finance" element={<FinancePage />} />
-        <Route path="operations" element={<OperationsPage />} />
+        <Route path="operations" element={<Navigate to="/admin/operations/dashboard" replace />} />
+        <Route path="operations/dashboard" element={<OperationsDashboardPage />} />
+        <Route path="operations/departures" element={<DeparturesPage />} />
+        <Route path="operations/departures/:id" element={<DepartureDetailPage />} />
+        <Route path="operations/vendors" element={<VendorsPage />} />
+      </Route>
+
+      <Route
+        path="/operations"
+        element={
+          <RequireAuth role="OPERATIONS">
+            <OperationsLayout />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<Navigate to="/operations/dashboard" replace />} />
+        <Route path="dashboard" element={<OperationsDashboardPage />} />
+        <Route path="departures" element={<DeparturesPage />} />
+        <Route path="departures/:id" element={<DepartureDetailPage />} />
+        <Route path="vendors" element={<VendorsPage />} />
+        <Route path="settings" element={<EmployeeSettingsPage />} />
       </Route>
 
       <Route

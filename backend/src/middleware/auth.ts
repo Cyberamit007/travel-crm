@@ -27,6 +27,14 @@ export const requireAdmin = (req: AuthenticatedRequest, res: Response, next: Nex
   next();
 };
 
+export const requireOperationsOrAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  if (req.user?.role !== 'ADMIN' && req.user?.role !== 'OPERATIONS') {
+    res.status(403).json({ success: false, error: 'Operations or Admin access required' });
+    return;
+  }
+  next();
+};
+
 export const requireAdminOrSelf = (userIdParam: string) =>
   (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     const targetId = req.params[userIdParam];

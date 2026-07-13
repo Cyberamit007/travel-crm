@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'EMPLOYEE';
+export type Role = 'ADMIN' | 'EMPLOYEE' | 'OPERATIONS';
 export type LeadSource = 'WHATSAPP' | 'INSTAGRAM' | 'MANUAL' | 'WEBSITE';
 export type LeadStatus = 'NEW' | 'CONTACTED' | 'INTERESTED' | 'FOLLOW_UP_SCHEDULED' | 'CONFIRMED' | 'LOST';
 export type LeadPriority = 'HIGH' | 'MEDIUM' | 'LOW';
@@ -524,4 +524,196 @@ export interface FeedbackStats {
   inProgress: number;
   bugs: number;
   suggestions: number;
+}
+
+// ─── Operations Panel ───────────────────────────────────────────────────────
+
+export type DepartureStatus = 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+export type TripCaptainStatus = 'UNASSIGNED' | 'ASSIGNED' | 'CONFIRMED';
+export type OpsBookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+export type DepartureTaskStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+export type VendorType = 'HOTEL' | 'VEHICLE' | 'LOCAL_GUIDE' | 'LOCAL_VENDOR' | 'OTHER';
+export type OpsDocumentType = 'HOTEL_VOUCHER' | 'VEHICLE_VOUCHER' | 'CUSTOMER_LIST' | 'ROOMING_LIST' | 'TRIP_CAPTAIN_SHEET' | 'EMERGENCY_CONTACT_LIST' | 'VENDOR_BILL' | 'OTHER';
+export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
+
+export interface Traveler {
+  id: string;
+  bookingId: string;
+  name: string;
+  mobile?: string;
+  gender?: Gender;
+  age?: number;
+  seatNumber?: string;
+  pickupPoint?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  roomSharing?: RoomSharing;
+  foodPreference?: FoodPreference;
+  isChild: boolean;
+  isSeniorCitizen: boolean;
+  needsExtraMattress: boolean;
+  specialNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Hotel {
+  id: string;
+  departureId: string;
+  name: string;
+  location?: string;
+  checkInDate?: string;
+  checkOutDate?: string;
+  numberOfRooms?: number;
+  roomAllocation?: string;
+  vendorName?: string;
+  vendorContact?: string;
+  confirmationNumber?: string;
+  status: OpsBookingStatus;
+  voucherUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Vehicle {
+  id: string;
+  departureId: string;
+  vehicleType?: string;
+  vehicleNumber?: string;
+  driverName?: string;
+  driverMobile?: string;
+  pickupTime?: string;
+  pickupLocation?: string;
+  vendorName?: string;
+  vendorContact?: string;
+  status: OpsBookingStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Vendor {
+  id: string;
+  organizationId?: string;
+  name: string;
+  type: VendorType;
+  contact?: string;
+  notes?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OperationsDocument {
+  id: string;
+  departureId: string;
+  name: string;
+  type: OpsDocumentType;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedById: string;
+  uploadedBy: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+}
+
+export interface OperationsNote {
+  id: string;
+  departureId: string;
+  content: string;
+  authorId: string;
+  author: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+}
+
+export interface DepartureTask {
+  id: string;
+  departureId: string;
+  dayOffset: number;
+  title: string;
+  description?: string;
+  status: DepartureTaskStatus;
+  sortOrder: number;
+  updatedById?: string;
+  updatedBy?: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupSummary {
+  totalTravelers: number;
+  maleCount: number;
+  femaleCount: number;
+  doubleSharingRoomsRequired: number;
+  tripleSharingRoomsRequired: number;
+  quadSharingRoomsRequired: number;
+  extraMattressRequired: number;
+  vegMeals: number;
+  nonVegMeals: number;
+  jainMeals: number;
+  childrenCount: number;
+  seniorCitizenCount: number;
+  pendingPayments: number;
+  totalPendingAmount: number;
+}
+
+export interface DepartureBooking extends Booking {
+  lead: Pick<Lead, 'id' | 'name' | 'phone' | 'email'>;
+  travelers: Traveler[];
+}
+
+export interface Departure {
+  id: string;
+  organizationId?: string;
+  packageId?: string;
+  package?: { id: string; name: string; code: string; nights?: number; days?: number };
+  destination: string;
+  departureDate: string;
+  returnDate?: string;
+  status: DepartureStatus;
+  tripCaptainName?: string;
+  tripCaptainPhone?: string;
+  tripCaptainStatus: TripCaptainStatus;
+  bookings: DepartureBooking[];
+  hotels: Hotel[];
+  vehicles: Vehicle[];
+  documents: OperationsDocument[];
+  notes: OperationsNote[];
+  timeline: DepartureTask[];
+  groupSummary?: GroupSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DepartureListItem {
+  id: string;
+  packageId?: string;
+  package?: { id: string; name: string; code: string };
+  destination: string;
+  departureDate: string;
+  returnDate?: string;
+  status: DepartureStatus;
+  tripCaptainStatus: TripCaptainStatus;
+  totalTravelers: number;
+  totalRevenue: number;
+  totalPending: number;
+  bookingCount: number;
+  hotelsPending: number;
+  vehiclesPending: number;
+}
+
+export interface OpsDashboardStats {
+  todaysDepartures: number;
+  upcomingDepartures: number;
+  activeTrips: number;
+  completedTrips: number;
+  totalTravelersToday: number;
+  pendingHotelBookings: number;
+  pendingVehicleBookings: number;
+  pendingRoomAllocation: number;
+  pendingTripCaptainAssignment: number;
+  todaysCheckins: number;
+  todaysCheckouts: number;
+  todaysTransfers: number;
+  upcomingActivities: number;
+  totalTravelersOnTour: number;
 }

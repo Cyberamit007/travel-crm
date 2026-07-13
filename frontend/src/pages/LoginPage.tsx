@@ -19,6 +19,7 @@ export default function LoginPage() {
   // Redirect if already logged in
   if (isAuthenticated && user) {
     if (user.role === 'ADMIN') navigate('/admin/dashboard', { replace: true });
+    else if (user.role === 'OPERATIONS') navigate('/operations/dashboard', { replace: true });
     else navigate('/employee/dashboard', { replace: true });
   }
 

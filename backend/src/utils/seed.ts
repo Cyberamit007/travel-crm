@@ -79,9 +79,15 @@ async function main() {
     update: { name: 'Priya Sharma', organizationId: OID },
     create: { name: 'Priya Sharma', email: 'priya@travelcrm.com', password: empPw, role: 'EMPLOYEE', phone: '+91-9876543215', organizationId: OID },
   });
+  const opsPw = await bcrypt.hash('ops123', 12);
+  const ops1 = await prisma.user.upsert({
+    where: { email: 'ops@travelcrm.com' },
+    update: { name: 'Rohan Bisht', organizationId: OID },
+    create: { name: 'Rohan Bisht', email: 'ops@travelcrm.com', password: opsPw, role: 'OPERATIONS', phone: '+91-9876543216', organizationId: OID },
+  });
 
   await prisma.user.updateMany({ where: { organizationId: null }, data: { organizationId: OID } });
-  console.log('  ~ Users ready: admin, amit, kaptan, biswas, abhay, priya');
+  console.log('  ~ Users ready: admin, amit, kaptan, biswas, abhay, priya, ops');
 
   // ── 3. Destinations ───────────────────────────────────────────────────────
   const destKed  = await upsertDestination(OID, { name: 'Kedarnath', country: 'India', state: 'Uttarakhand', type: 'DOMESTIC', isPopular: true, description: 'Sacred Shiva temple at 3,583m in the Himalayas' });
@@ -232,6 +238,43 @@ async function main() {
   }
   console.log(`  ~ ${packages.length} packages ready`);
 
+  // ── 5b. Package Itinerary (day-wise workflow template) ────────────────────
+  // Drives both Sales' BookingTask generation and Operations' DepartureTask
+  // generation — configured once per package, reused by both panels.
+  const itineraries: Record<string, Array<{ dayOffset: number; title: string; description?: string; taskType: string; department: string; sortOrder: number }>> = {
+    'pkg-kedarnath-6n7d': [
+      { dayOffset: -7, title: 'Collect traveler documents', taskType: 'COLLECT_DOCS', department: 'SALES', sortOrder: 1 },
+      { dayOffset: -3, title: 'Confirm hotel booking', taskType: 'CONFIRM_HOTEL', department: 'OPERATIONS', sortOrder: 2 },
+      { dayOffset: -2, title: 'Confirm vehicle & driver', taskType: 'CONFIRM_VEHICLE', department: 'OPERATIONS', sortOrder: 3 },
+      { dayOffset: -1, title: 'Send reminder & packing checklist', taskType: 'SEND_REMINDER', department: 'ALL', sortOrder: 4 },
+      { dayOffset: 0, title: 'Departure from Delhi', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 5 },
+      { dayOffset: 1, title: 'Arrival & hotel check-in', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 6 },
+      { dayOffset: 2, title: 'Kedarnath trek & darshan', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 7 },
+      { dayOffset: 6, title: 'Return journey to Delhi', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 8 },
+      { dayOffset: 8, title: 'Collect review & feedback', taskType: 'COLLECT_REVIEW', department: 'SALES', sortOrder: 9 },
+    ],
+    'pkg-zanskar-10n11d': [
+      { dayOffset: -10, title: 'Collect traveler documents & medical fitness', taskType: 'COLLECT_DOCS', department: 'SALES', sortOrder: 1 },
+      { dayOffset: -4, title: 'Confirm camping & permits', taskType: 'CONFIRM_HOTEL', department: 'OPERATIONS', sortOrder: 2 },
+      { dayOffset: -2, title: 'Confirm transport from Leh', taskType: 'CONFIRM_VEHICLE', department: 'OPERATIONS', sortOrder: 3 },
+      { dayOffset: -1, title: 'Send altitude sickness briefing', taskType: 'SEND_REMINDER', department: 'ALL', sortOrder: 4 },
+      { dayOffset: 0, title: 'Departure from Leh', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 5 },
+      { dayOffset: 3, title: 'Zanskar River canyon trek', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 6 },
+      { dayOffset: 6, title: 'Phuktal Monastery visit', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 7 },
+      { dayOffset: 10, title: 'Return journey to Leh', taskType: 'TRIP_DAY', department: 'OPERATIONS', sortOrder: 8 },
+    ],
+  };
+
+  let itinerariesCreated = 0;
+  for (const [packageId, items] of Object.entries(itineraries)) {
+    const existingCount = await prisma.packageItinerary.count({ where: { packageId } });
+    if (existingCount === 0) {
+      await prisma.packageItinerary.createMany({ data: items.map((i) => ({ ...i, packageId })) });
+      itinerariesCreated += items.length;
+    }
+  }
+  console.log(`  ~ ${itinerariesCreated} package itinerary steps ready`);
+
   // ── 6. Campaigns ─────────────────────────────────────────────────────────
   const campaign1 = await findOrCreateCampaign('Kedarnath July Batch', {
     name: 'Kedarnath July Batch', destination: 'Kedarnath', status: 'ACTIVE',
@@ -357,6 +400,7 @@ async function main() {
       travelerName: 'Vikram Singh', numberOfTravelers: 3, tourType: 'GIT',
       foodPreference: 'VEG', roomSharing: 'TRIPLE', departureLocation: 'Delhi',
       departurePackage: 'ZAN-10N11D-DEL', finalPrice: 66000, amountPaid: 66000,
+      packageId: 'pkg-zanskar-10n11d', departureDate: new Date(nextWeek),
     },
     {
       phone: '+91-9001122334', // Ravi Sharma — Kedarnath
@@ -364,6 +408,7 @@ async function main() {
       foodPreference: 'VEG', roomSharing: 'TRIPLE', departureLocation: 'Delhi',
       departurePackage: 'KED-6N7D-DEL', finalPrice: 60000, amountPaid: 36000,
       balanceDueDate: new Date(Date.now() + 10 * 86400000),
+      packageId: 'pkg-kedarnath-6n7d', departureDate: new Date(in2Weeks),
     },
     {
       phone: '+91-8901122335', // Nisha Patel — Char Dham
@@ -418,6 +463,7 @@ async function main() {
   ];
 
   let bookingsCreated = 0;
+  const bookingMap: Record<string, string> = {};
   for (const b of confirmedBookings) {
     const leadId = leadMap[b.phone];
     if (!leadId) continue;
@@ -426,7 +472,7 @@ async function main() {
       const paid = Number(b.amountPaid);
       const price = Number(b.finalPrice);
       const balance = Math.max(0, price - paid);
-      await prisma.booking.create({
+      const created = await prisma.booking.create({
         data: {
           leadId,
           organizationId: OID,
@@ -437,6 +483,8 @@ async function main() {
           roomSharing: b.roomSharing,
           departureLocation: b.departureLocation,
           departurePackage: b.departurePackage,
+          packageId: (b as any).packageId || null,
+          departureDate: (b as any).departureDate || null,
           finalPrice: price,
           amountPaid: paid,
           balanceAmount: balance,
@@ -445,10 +493,67 @@ async function main() {
           status: 'ACTIVE',
         },
       });
+      bookingMap[b.phone] = created.id;
       bookingsCreated++;
+    } else {
+      bookingMap[b.phone] = exists.id;
     }
   }
   console.log(`  ~ ${bookingsCreated} bookings created`);
+
+  // ── 9b. Operations demo data (Departures/Hotels/Vehicles/Travelers) ──────
+  // Mirrors what linkBookingToDeparture() does automatically at runtime when
+  // Sales confirms a booking through the app — done directly here since seeding
+  // bypasses the HTTP layer.
+  const opsDemo: Array<{ phone: string; packageId: string; destination: string; departureDate: Date; hotel: Record<string, unknown>; vehicle: Record<string, unknown> }> = [
+    {
+      phone: '+91-9655667788', packageId: 'pkg-zanskar-10n11d', destination: 'Zanskar Valley', departureDate: new Date(nextWeek),
+      hotel: { name: 'Zanskar Base Camp', location: 'Padum', numberOfRooms: 2, roomAllocation: '1 Triple, extra mattress', vendorName: 'Ladakh Camps Co.', vendorContact: '+91-9419012345', confirmationNumber: 'ZBC-2026-0714', status: 'CONFIRMED' },
+      vehicle: { vehicleType: 'Tempo Traveller', vehicleNumber: 'JK10-A-4521', driverName: 'Tenzin Norbu', driverMobile: '+91-9419098765', pickupLocation: 'Leh Bus Stand', status: 'CONFIRMED' },
+    },
+    {
+      phone: '+91-9001122334', packageId: 'pkg-kedarnath-6n7d', destination: 'Kedarnath', departureDate: new Date(in2Weeks),
+      hotel: { name: 'Hotel Mandakini Heights', location: 'Guptkashi', numberOfRooms: 3, roomAllocation: null, vendorName: 'Himalayan Stays', vendorContact: '+91-9412034567', status: 'PENDING' },
+      vehicle: { vehicleType: 'AC Bus', vehicleNumber: null, driverName: null, status: 'PENDING' },
+    },
+  ];
+
+  let departuresCreated = 0;
+  for (const d of opsDemo) {
+    const bookingId = bookingMap[d.phone];
+    if (!bookingId) continue;
+
+    let departure = await prisma.departure.findFirst({ where: { packageId: d.packageId, departureDate: d.departureDate } });
+    if (!departure) {
+      departure = await prisma.departure.create({
+        data: { organizationId: OID, packageId: d.packageId, destination: d.destination, departureDate: d.departureDate, status: 'UPCOMING' },
+      });
+      departuresCreated++;
+
+      const items = itineraries[d.packageId]?.filter((i) => i.department === 'OPERATIONS' || i.department === 'ALL') ?? [];
+      if (items.length) {
+        await prisma.departureTask.createMany({
+          data: items.map((i) => ({ departureId: departure!.id, dayOffset: i.dayOffset, title: i.title, status: 'PENDING', sortOrder: i.sortOrder })),
+        });
+      }
+      await prisma.hotel.create({ data: { departureId: departure.id, ...(d.hotel as any) } });
+      await prisma.vehicle.create({ data: { departureId: departure.id, ...(d.vehicle as any) } });
+    }
+
+    await prisma.booking.update({ where: { id: bookingId }, data: { departureId: departure.id } });
+  }
+  console.log(`  ~ ${departuresCreated} operations departures ready (with hotel/vehicle/timeline)`);
+
+  await prisma.vendor.upsert({
+    where: { id: 'vendor-himalayan-stays' },
+    update: { organizationId: OID },
+    create: { id: 'vendor-himalayan-stays', organizationId: OID, name: 'Himalayan Stays', type: 'HOTEL', contact: '+91-9412034567', notes: 'Preferred hotel vendor for Uttarakhand routes.' },
+  });
+  await prisma.vendor.upsert({
+    where: { id: 'vendor-ladakh-camps' },
+    update: { organizationId: OID },
+    create: { id: 'vendor-ladakh-camps', organizationId: OID, name: 'Ladakh Camps Co.', type: 'VEHICLE', contact: '+91-9419012345', notes: 'Camping + transport vendor for Ladakh/Zanskar treks.' },
+  });
 
   // ── 9. Activity logs ──────────────────────────────────────────────────────
   const logCount = await prisma.activityLog.count();
@@ -473,7 +578,8 @@ async function main() {
   console.log('  Kaptan:  kaptan@travelcrm.com / emp123');
   console.log('  Biswas:  biswas@travelcrm.com / emp123');
   console.log('  Abhay:   abhay@travelcrm.com  / emp123');
-  console.log('  Priya:   priya@travelcrm.com  / emp123\n');
+  console.log('  Priya:   priya@travelcrm.com  / emp123');
+  console.log('  Ops:     ops@travelcrm.com    / ops123\n');
 }
 
 main()

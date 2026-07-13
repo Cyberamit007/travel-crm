@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { generateTasksFromItinerary } from './bookingTask.controller.js';
+import { linkBookingToDeparture } from './departure.controller.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 
@@ -130,7 +131,7 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
     }
 
     // Create notification for lead assignee
-    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true } });
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true, destination: true } });
     if (lead?.assignedToId) {
       await prisma.notification.create({
         data: {
@@ -151,6 +152,17 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
         leadId,
       },
     });
+
+    // Auto-link to (or create) a Departure so this booking appears in the
+    // Operations Panel without any manual action there.
+    if (depDate) {
+      let destination = departureLocation?.trim() || lead?.destination || 'Unspecified';
+      if (packageId) {
+        const pkg = await prisma.package.findUnique({ where: { id: packageId }, include: { destination: true } });
+        if (pkg?.destination?.name) destination = pkg.destination.name;
+      }
+      await linkBookingToDeparture(booking.id, orgId(req), packageId || null, depDate, destination).catch(console.error);
+    }
 
     // Return the full booking with relations
     const fullBooking = await prisma.booking.findUnique({
@@ -227,6 +239,17 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
         leadId: existing.leadId,
       },
     });
+
+    // Re-link to a Departure if the departure date or package changed.
+    if (booking.departureDate) {
+      const leadForDest = await prisma.lead.findUnique({ where: { id: existing.leadId }, select: { destination: true } });
+      let destination = booking.departureLocation?.trim() || leadForDest?.destination || 'Unspecified';
+      if (booking.packageId) {
+        const pkg = await prisma.package.findUnique({ where: { id: booking.packageId }, include: { destination: true } });
+        if (pkg?.destination?.name) destination = pkg.destination.name;
+      }
+      await linkBookingToDeparture(booking.id, orgId(req), booking.packageId || null, booking.departureDate, destination).catch(console.error);
+    }
 
     res.json({ success: true, data: booking });
   } catch {

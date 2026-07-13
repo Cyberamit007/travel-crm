@@ -31,6 +31,10 @@ export function useRealtimeSync() {
       queryClient.invalidateQueries({ queryKey: ['leads-overdue'] });
     });
 
+    socket.on('operations_updated', () => {
+      queryClient.invalidateQueries({ queryKey: ['operations'] });
+    });
+
     socket.on('connect_error', (err) => {
       console.warn('Socket connection error:', err.message);
     });

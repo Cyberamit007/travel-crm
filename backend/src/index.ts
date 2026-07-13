@@ -12,7 +12,7 @@ import jwt from 'jsonwebtoken';
 import path from 'path';
 
 import routes from './routes/index.js';
-import { setSocketServer, sendFollowUpReminders } from './services/notification.service.js';
+import { setSocketServer, sendFollowUpReminders, sendOperationsReminders, updateDepartureStatuses } from './services/notification.service.js';
 import { runMetaSync } from './services/metaSync.service.js';
 import logger from './utils/logger.js';
 import { JWTPayload } from './types/index.js';
@@ -94,6 +94,7 @@ io.on('connection', (socket) => {
   logger.info(`Socket connected: ${user.name} (${user.id})`);
   socket.join(`user:${user.id}`);
   if (user.role === 'ADMIN') socket.join('admin');
+  if (user.role === 'OPERATIONS') socket.join('operations');
 
   socket.on('disconnect', () => {
     logger.info(`Socket disconnected: ${user.name}`);
@@ -103,6 +104,12 @@ io.on('connection', (socket) => {
 cron.schedule('*/30 * * * *', async () => {
   logger.info('Running follow-up reminder check...');
   await sendFollowUpReminders();
+});
+
+cron.schedule('*/30 * * * *', async () => {
+  logger.info('Running operations reminder check...');
+  await updateDepartureStatuses().catch((err) => logger.error('Departure status sweep error', err));
+  await sendOperationsReminders().catch((err) => logger.error('Operations reminder cron error', err));
 });
 
 cron.schedule('*/15 * * * *', async () => {

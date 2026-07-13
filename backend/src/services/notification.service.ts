@@ -58,3 +58,111 @@ export const sendFollowUpReminders = async () => {
 export const emitLeadUpdated = (leadId: string) => {
   if (io) io.emit('lead_updated', { leadId });
 };
+
+// ─── Operations Panel ────────────────────────────────────────────────────────
+
+export const emitOperationsUpdated = (departureId: string) => {
+  if (io) io.to('admin').to('operations').emit('operations_updated', { departureId });
+};
+
+export const notifyOperationsTeam = async (
+  organizationId: string | null,
+  type: string,
+  title: string,
+  message: string
+) => {
+  const team = await prisma.user.findMany({
+    where: { role: { in: ['ADMIN', 'OPERATIONS'] }, isActive: true, ...(organizationId ? { organizationId } : {}) },
+    select: { id: true },
+  });
+  for (const member of team) {
+    await createNotification(member.id, type, title, message);
+  }
+};
+
+export const sendOperationsReminders = async () => {
+  const now = new Date();
+  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
+  const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+  const dedupWindow = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  const upcomingDepartures = await prisma.departure.findMany({
+    where: { status: { in: ['UPCOMING', 'ACTIVE'] }, departureDate: { gte: startOfToday, lte: in48h } },
+    include: {
+      hotels: { select: { status: true } },
+      vehicles: { select: { status: true } },
+      bookings: { select: { balanceAmount: true } },
+    },
+  });
+
+  for (const dep of upcomingDepartures) {
+    const checks: Array<{ type: string; title: string; message: string; when: boolean }> = [
+      {
+        type: 'DEPARTURE_APPROACHING',
+        title: 'Departure Approaching',
+        message: `${dep.destination} departs ${dep.departureDate.toDateString()} — within 48 hours.`,
+        when: true,
+      },
+      {
+        type: 'HOTEL_PENDING',
+        title: 'Hotel Booking Pending',
+        message: `${dep.destination} (${dep.departureDate.toDateString()}) has no confirmed hotel yet.`,
+        when: dep.hotels.length === 0 || dep.hotels.every((h) => h.status === 'PENDING'),
+      },
+      {
+        type: 'VEHICLE_PENDING',
+        title: 'Vehicle Booking Pending',
+        message: `${dep.destination} (${dep.departureDate.toDateString()}) has no confirmed vehicle yet.`,
+        when: dep.vehicles.length === 0 || dep.vehicles.every((v) => v.status === 'PENDING'),
+      },
+      {
+        type: 'ROOM_ALLOCATION_PENDING',
+        title: 'Room Allocation Pending',
+        message: `${dep.destination} (${dep.departureDate.toDateString()}) still needs room allocation.`,
+        when: dep.hotels.length > 0 && dep.hotels.every((h) => !(h as unknown as { roomAllocation?: string }).roomAllocation),
+      },
+      {
+        type: 'TRIP_CAPTAIN_PENDING',
+        title: 'Trip Captain Not Assigned',
+        message: `${dep.destination} (${dep.departureDate.toDateString()}) has no trip captain assigned.`,
+        when: dep.tripCaptainStatus === 'UNASSIGNED',
+      },
+      {
+        type: 'PAYMENT_PENDING_OPS',
+        title: 'Customer Payment Pending',
+        message: `${dep.destination} (${dep.departureDate.toDateString()}) has travelers with pending balance.`,
+        when: dep.bookings.some((b) => b.balanceAmount > 0),
+      },
+    ];
+
+    for (const check of checks) {
+      if (!check.when) continue;
+      const alreadyNotified = await prisma.notification.findFirst({
+        where: { type: check.type, message: check.message, createdAt: { gte: dedupWindow } },
+      });
+      if (!alreadyNotified) {
+        await notifyOperationsTeam(dep.organizationId, check.type, check.title, check.message);
+      }
+    }
+  }
+};
+
+// Auto-transitions departure status based on today vs. departure/return dates —
+// keeps Active Trips / Completed Trips dashboard counts accurate without manual input.
+export const updateDepartureStatuses = async () => {
+  const now = new Date();
+  const today = new Date(now); today.setHours(0, 0, 0, 0);
+
+  await prisma.departure.updateMany({
+    where: { status: 'UPCOMING', departureDate: { lte: now } },
+    data: { status: 'ACTIVE' },
+  });
+
+  const active = await prisma.departure.findMany({ where: { status: 'ACTIVE' }, select: { id: true, departureDate: true, returnDate: true } });
+  const toComplete = active
+    .filter((d) => (d.returnDate ?? d.departureDate) < today)
+    .map((d) => d.id);
+  if (toComplete.length) {
+    await prisma.departure.updateMany({ where: { id: { in: toComplete } }, data: { status: 'COMPLETED' } });
+  }
+};

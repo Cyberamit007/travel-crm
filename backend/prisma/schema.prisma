@@ -29,6 +29,8 @@ model Organization {
   destinations  Destination[]
   tourCategories TourCategory[]
   packages      Package[]
+  departures    Departure[]
+  vendors       Vendor[]
 
   @@map("organizations")
 }
@@ -43,7 +45,7 @@ model User {
   name         String
   email        String   @unique
   password     String
-  role         String   @default("EMPLOYEE")   // ADMIN | EMPLOYEE
+  role         String   @default("EMPLOYEE")   // ADMIN | EMPLOYEE | OPERATIONS
   phone        String?
   avatar       String?
   isActive     Boolean  @default(true)
@@ -73,6 +75,9 @@ model User {
   headedDepartments   Department[]       @relation("DepartmentHead")
   recordedPayments    Payment[]          @relation("PaymentRecorder")
   assignedTasks       BookingTask[]      @relation("TaskAssignee")
+  uploadedOpsDocuments OperationsDocument[] @relation("OpsDocumentUploader")
+  opsNotes            OperationsNote[]   @relation("OpsNoteAuthor")
+  updatedDepartureTasks DepartureTask[]  @relation("DepartureTaskUpdater")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -377,7 +382,7 @@ model ActivityLog {
   id         String  @id @default(uuid())
   action     String
   details    String?
-  entityType String? // LEAD | CAMPAIGN | USER | LEAVE
+  entityType String? // LEAD | CAMPAIGN | USER | LEAVE | DEPARTURE | HOTEL | VEHICLE | VENDOR | TRAVELER
   entityId   String?
 
   user   User   @relation(fields: [userId], references: [id])
@@ -585,18 +590,53 @@ model Booking {
   salesExecutiveId String?
   opsExecutiveId   String?
 
+  departureId String?
+  departure   Departure? @relation(fields: [departureId], references: [id], onDelete: SetNull)
+
   status    String   @default("ACTIVE")  // ACTIVE | CANCELLED | COMPLETED
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   payments     Payment[]
   tasks        BookingTask[]
+  travelers    Traveler[]
 
   @@index([organizationId])
   @@index([leadId])
   @@index([packageId])
   @@index([departureDate])
+  @@index([departureId])
   @@map("bookings")
+}
+
+// ─── Travelers (individual passengers within a booking) ──────────────────────
+// Entered by Operations after a booking is confirmed — Sales only records a headcount.
+
+model Traveler {
+  id        String  @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  name                  String
+  mobile                String?
+  gender                String?   // MALE | FEMALE | OTHER
+  age                   Int?
+  seatNumber            String?
+  pickupPoint           String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  roomSharing           String?   // overrides booking.roomSharing when set: SINGLE | DOUBLE | TRIPLE | QUAD
+  foodPreference        String?   // overrides booking.foodPreference when set: VEG | NON_VEG | JAIN | NO_PREFERENCE
+  isChild               Boolean  @default(false)
+  isSeniorCitizen       Boolean  @default(false)
+  needsExtraMattress    Boolean  @default(false)
+  specialNotes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookingId])
+  @@map("travelers")
 }
 
 // ─── Packages ─────────────────────────────────────────────────────────────────
@@ -655,6 +695,7 @@ model Package {
 
   itineraryItems PackageItinerary[]
   bookings       Booking[]
+  departures     Departure[]
 
   @@index([organizationId])
   @@index([destinationId])
@@ -739,4 +780,165 @@ model BookingTask {
   @@index([dueDate])
   @@index([status])
   @@map("booking_tasks")
+}
+
+// ─── Operations Panel ──────────────────────────────────────────────────────────
+// Groups confirmed bookings that share a real-world trip departure. Created
+// automatically when Sales confirms a booking (see booking.controller.ts) —
+// Operations never creates one manually, only enriches it.
+
+model Departure {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  packageId   String?
+  package     Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  destination String                              // denormalized label for display/grouping
+  departureDate DateTime
+  returnDate    DateTime?
+
+  status String @default("UPCOMING")              // UPCOMING | ACTIVE | COMPLETED | CANCELLED
+
+  tripCaptainName   String?
+  tripCaptainPhone  String?
+  tripCaptainStatus String  @default("UNASSIGNED") // UNASSIGNED | ASSIGNED | CONFIRMED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings  Booking[]
+  hotels    Hotel[]
+  vehicles  Vehicle[]
+  documents OperationsDocument[]
+  notes     OperationsNote[]
+  timeline  DepartureTask[]
+
+  @@index([organizationId])
+  @@index([packageId])
+  @@index([departureDate])
+  @@index([status])
+  @@map("departures")
+}
+
+model Hotel {
+  id          String    @id @default(uuid())
+  departureId String
+  departure   Departure @relation(fields: [departureId], references: [id], onDelete: Cascade)
+
+  name               String
+  location           String?
+  checkInDate        DateTime?
+  checkOutDate       DateTime?
+  numberOfRooms      Int?
+  roomAllocation     String?                      // free-text summary, e.g. "5 Double, 2 Triple"
+  vendorName         String?
+  vendorContact      String?
+  confirmationNumber String?
+  status             String  @default("PENDING")  // PENDING | CONFIRMED | CANCELLED
+  voucherUrl         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departureId])
+  @@map("operations_hotels")
+}
+
+model Vehicle {
+  id          String    @id @default(uuid())
+  departureId String
+  departure   Departure @relation(fields: [departureId], references: [id], onDelete: Cascade)
+
+  vehicleType    String?
+  vehicleNumber  String?
+  driverName     String?
+  driverMobile   String?
+  pickupTime     DateTime?
+  pickupLocation String?
+  vendorName     String?
+  vendorContact  String?
+  status         String  @default("PENDING")      // PENDING | CONFIRMED | CANCELLED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departureId])
+  @@map("operations_vehicles")
+}
+
+model Vendor {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  name    String
+  type    String  @default("OTHER")  // HOTEL | VEHICLE | LOCAL_GUIDE | LOCAL_VENDOR | OTHER
+  contact String?
+  notes   String?
+  status  String  @default("ACTIVE") // ACTIVE | INACTIVE
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([type])
+  @@map("operations_vendors")
+}
+
+model OperationsDocument {
+  id          String    @id @default(uuid())
+  departureId String
+  departure   Departure @relation(fields: [departureId], references: [id], onDelete: Cascade)
+
+  name     String
+  type     String   @default("OTHER") // HOTEL_VOUCHER | VEHICLE_VOUCHER | CUSTOMER_LIST | ROOMING_LIST | TRIP_CAPTAIN_SHEET | EMERGENCY_CONTACT_LIST | VENDOR_BILL | OTHER
+  fileUrl  String
+  fileSize Int
+  mimeType String
+
+  uploadedById String
+  uploadedBy   User   @relation("OpsDocumentUploader", fields: [uploadedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([departureId])
+  @@map("operations_documents")
+}
+
+model OperationsNote {
+  id          String    @id @default(uuid())
+  departureId String
+  departure   Departure @relation(fields: [departureId], references: [id], onDelete: Cascade)
+
+  content String
+
+  authorId String
+  author   User   @relation("OpsNoteAuthor", fields: [authorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([departureId])
+  @@map("operations_notes")
+}
+
+model DepartureTask {
+  id          String    @id @default(uuid())
+  departureId String
+  departure   Departure @relation(fields: [departureId], references: [id], onDelete: Cascade)
+
+  dayOffset   Int                                 // mirrors PackageItinerary.dayOffset relative to departureDate
+  title       String
+  description String?
+  status      String  @default("PENDING")         // PENDING | IN_PROGRESS | COMPLETED
+  sortOrder   Int     @default(0)
+
+  updatedById String?
+  updatedBy   User?   @relation("DepartureTaskUpdater", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departureId])
+  @@map("departure_tasks")
 }
