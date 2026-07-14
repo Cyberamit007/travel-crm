@@ -3,7 +3,7 @@ import api from '../services/api';
 import {
   ApiResponse, PaginatedResponse, OpsDashboardStats, Departure, DepartureListItem,
   Traveler, Hotel, Vehicle, Vendor, VendorDetail, DepartureTask, OperationsDocument, OperationsNote,
-  RoomAllocationSuggestion, TravelCalendarItem, VendorDocument,
+  RoomAllocationSuggestion, TravelCalendarItem, VendorDocument, ActivityLog,
 } from '../types/index';
 import toast from 'react-hot-toast';
 
@@ -73,6 +73,14 @@ export function useUpdateDeparture(id: string) {
       toast.success('Departure updated');
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to update departure'),
+  });
+}
+
+export function useDepartureActivity(departureId: string | undefined) {
+  return useQuery<ApiResponse<ActivityLog[]>>({
+    queryKey: ['operations', 'departure', departureId, 'activity'],
+    queryFn: async () => (await api.get(`/operations/departures/${departureId}/activity`)).data,
+    enabled: !!departureId,
   });
 }
 

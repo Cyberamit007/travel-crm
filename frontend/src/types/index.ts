@@ -805,8 +805,18 @@ export interface Departure {
   timeline: DepartureTask[];
   groupSummary?: GroupSummary;
   checklist?: Checklist;
+  journeySummaries?: JourneySummary[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface JourneySummary {
+  bookingId: string;
+  leadId: string;
+  leadName: string;
+  completedCount: number;
+  totalCount: number;
+  currentStage: string | null;
 }
 
 export interface ChecklistItem {
@@ -854,6 +864,8 @@ export interface OpsDashboardStats {
   todaysTransfers: number;
   upcomingActivities: number;
   totalTravelersOnTour: number;
+  pendingTravelerVerification: number;
+  checklistProgressAvg: number;
 }
 
 // ─── Finance Panel ───────────────────────────────────────────────────────────

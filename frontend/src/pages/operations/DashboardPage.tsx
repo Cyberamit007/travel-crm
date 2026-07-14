@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   CalendarDays, CalendarClock, Plane, CheckCircle2, Users, Building2,
   Truck, BedDouble, UserCog, LogIn, LogOut, ArrowRightLeft, ListChecks,
-  Users2, Truck as TruckIcon, ArrowRight,
+  Users2, Truck as TruckIcon, ArrowRight, ShieldCheck, ClipboardCheck,
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useOpsDashboard } from '../../hooks/useOperations';
@@ -53,6 +53,8 @@ export default function OperationsDashboardPage() {
         { label: "Today's Transfers", value: stats.todaysTransfers, icon: ArrowRightLeft, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
         { label: 'Upcoming Activities', value: stats.upcomingActivities, icon: ListChecks, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
         { label: 'Total Travelers on Tour', value: stats.totalTravelersOnTour, icon: Users2, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
+        { label: 'Pending Traveler Verification', value: stats.pendingTravelerVerification, icon: ShieldCheck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
+        { label: 'Avg. Checklist Progress', value: `${stats.checklistProgressAvg}%`, icon: ClipboardCheck, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
       ]
     : [];
 

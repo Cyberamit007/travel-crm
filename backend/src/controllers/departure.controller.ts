@@ -4,6 +4,7 @@ import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { emitOperationsUpdated, notifyOperationsTeam, createNotification } from '../services/notification.service.js';
 import { generateOpsTasksFromItinerary, generateStandardOpsTasks } from './departureTask.controller.js';
+import { computeJourney } from './journey.controller.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 const orgFilter = (req: AuthenticatedRequest) => (orgId(req) ? { organizationId: orgId(req) } : {});
@@ -250,6 +251,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       activeTripBookings,
       pendingRoomAllocation,
       candidateTasks,
+      pendingTravelerVerification,
+      checklistDepartures,
     ] = await Promise.all([
       prisma.departure.count({ where: { ...orgFilter(req), departureDate: { gte: today, lte: todayEnd } } }),
       prisma.departure.count({ where: { ...orgFilter(req), departureDate: { gt: todayEnd, lte: in30 }, status: 'UPCOMING' } }),
@@ -268,6 +271,19 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         where: { status: { not: 'COMPLETED' }, departure: { ...orgFilter(req), departureDate: { gte: addDays(today, -30), lte: in30 } } },
         select: { dayOffset: true, departure: { select: { departureDate: true } } },
       }),
+      prisma.traveler.count({
+        where: { verificationStatus: { in: ['SUBMITTED', 'CORRECTION_REQUESTED'] }, booking: { departure: { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] } } } },
+      }),
+      prisma.departure.findMany({
+        where: { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] } },
+        select: {
+          hotels: { select: { status: true, roomAllocation: true } },
+          vehicles: { select: { status: true } },
+          tripCaptainStatus: true,
+          manualChecklist: true,
+          bookings: { select: { travelers: { select: { verificationStatus: true } } } },
+        },
+      }),
     ]);
 
     const upcomingActivities = candidateTasks.filter((t) => {
@@ -277,6 +293,9 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
 
     const totalTravelersToday = todaysBookings.reduce((s, b) => s + b.numberOfTravelers, 0);
     const totalTravelersOnTour = activeTripBookings.reduce((s, b) => s + b.numberOfTravelers, 0);
+    const checklistProgressAvg = checklistDepartures.length
+      ? Math.round(checklistDepartures.reduce((s, d) => s + computeChecklist(d as any).progress, 0) / checklistDepartures.length)
+      : 0;
 
     res.json({
       success: true,
@@ -289,6 +308,7 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         pendingTripCaptainAssignment: unassignedCaptains,
         todaysCheckins, todaysCheckouts, todaysTransfers: todaysVehicles,
         upcomingActivities, totalTravelersOnTour,
+        pendingTravelerVerification, checklistProgressAvg,
       },
     });
   } catch (e) {
@@ -358,8 +378,14 @@ export const getDepartureDetail = async (req: AuthenticatedRequest, res: Respons
         package: { select: { id: true, name: true, code: true, nights: true, days: true } },
         bookings: {
           include: {
-            lead: { select: { id: true, name: true, phone: true, email: true } },
+            lead: {
+              select: {
+                id: true, name: true, phone: true, email: true, status: true, createdAt: true, updatedAt: true,
+                activityLogs: { select: { action: true, createdAt: true } },
+              },
+            },
             travelers: true,
+            payments: { select: { status: true, verifiedAt: true } },
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -418,9 +444,75 @@ export const getDepartureDetail = async (req: AuthenticatedRequest, res: Respons
 
     const checklist = computeChecklist(departure);
 
-    res.json({ success: true, data: { ...departure, groupSummary, checklist } });
+    // Compact per-booking journey progress for the Trip Workspace overview —
+    // reuses the same 15-stage computation as the full Lead Journey Tracker,
+    // just without the stage-by-stage detail (that lives on the Lead page).
+    const journeySummaries = departure.bookings.map((b) => {
+      const { stages, ...summary } = computeJourney({
+        status: b.lead.status,
+        createdAt: b.lead.createdAt,
+        updatedAt: b.lead.updatedAt,
+        activityLogs: b.lead.activityLogs,
+        booking: {
+          createdAt: b.createdAt,
+          reviewSubmittedAt: b.reviewSubmittedAt,
+          referralReceivedAt: b.referralReceivedAt,
+          payments: b.payments,
+          travelers: b.travelers,
+          departure: { status: departure.status, tripCaptainStatus: departure.tripCaptainStatus, updatedAt: departure.updatedAt, hotels: departure.hotels, vehicles: departure.vehicles },
+        },
+      });
+      return { bookingId: b.id, leadId: b.lead.id, leadName: b.lead.name, ...summary };
+    });
+
+    res.json({ success: true, data: { ...departure, groupSummary, checklist, journeySummaries } });
   } catch (e) {
     console.error('[operations] getDepartureDetail error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// ─── Recent Activity feed for the Trip Workspace ─────────────────────────────
+// Aggregates ActivityLog entries across everything that belongs to this
+// departure (the departure itself, its hotels/vehicles, and its bookings'
+// travelers/leads) — no new logging plumbing, just a broader read.
+export const getDepartureActivity = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const departure = await prisma.departure.findFirst({
+      where: { id, ...orgFilter(req) },
+      select: {
+        id: true,
+        hotels: { select: { id: true } },
+        vehicles: { select: { id: true } },
+        bookings: { select: { leadId: true, travelers: { select: { id: true } } } },
+      },
+    });
+    if (!departure) { res.status(404).json({ success: false, error: 'Departure not found' }); return; }
+
+    const hotelIds = departure.hotels.map((h) => h.id);
+    const vehicleIds = departure.vehicles.map((v) => v.id);
+    const leadIds = departure.bookings.map((b) => b.leadId);
+    const travelerIds = departure.bookings.flatMap((b) => b.travelers.map((t) => t.id));
+
+    const logs = await prisma.activityLog.findMany({
+      where: {
+        OR: [
+          { entityType: 'DEPARTURE', entityId: id },
+          { entityType: 'HOTEL', entityId: { in: hotelIds } },
+          { entityType: 'VEHICLE', entityId: { in: vehicleIds } },
+          { entityType: 'TRAVELER', entityId: { in: travelerIds } },
+          { entityType: 'TRAVELER_PORTAL', leadId: { in: leadIds } },
+        ],
+      },
+      include: { user: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    });
+
+    res.json({ success: true, data: logs });
+  } catch (e) {
+    console.error('[operations] getDepartureActivity error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };

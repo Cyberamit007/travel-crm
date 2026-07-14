@@ -5,7 +5,7 @@ import {
   getDashboardStats, listDepartures, getDepartureDetail, updateDeparture,
   createTraveler, updateTraveler, deleteTraveler,
   approveTraveler, rejectTraveler, requestTravelerCorrection, regenerateTravelerPortalLink,
-  updateChecklist, suggestRoomAllocation, getTravelCalendar,
+  updateChecklist, suggestRoomAllocation, getTravelCalendar, getDepartureActivity,
 } from '../controllers/departure.controller.js';
 import { createHotel, updateHotel, deleteHotel } from '../controllers/hotel.controller.js';
 import { createVehicle, updateVehicle, deleteVehicle } from '../controllers/vehicle.controller.js';
@@ -30,6 +30,7 @@ router.get('/departures/:id', getDepartureDetail);
 router.put('/departures/:id', updateDeparture);
 router.patch('/departures/:id/checklist', updateChecklist);
 router.get('/departures/:id/room-allocation-suggestion', suggestRoomAllocation);
+router.get('/departures/:id/activity', getDepartureActivity);
 
 // Travelers (Passenger List)
 router.post('/bookings/:bookingId/travelers', createTraveler);

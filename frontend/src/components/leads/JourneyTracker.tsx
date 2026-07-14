@@ -2,6 +2,27 @@ import { Check } from 'lucide-react';
 import { Journey } from '../../types/index';
 import { formatDateTime, cn } from '../../utils/helpers';
 
+// Mirrors STAGE_LABELS in backend/src/controllers/journey.controller.ts — used
+// wherever only a stage key (not the full Journey object) is available, e.g.
+// the compact per-booking summary on the Trip Workspace.
+export const JOURNEY_STAGE_LABELS: Record<string, string> = {
+  LEAD_CREATED: 'Lead Created',
+  INTERESTED: 'Interested',
+  PACKAGE_SHARED: 'Package Shared',
+  BOOKING_CONFIRMED: 'Booking Confirmed',
+  ADVANCE_PAID: 'Advance Paid',
+  TRAVELER_DETAILS_SUBMITTED: 'Traveller Details Submitted',
+  TRAVELER_DETAILS_VERIFIED: 'Traveller Details Verified',
+  HOTEL_CONFIRMED: 'Hotel Confirmed',
+  VEHICLE_ASSIGNED: 'Vehicle Assigned',
+  ROOM_ALLOCATED: 'Room Allocated',
+  CAPTAIN_ASSIGNED: 'Captain Assigned',
+  TRIP_STARTED: 'Trip Started',
+  TRIP_COMPLETED: 'Trip Completed',
+  REVIEW_COLLECTED: 'Review Collected',
+  REFERRAL_RECEIVED: 'Referral Received',
+};
+
 interface Props {
   journey: Journey;
   onMarkReviewCollected?: () => void;

@@ -7,6 +7,8 @@ import {
 import { useDeparture, useUpdateDeparture } from '../../hooks/useOperations';
 import { Skeleton } from '../../components/ui/Skeleton';
 import Modal from '../../components/ui/Modal';
+import Tabs, { useUrlTab } from '../../components/ui/Tabs';
+import TripOverviewTab from '../../components/operations/TripOverviewTab';
 import PassengerTable from '../../components/operations/PassengerTable';
 import GroupSummaryGrid from '../../components/operations/GroupSummaryGrid';
 import HotelsTab from '../../components/operations/HotelsTab';
@@ -31,6 +33,7 @@ const CAPTAIN_STATUS_BADGE: Record<string, string> = {
 };
 
 const TABS = [
+  { key: 'overview', label: 'Overview' },
   { key: 'passengers', label: 'Passengers' },
   { key: 'summary', label: 'Group Summary' },
   { key: 'hotels', label: 'Hotels' },
@@ -91,7 +94,7 @@ export default function DepartureDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const base = location.pathname.startsWith('/admin') ? '/admin/operations' : '/operations';
-  const [tab, setTab] = useState<Tab>('passengers');
+  const [tab, setTab] = useUrlTab<Tab>(TABS, 'overview');
   const [captainModalOpen, setCaptainModalOpen] = useState(false);
 
   const { data, isLoading } = useDeparture(id);
@@ -158,14 +161,9 @@ export default function DepartureDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="tabs overflow-x-auto">
-        {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={tab === t.key ? 'tab-item-active' : 'tab-item'}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
+      {tab === 'overview' && <TripOverviewTab departure={departure} onChangeTab={(t) => setTab(t as Tab)} />}
       {tab === 'passengers' && <PassengerTable departure={departure} />}
       {tab === 'summary' && departure.groupSummary && <GroupSummaryGrid summary={departure.groupSummary} />}
       {tab === 'hotels' && <HotelsTab departureId={departure.id} hotels={departure.hotels} />}
