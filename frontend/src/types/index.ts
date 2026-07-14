@@ -594,6 +594,8 @@ export interface Traveler {
   medicalConditions?: string;
   arrivalDetails?: string;
   departureDetails?: string;
+  flightBookedByUs?: boolean | null;
+  pickupDropBookedByUs?: boolean | null;
   verificationStatus: TravelerVerificationStatus;
   verificationNote?: string;
   submittedAt?: string;

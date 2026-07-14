@@ -65,6 +65,14 @@ interface TravelerForm {
   govIdType?: string;
   govIdNumber?: string;
   medicalConditions?: string;
+  arrivalDetails?: string;
+  departureDetails?: string;
+  flightBookedByUs?: string;
+  pickupDropBookedByUs?: string;
+}
+
+function boolToSelect(v: boolean | null | undefined): string {
+  return v === true ? 'yes' : v === false ? 'no' : '';
 }
 
 function TravelerFormModal({
@@ -96,8 +104,14 @@ function TravelerFormModal({
       govIdType: defaultValues?.govIdType ?? '',
       govIdNumber: defaultValues?.govIdNumber ?? '',
       medicalConditions: defaultValues?.medicalConditions ?? '',
+      arrivalDetails: defaultValues?.arrivalDetails ?? '',
+      departureDetails: defaultValues?.departureDetails ?? '',
+      flightBookedByUs: boolToSelect(defaultValues?.flightBookedByUs),
+      pickupDropBookedByUs: boolToSelect(defaultValues?.pickupDropBookedByUs),
     },
   });
+
+  const flightBookedByUs = watch('flightBookedByUs');
 
   return (
     <Modal
@@ -235,6 +249,32 @@ function TravelerFormModal({
           </select>
         </div>
         <div>
+          <label className="label">Flight Booked By Us?</label>
+          <select {...register('flightBookedByUs')} className="input">
+            <option value="">—</option>
+            <option value="yes">Yes</option>
+            <option value="no">No — arranging own travel</option>
+          </select>
+        </div>
+        {flightBookedByUs === 'no' && (
+          <div>
+            <label className="label">Pickup &amp; Drop Opted?</label>
+            <select {...register('pickupDropBookedByUs')} className="input">
+              <option value="">—</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="label">Arrival Details</label>
+          <input {...register('arrivalDetails')} className="input" placeholder="Flight/train number, arrival time" />
+        </div>
+        <div>
+          <label className="label">Return Details</label>
+          <input {...register('departureDetails')} className="input" placeholder="Return flight/train number, time" />
+        </div>
+        <div>
           <label className="label">Emergency Contact Name</label>
           <input {...register('emergencyContactName')} className="input" />
         </div>
@@ -289,13 +329,21 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
   const regenerateLink = useRegeneratePortalLink();
 
   const handleAdd = (data: TravelerForm) => {
-    createTraveler.mutate({ bookingId: booking.id, ...data, age: data.age ? Number(data.age) : undefined } as any, {
+    createTraveler.mutate({
+      bookingId: booking.id, ...data, age: data.age ? Number(data.age) : undefined,
+      flightBookedByUs: data.flightBookedByUs === '' ? null : data.flightBookedByUs === 'yes',
+      pickupDropBookedByUs: data.pickupDropBookedByUs === '' ? null : data.pickupDropBookedByUs === 'yes',
+    } as any, {
       onSuccess: () => setAddOpen(false),
     });
   };
   const handleEdit = (data: TravelerForm) => {
     if (!editTraveler) return;
-    updateTraveler.mutate({ id: editTraveler.id, ...data, age: data.age ? Number(data.age) : undefined } as any, {
+    updateTraveler.mutate({
+      id: editTraveler.id, ...data, age: data.age ? Number(data.age) : undefined,
+      flightBookedByUs: data.flightBookedByUs === '' ? null : data.flightBookedByUs === 'yes',
+      pickupDropBookedByUs: data.pickupDropBookedByUs === '' ? null : data.pickupDropBookedByUs === 'yes',
+    } as any, {
       onSuccess: () => setEditTraveler(null),
     });
   };
@@ -389,6 +437,7 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
                     <th className="text-left px-2 py-1.5">Age</th>
                     <th className="text-left px-2 py-1.5">Seat</th>
                     <th className="text-left px-2 py-1.5">Pickup</th>
+                    <th className="text-left px-2 py-1.5">Travel</th>
                     <th className="text-left px-2 py-1.5">Emergency Contact</th>
                     <th className="text-left px-2 py-1.5">Room</th>
                     <th className="text-left px-2 py-1.5">Food</th>
@@ -412,6 +461,19 @@ function BookingCard({ booking, departureId }: { booking: DepartureBooking; depa
                       <td className="px-2 py-2 text-slate-500">{t.age ?? '—'}</td>
                       <td className="px-2 py-2 text-slate-500">{t.seatNumber || '—'}</td>
                       <td className="px-2 py-2 text-slate-500">{t.pickupPoint || '—'}</td>
+                      <td className="px-2 py-2 text-slate-500">
+                        {t.flightBookedByUs === true ? (
+                          <span className="badge bg-primary-50 text-primary-700 text-[9px]">Flight (Us)</span>
+                        ) : t.flightBookedByUs === false ? (
+                          t.pickupDropBookedByUs === true ? (
+                            <span className="badge bg-emerald-50 text-emerald-700 text-[9px]">Pickup/Drop</span>
+                          ) : t.pickupDropBookedByUs === false ? (
+                            <span className="badge badge-muted text-[9px]">Own Travel</span>
+                          ) : (
+                            <span className="badge bg-amber-50 text-amber-700 text-[9px]">Own Flight — Confirm Transfer</span>
+                          )
+                        ) : '—'}
+                      </td>
                       <td className="px-2 py-2 text-slate-500">{t.emergencyContactName ? `${t.emergencyContactName} (${t.emergencyContactPhone || '—'})` : '—'}</td>
                       <td className="px-2 py-2 text-slate-500">{t.roomSharing || booking.roomSharing}</td>
                       <td className="px-2 py-2 text-slate-500">{t.foodPreference || booking.foodPreference}</td>

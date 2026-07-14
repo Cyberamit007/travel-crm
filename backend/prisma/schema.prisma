@@ -663,6 +663,12 @@ model Traveler {
   arrivalDetails        String?   // free-text: flight/train number, arrival time
   departureDetails      String?   // free-text: return flight/train number, departure time
 
+  // Flight vs. self-arranged travel — if not flying with us, Ops needs to know
+  // whether pickup/drop transfer (usually included in the package) was opted
+  // into, so it can be reflected under inclusions and staffed for.
+  flightBookedByUs      Boolean?
+  pickupDropBookedByUs  Boolean?
+
   // Traveler Portal verification workflow — Ops reviews what the customer submits.
   verificationStatus    String    @default("PENDING") // PENDING | SUBMITTED | VERIFIED | REJECTED | CORRECTION_REQUESTED
   verificationNote      String?

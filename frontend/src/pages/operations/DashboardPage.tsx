@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   CalendarDays, CalendarClock, Plane, CheckCircle2, Users, Building2,
   Truck, BedDouble, UserCog, LogIn, LogOut, ArrowRightLeft, ListChecks,
-  Users2, Truck as TruckIcon, ArrowRight, ShieldCheck, ClipboardCheck,
+  Users2, Truck as TruckIcon, ArrowRight, ShieldCheck, ClipboardCheck, PartyPopper,
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useOpsDashboard } from '../../hooks/useOperations';
@@ -37,23 +37,42 @@ export default function OperationsDashboardPage() {
       ].filter((d) => d.value > 0)
     : [];
 
-  const cards = stats
+  // Grouped into sections with a clear purpose each, instead of one flat wall
+  // of 16 identical cards — and "Pending Actions" only shows what's actually
+  // pending, same "don't show a zero" rule as the room-type breakdown.
+  const tripStatusCards = stats
     ? [
         { label: "Today's Departures", value: stats.todaysDepartures, icon: CalendarDays, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
         { label: 'Upcoming Departures', value: stats.upcomingDepartures, icon: CalendarClock, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
         { label: 'Active Trips', value: stats.activeTrips, icon: Plane, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
         { label: 'Completed Trips', value: stats.completedTrips, icon: CheckCircle2, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
+      ]
+    : [];
+
+  const todaysOpsCards = stats
+    ? [
         { label: 'Total Travelers Today', value: stats.totalTravelersToday, icon: Users, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
+        { label: "Today's Check-ins", value: stats.todaysCheckins, icon: LogIn, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
+        { label: "Today's Check-outs", value: stats.todaysCheckouts, icon: LogOut, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
+        { label: "Today's Transfers", value: stats.todaysTransfers, icon: ArrowRightLeft, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
+      ]
+    : [];
+
+  const pendingActionCards = (stats
+    ? [
         { label: 'Pending Hotel Bookings', value: stats.pendingHotelBookings, icon: Building2, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
         { label: 'Pending Vehicle Bookings', value: stats.pendingVehicleBookings, icon: Truck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
         { label: 'Pending Room Allocation', value: stats.pendingRoomAllocation, icon: BedDouble, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
         { label: 'Pending Trip Captain', value: stats.pendingTripCaptainAssignment, icon: UserCog, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: "Today's Check-ins", value: stats.todaysCheckins, icon: LogIn, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
-        { label: "Today's Check-outs", value: stats.todaysCheckouts, icon: LogOut, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
-        { label: "Today's Transfers", value: stats.todaysTransfers, icon: ArrowRightLeft, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
-        { label: 'Upcoming Activities', value: stats.upcomingActivities, icon: ListChecks, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
-        { label: 'Total Travelers on Tour', value: stats.totalTravelersOnTour, icon: Users2, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
         { label: 'Pending Traveler Verification', value: stats.pendingTravelerVerification, icon: ShieldCheck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
+      ]
+    : []
+  ).filter((c) => c.value > 0);
+
+  const overviewCards = stats
+    ? [
+        { label: 'Total Travelers on Tour', value: stats.totalTravelersOnTour, icon: Users2, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
+        { label: 'Upcoming Activities', value: stats.upcomingActivities, icon: ListChecks, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
         { label: 'Avg. Checklist Progress', value: `${stats.checklistProgressAvg}%`, icon: ClipboardCheck, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
       ]
     : [];
@@ -78,14 +97,53 @@ export default function OperationsDashboardPage() {
 
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 14 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {cards.map((c) => (
-              <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
-            ))}
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Trip Status</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {tripStatusCards.map((c) => (
+                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Today's Operations</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {todaysOpsCards.map((c) => (
+                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Pending Actions</h3>
+            {pendingActionCards.length === 0 ? (
+              <div className="card p-5 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                  <PartyPopper className="w-4.5 h-4.5 text-emerald-600" />
+                </div>
+                <p className="text-sm font-medium text-slate-700">Nothing pending across upcoming and active trips — all caught up.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {pendingActionCards.map((c) => (
+                  <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Overview</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {overviewCards.map((c) => (
+                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -48,6 +48,12 @@ interface TravelerFormValues {
   isSeniorCitizen?: boolean;
   isChild?: boolean;
   needsExtraMattress?: boolean;
+  flightBookedByUs?: string;
+  pickupDropBookedByUs?: string;
+}
+
+function boolToSelect(v: boolean | null | undefined): string {
+  return v === true ? 'yes' : v === false ? 'no' : '';
 }
 
 function TravelerCard({ traveler, token, index }: { traveler: Traveler; token: string; index: number }) {
@@ -80,12 +86,21 @@ function TravelerCard({ traveler, token, index }: { traveler: Traveler; token: s
       isSeniorCitizen: traveler.isSeniorCitizen,
       isChild: traveler.isChild,
       needsExtraMattress: traveler.needsExtraMattress,
+      flightBookedByUs: boolToSelect(traveler.flightBookedByUs),
+      pickupDropBookedByUs: boolToSelect(traveler.pickupDropBookedByUs),
     },
   });
 
+  const flightBookedByUs = watch('flightBookedByUs');
+
   const onSubmit = (data: TravelerFormValues) => {
     if (!data.name?.trim()) return;
-    submit.mutate({ travelerId: traveler.id, ...data } as any, { onSuccess: () => setExpanded(false) });
+    submit.mutate({
+      travelerId: traveler.id,
+      ...data,
+      flightBookedByUs: data.flightBookedByUs === '' ? null : data.flightBookedByUs === 'yes',
+      pickupDropBookedByUs: data.pickupDropBookedByUs === '' ? null : data.pickupDropBookedByUs === 'yes',
+    } as any, { onSuccess: () => setExpanded(false) });
   };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -256,6 +271,29 @@ function TravelerCard({ traveler, token, index }: { traveler: Traveler; token: s
                 )}
                 {uploadDoc.isPending && <p className="text-xs text-slate-400 mt-1 flex items-center gap-1"><Upload className="w-3 h-3 animate-pulse" />Uploading…</p>}
               </div>
+              <div>
+                <label className="label">Are your flight tickets booked through us?</label>
+                <select {...register('flightBookedByUs')} className="input">
+                  <option value="">—</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No, I'm arranging my own travel</option>
+                </select>
+              </div>
+              {flightBookedByUs === 'no' && (
+                <div>
+                  <label className="label">Would you like pickup &amp; drop transfer?</label>
+                  <select {...register('pickupDropBookedByUs')} className="input">
+                    <option value="">—</option>
+                    <option value="yes">Yes, please arrange it</option>
+                    <option value="no">No, I'll arrange my own transfer</option>
+                  </select>
+                </div>
+              )}
+              {flightBookedByUs === 'no' && (
+                <div className="sm:col-span-2 text-xs bg-primary-50 border border-primary-100 text-primary-700 rounded-xl px-3.5 py-2.5">
+                  Pickup &amp; Drop transfer is included as part of your package — let us know if you'd like us to arrange it, and share your arrival/departure details below either way.
+                </div>
+              )}
               <div className="sm:col-span-2">
                 <label className="label">Arrival Details</label>
                 <input {...register('arrivalDetails')} className="input" placeholder="Flight/train number, arrival time" />

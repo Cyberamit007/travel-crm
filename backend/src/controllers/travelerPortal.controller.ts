@@ -115,6 +115,8 @@ export const submitTravelerDetails = async (req: Request, res: Response): Promis
         medicalConditions: b.medicalConditions !== undefined ? b.medicalConditions?.trim() || null : traveler.medicalConditions,
         arrivalDetails: b.arrivalDetails !== undefined ? b.arrivalDetails?.trim() || null : traveler.arrivalDetails,
         departureDetails: b.departureDetails !== undefined ? b.departureDetails?.trim() || null : traveler.departureDetails,
+        flightBookedByUs: b.flightBookedByUs !== undefined ? (b.flightBookedByUs === null ? null : !!b.flightBookedByUs) : traveler.flightBookedByUs,
+        pickupDropBookedByUs: b.pickupDropBookedByUs !== undefined ? (b.pickupDropBookedByUs === null ? null : !!b.pickupDropBookedByUs) : traveler.pickupDropBookedByUs,
         verificationStatus: 'SUBMITTED',
         verificationNote: null,
         submittedAt: new Date(),

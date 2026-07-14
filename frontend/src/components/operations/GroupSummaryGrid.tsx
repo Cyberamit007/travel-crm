@@ -7,7 +7,7 @@ import { formatCurrency } from '../../utils/helpers';
 
 export default function GroupSummaryGrid({ summary }: { summary: GroupSummary }) {
   const tiles = [
-    { label: 'Total Travelers', value: summary.totalTravelers, icon: Users, color: 'text-primary-600 bg-primary-50' },
+    { label: 'Total Travelers', value: summary.totalTravelers, icon: Users, color: 'text-primary-600 bg-primary-50', alwaysShow: true },
     { label: 'Male', value: summary.maleCount, icon: User, color: 'text-blue-600 bg-blue-50' },
     { label: 'Female', value: summary.femaleCount, icon: User, color: 'text-pink-600 bg-pink-50' },
     { label: 'Double Rooms Required', value: summary.doubleSharingRoomsRequired, icon: BedDouble, color: 'text-slate-600 bg-slate-100' },
@@ -20,12 +20,16 @@ export default function GroupSummaryGrid({ summary }: { summary: GroupSummary })
     { label: 'Children', value: summary.childrenCount, icon: Baby, color: 'text-mountain-600 bg-mountain-50' },
     { label: 'Senior Citizens', value: summary.seniorCitizenCount, icon: Accessibility, color: 'text-mountain-600 bg-mountain-50' },
     { label: 'Pending Payments', value: summary.pendingPayments, icon: AlertCircle, color: 'text-orange-600 bg-orange-50' },
-    { label: 'Total Pending Amount', value: formatCurrency(summary.totalPendingAmount), icon: IndianRupee, color: 'text-orange-600 bg-orange-50' },
+    { label: 'Total Pending Amount', value: formatCurrency(summary.totalPendingAmount), icon: IndianRupee, color: 'text-orange-600 bg-orange-50', numeric: summary.totalPendingAmount },
   ];
+
+  // Only show a breakdown tile once it actually applies to this trip — a
+  // "Triple Rooms Required: 0" tile is noise, not information.
+  const visibleTiles = tiles.filter((t) => t.alwaysShow || (t.numeric !== undefined ? t.numeric : t.value) > 0);
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-      {tiles.map((t) => {
+      {visibleTiles.map((t) => {
         const Icon = t.icon;
         return (
           <div key={t.label} className="card p-4 flex items-center gap-3">

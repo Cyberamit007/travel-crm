@@ -144,17 +144,25 @@ function computeChecklist(departure: {
 }) {
   const travelers = departure.bookings.flatMap((b) => b.travelers);
   const manual = (departure.manualChecklist ?? {}) as Record<string, boolean>;
+  const hasHotels = departure.hotels.length > 0;
+  const hasVehicles = departure.vehicles.length > 0;
 
-  const items = [
-    { key: 'hotelConfirmed', label: 'Hotel Confirmed', done: departure.hotels.length > 0 && departure.hotels.every((h) => h.status === 'CONFIRMED') },
-    { key: 'vehicleConfirmed', label: 'Vehicle Confirmed', done: departure.vehicles.length > 0 && departure.vehicles.every((v) => v.status === 'CONFIRMED') },
-    { key: 'driverAssigned', label: 'Driver Assigned', done: departure.vehicles.length > 0 && departure.vehicles.every((v) => !!v.driverName?.trim()) },
-    { key: 'roomAllocationDone', label: 'Room Allocation Done', done: departure.hotels.length > 0 && departure.hotels.every((h) => !!h.roomAllocation?.trim()) },
-    { key: 'tripCaptainConfirmed', label: 'Trip Captain Confirmed', done: departure.tripCaptainStatus === 'CONFIRMED' },
-    { key: 'travelerVerificationDone', label: 'Traveler Verification Done', done: travelers.length > 0 && travelers.every((t) => t.verificationStatus === 'VERIFIED') },
-    ...MANUAL_CHECKLIST_ITEMS.map((item) => ({ key: item.key as string, label: item.label, done: !!manual[item.key] })),
+  // "applicable: false" items are excluded from both the display and the
+  // progress total — a trip with no vehicle component should be able to
+  // reach 100%, not get stuck forever on a "Vehicle Confirmed" item that can
+  // never be satisfied. Same "don't show what doesn't apply" rule as tiles
+  // that would otherwise display a permanent zero.
+  const allItems = [
+    { key: 'hotelConfirmed', label: 'Hotel Confirmed', applicable: hasHotels, done: hasHotels && departure.hotels.every((h) => h.status === 'CONFIRMED') },
+    { key: 'vehicleConfirmed', label: 'Vehicle Confirmed', applicable: hasVehicles, done: hasVehicles && departure.vehicles.every((v) => v.status === 'CONFIRMED') },
+    { key: 'driverAssigned', label: 'Driver Assigned', applicable: hasVehicles, done: hasVehicles && departure.vehicles.every((v) => !!v.driverName?.trim()) },
+    { key: 'roomAllocationDone', label: 'Room Allocation Done', applicable: hasHotels, done: hasHotels && departure.hotels.every((h) => !!h.roomAllocation?.trim()) },
+    { key: 'tripCaptainConfirmed', label: 'Trip Captain Confirmed', applicable: true, done: departure.tripCaptainStatus === 'CONFIRMED' },
+    { key: 'travelerVerificationDone', label: 'Traveler Verification Done', applicable: travelers.length > 0, done: travelers.length > 0 && travelers.every((t) => t.verificationStatus === 'VERIFIED') },
+    ...MANUAL_CHECKLIST_ITEMS.map((item) => ({ key: item.key as string, label: item.label, applicable: true, done: !!manual[item.key] })),
   ];
 
+  const items = allItems.filter((i) => i.applicable).map(({ key, label, done }) => ({ key, label, done }));
   const completedCount = items.filter((i) => i.done).length;
   return { items, completedCount, totalCount: items.length, progress: items.length ? Math.round((completedCount / items.length) * 100) : 0 };
 }
@@ -609,6 +617,31 @@ export const updateDeparture = async (req: AuthenticatedRequest, res: Response):
 
     const { status, tripCaptainName, tripCaptainPhone, tripCaptainStatus, returnDate } = req.body;
 
+    // A trip can't start until every applicable checklist item is done —
+    // otherwise "Trip Started" becomes meaningless as a signal to the rest of
+    // the app (Journey Tracker, dashboards) that the group is actually ready.
+    if (status === 'ACTIVE' && existing.status !== 'ACTIVE') {
+      const full = await prisma.departure.findFirst({
+        where: { id },
+        include: {
+          hotels: { select: { status: true, roomAllocation: true } },
+          vehicles: { select: { status: true, driverName: true } },
+          bookings: { select: { travelers: { select: { verificationStatus: true } } } },
+        },
+      });
+      if (full) {
+        const checklist = computeChecklist(full);
+        if (checklist.progress < 100) {
+          const pending = checklist.items.filter((i) => !i.done).map((i) => i.label);
+          res.status(400).json({
+            success: false,
+            error: `Cannot start this trip — checklist isn't complete: ${pending.join(', ')}.`,
+          });
+          return;
+        }
+      }
+    }
+
     const departure = await prisma.departure.update({
       where: { id },
       data: {
@@ -651,6 +684,7 @@ export const createTraveler = async (req: AuthenticatedRequest, res: Response): 
       emergencyContactName, emergencyContactPhone, roomSharing, foodPreference,
       isChild, isSeniorCitizen, needsExtraMattress, specialNotes,
       govIdType, govIdNumber, govIdDocumentUrl, medicalConditions, arrivalDetails, departureDetails,
+      flightBookedByUs, pickupDropBookedByUs,
     } = req.body;
     if (!name?.trim()) { res.status(400).json({ success: false, error: 'Traveler name is required' }); return; }
     const validationError = validateTravelerInput(req.body);
@@ -686,6 +720,8 @@ export const createTraveler = async (req: AuthenticatedRequest, res: Response): 
         medicalConditions: medicalConditions?.trim() || null,
         arrivalDetails: arrivalDetails?.trim() || null,
         departureDetails: departureDetails?.trim() || null,
+        flightBookedByUs: flightBookedByUs === undefined ? null : (flightBookedByUs === null ? null : !!flightBookedByUs),
+        pickupDropBookedByUs: pickupDropBookedByUs === undefined ? null : (pickupDropBookedByUs === null ? null : !!pickupDropBookedByUs),
       },
     });
 
@@ -750,6 +786,8 @@ export const updateTraveler = async (req: AuthenticatedRequest, res: Response): 
         medicalConditions: b.medicalConditions !== undefined ? b.medicalConditions?.trim() || null : existing.medicalConditions,
         arrivalDetails: b.arrivalDetails !== undefined ? b.arrivalDetails?.trim() || null : existing.arrivalDetails,
         departureDetails: b.departureDetails !== undefined ? b.departureDetails?.trim() || null : existing.departureDetails,
+        flightBookedByUs: b.flightBookedByUs !== undefined ? (b.flightBookedByUs === null ? null : !!b.flightBookedByUs) : existing.flightBookedByUs,
+        pickupDropBookedByUs: b.pickupDropBookedByUs !== undefined ? (b.pickupDropBookedByUs === null ? null : !!b.pickupDropBookedByUs) : existing.pickupDropBookedByUs,
       },
     });
 

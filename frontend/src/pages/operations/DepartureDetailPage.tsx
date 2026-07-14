@@ -100,6 +100,8 @@ export default function DepartureDetailPage() {
   const { data, isLoading } = useDeparture(id);
   const departure = data?.data;
 
+  const updateStatus = useUpdateDeparture(id ?? '');
+
   if (isLoading || !departure) {
     return (
       <div className="space-y-4">
@@ -126,7 +128,18 @@ export default function DepartureDetailPage() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-xl font-bold text-slate-900">{departure.destination}</h2>
-                <span className={cn('badge', STATUS_BADGE[departure.status])}>{departure.status}</span>
+                <select
+                  value={departure.status}
+                  disabled={updateStatus.isPending}
+                  onChange={(e) => updateStatus.mutate({ status: e.target.value } as any)}
+                  title={departure.status === 'UPCOMING' ? 'Starting the trip requires every applicable checklist item to be done first' : undefined}
+                  className={cn('badge border-0 cursor-pointer pr-6', STATUS_BADGE[departure.status])}
+                >
+                  <option value="UPCOMING">UPCOMING</option>
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="COMPLETED">COMPLETED</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
               </div>
               <p className="text-sm text-slate-500 flex items-center gap-1.5 mt-1">
                 <Calendar className="w-3.5 h-3.5" />

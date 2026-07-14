@@ -5,7 +5,7 @@ import {
   LogOut, ChevronDown, Menu, X, UserCircle, Megaphone,
   MessageSquarePlus, Activity, BarChart2, Building2,
   UserCheck, Database, ChevronRight, Package, BookOpen,
-  Contact, Wallet, Map,
+  Contact, Wallet, Map, Home,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -57,16 +57,49 @@ const NAV: NavEntry[] = [
   { type: 'item', to: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
-// Derive page title from any nested level
-function resolveTitle(pathname: string): string {
+// Sub-page labels for the deeper ERP sections (Finance/Operations), which
+// otherwise all collapse to the same top-level "Finance"/"Operations" title —
+// this is what actually tells someone buried in Payment Verification where
+// they are and how to get back out.
+const SUB_LABELS: Record<string, string> = {
+  'finance/dashboard': 'Dashboard',
+  'finance/verification': 'Payment Verification',
+  'finance/ledger': 'Customer Ledger',
+  'finance/pending': 'Pending Tracker',
+  'finance/refunds': 'Refunds',
+  'finance/vendor-payments': 'Vendor Payments',
+  'finance/reports': 'Reports',
+  'operations/dashboard': 'Dashboard',
+  'operations/departures': 'Departures',
+  'operations/vendors': 'Vendors',
+};
+
+// Breadcrumb trail: Dashboard > [ERP group, if any] > [specific sub-page, if any].
+// Every admin page — however deep — is always one click from Dashboard.
+function resolveBreadcrumb(pathname: string): { label: string; to?: string }[] {
+  if (pathname === '/admin/dashboard') return [{ label: 'Dashboard' }];
+  const trail: { label: string; to?: string }[] = [{ label: 'Dashboard', to: '/admin/dashboard' }];
+
   for (const entry of NAV) {
-    if (entry.type === 'item' && pathname.startsWith(entry.to)) return entry.label;
-    if (entry.type === 'group') {
-      const match = entry.items.find((i) => pathname.startsWith(i.to));
-      if (match) return match.label;
+    if (entry.type !== 'group') continue;
+    const match = entry.items.find((i) => pathname.startsWith(i.to));
+    if (!match) continue;
+
+    trail.push({ label: match.label, to: match.to === '/admin/finance' || match.to === '/admin/operations' ? `${match.to}/dashboard` : match.to });
+
+    const rest = pathname.replace(/^\/admin\//, '');
+    if (rest.includes('/departures/')) trail.push({ label: 'Trip Detail' });
+    else if (rest.includes('/vendors/') && rest.split('/').length > 2) trail.push({ label: 'Vendor Detail' });
+    else {
+      const subLabel = SUB_LABELS[rest];
+      if (subLabel && subLabel !== match.label) trail.push({ label: subLabel });
     }
+    return trail;
   }
-  return 'Admin';
+
+  const topMatch = NAV.find((e) => e.type === 'item' && pathname.startsWith(e.to)) as Extract<NavEntry, { type: 'item' }> | undefined;
+  if (topMatch) trail.push({ label: topMatch.label });
+  return trail;
 }
 
 // ─── Sidebar Group Component ──────────────────────────────────────────────────
@@ -155,7 +188,7 @@ export default function AdminLayout() {
 
   const notifications = notifData?.data ?? [];
   const unreadCount = notifData?.meta?.unreadCount ?? 0;
-  const pageTitle = resolveTitle(location.pathname);
+  const breadcrumb = resolveBreadcrumb(location.pathname);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -275,10 +308,29 @@ export default function AdminLayout() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2">
-              <ChevronRight className="w-4 h-4 text-slate-300 hidden sm:block" />
-              <h1 className="text-base font-bold text-slate-900">{pageTitle}</h1>
-            </div>
+            {/* Breadcrumb — always starts with Dashboard, so no admin page is
+                ever more than one click from home, however deep it is. */}
+            <nav className="flex items-center gap-1.5 min-w-0 overflow-x-auto scrollbar-thin">
+              {breadcrumb.map((crumb, i) => (
+                <div key={`${crumb.label}-${i}`} className="flex items-center gap-1.5 flex-shrink-0">
+                  {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />}
+                  {crumb.to ? (
+                    <button
+                      onClick={() => navigate(crumb.to!)}
+                      className="flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-primary-600 transition-colors"
+                    >
+                      {i === 0 && <Home className="w-3.5 h-3.5" />}
+                      {crumb.label}
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+                      {i === 0 && <Home className="w-3.5 h-3.5 text-slate-400" />}
+                      {crumb.label}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </nav>
           </div>
 
           <div className="flex items-center gap-1.5">

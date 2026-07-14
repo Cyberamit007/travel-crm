@@ -40,7 +40,14 @@ export default function EmployeeLeadsPage() {
   }, [searchParams]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editLead, setEditLead] = useState<Lead | null>(null);
-  const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
+  const [detailLeadId, setDetailLeadId] = useState<string | null>(searchParams.get('id'));
+
+  // Deep-linked from elsewhere (e.g. "view lead" on My Customers) — open
+  // straight to that lead's detail instead of dropping the user on the full list.
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (id) setDetailLeadId(id);
+  }, [searchParams]);
 
   const filters = {
     page,
