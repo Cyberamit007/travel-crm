@@ -28,6 +28,41 @@ export async function generateOpsTasksFromItinerary(departureId: string, package
   await prisma.departureTask.createMany({ data: tasks });
 }
 
+// ─── Standard Ops task set ────────────────────────────────────────────────────
+// One fixed checklist of operational tasks generated for every new Departure,
+// independent of (and in addition to) any package-itinerary-driven tasks above.
+// dayOffset is a literal day count from departureDate (can be negative for
+// pre-trip prep, or positive/past the trip length for post-trip follow-up).
+function buildStandardTasks(tripDays: number): { title: string; description: string; dayOffset: number }[] {
+  const returnOffset = Math.max(tripDays - 1, 0);
+  return [
+    { title: 'Collect Traveller Details', description: 'Share the traveler portal link and follow up until every traveler has submitted their details.', dayOffset: -14 },
+    { title: 'Verify Traveller Details', description: 'Review submitted traveler details and government ID documents.', dayOffset: -10 },
+    { title: 'Confirm Hotel', description: 'Finalize and confirm hotel bookings for the group.', dayOffset: -10 },
+    { title: 'Confirm Vehicle', description: 'Finalize and confirm vehicle/transport bookings.', dayOffset: -10 },
+    { title: 'Assign Driver', description: 'Assign a driver to each vehicle for this departure.', dayOffset: -5 },
+    { title: 'Assign Guide', description: 'Assign a local guide for this departure.', dayOffset: -5 },
+    { title: 'Room Allocation', description: 'Allocate rooms across travelers by gender/family/age grouping.', dayOffset: -3 },
+    { title: 'Collect Balance Payment', description: 'Follow up with travelers who still have a pending balance.', dayOffset: -7 },
+    { title: 'Share Driver Details', description: "Share the driver's name and contact number with all travelers.", dayOffset: -1 },
+    { title: 'Final Reminder', description: 'Send a final pre-departure reminder with pickup point and time.', dayOffset: -1 },
+    { title: 'Collect Review', description: 'Request a review from travelers after their trip.', dayOffset: returnOffset + 2 },
+    { title: 'Collect Referral', description: 'Ask satisfied travelers for referrals.', dayOffset: returnOffset + 5 },
+  ];
+}
+
+export async function generateStandardOpsTasks(departureId: string, tripDays: number): Promise<void> {
+  const tasks = buildStandardTasks(tripDays).map((t, i) => ({
+    departureId,
+    dayOffset: t.dayOffset,
+    title: t.title,
+    description: t.description,
+    status: 'PENDING',
+    sortOrder: i,
+  }));
+  await prisma.departureTask.createMany({ data: tasks });
+}
+
 export const updateTaskStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;

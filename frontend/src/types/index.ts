@@ -728,8 +728,22 @@ export interface Departure {
   notes: OperationsNote[];
   timeline: DepartureTask[];
   groupSummary?: GroupSummary;
+  checklist?: Checklist;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ChecklistItem {
+  key: string;
+  label: string;
+  done: boolean;
+}
+
+export interface Checklist {
+  items: ChecklistItem[];
+  completedCount: number;
+  totalCount: number;
+  progress: number;
 }
 
 export interface DepartureListItem {

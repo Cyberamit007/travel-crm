@@ -3,7 +3,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { emitOperationsUpdated, notifyOperationsTeam, createNotification } from '../services/notification.service.js';
-import { generateOpsTasksFromItinerary } from './departureTask.controller.js';
+import { generateOpsTasksFromItinerary, generateStandardOpsTasks } from './departureTask.controller.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 const orgFilter = (req: AuthenticatedRequest) => (orgId(req) ? { organizationId: orgId(req) } : {});
@@ -68,7 +68,8 @@ export async function linkBookingToDeparture(
   organizationId: string | null,
   packageId: string | null,
   departureDate: Date,
-  destination: string
+  destination: string,
+  tripDays: number = 1
 ): Promise<string> {
   const where = packageId
     ? { organizationId, packageId, departureDate }
@@ -85,8 +86,11 @@ export async function linkBookingToDeparture(
 
   await prisma.booking.update({ where: { id: bookingId }, data: { departureId: departure.id } });
 
-  if (isNew && packageId) {
-    await generateOpsTasksFromItinerary(departure.id, packageId, departureDate).catch(console.error);
+  if (isNew) {
+    await generateStandardOpsTasks(departure.id, tripDays).catch(console.error);
+    if (packageId) {
+      await generateOpsTasksFromItinerary(departure.id, packageId, departureDate).catch(console.error);
+    }
   }
 
   await notifyOperationsTeam(
@@ -99,6 +103,64 @@ export async function linkBookingToDeparture(
 
   return departure.id;
 }
+
+// ─── Checklist Engine ─────────────────────────────────────────────────────────
+// Most items are computed live from existing fields — never stored — so they
+// can never drift out of sync. Only the handful with no natural backing field
+// (physical prep, not data the app already tracks) are persisted, in
+// Departure.manualChecklist.
+const MANUAL_CHECKLIST_ITEMS = [
+  { key: 'welcomeKitReady', label: 'Welcome Kit Ready' },
+  { key: 'passengerListPrinted', label: 'Passenger List Printed' },
+  { key: 'emergencyContactsReady', label: 'Emergency Contacts Ready' },
+  { key: 'medicalKitReady', label: 'Medical Kit Ready' },
+] as const;
+const MANUAL_CHECKLIST_KEYS = new Set(MANUAL_CHECKLIST_ITEMS.map((i) => i.key));
+
+function computeChecklist(departure: {
+  hotels: { status: string; roomAllocation: string | null }[];
+  vehicles: { status: string; driverName: string | null }[];
+  tripCaptainStatus: string;
+  manualChecklist: unknown;
+  bookings: { travelers: { verificationStatus: string }[] }[];
+}) {
+  const travelers = departure.bookings.flatMap((b) => b.travelers);
+  const manual = (departure.manualChecklist ?? {}) as Record<string, boolean>;
+
+  const items = [
+    { key: 'hotelConfirmed', label: 'Hotel Confirmed', done: departure.hotels.length > 0 && departure.hotels.every((h) => h.status === 'CONFIRMED') },
+    { key: 'vehicleConfirmed', label: 'Vehicle Confirmed', done: departure.vehicles.length > 0 && departure.vehicles.every((v) => v.status === 'CONFIRMED') },
+    { key: 'driverAssigned', label: 'Driver Assigned', done: departure.vehicles.length > 0 && departure.vehicles.every((v) => !!v.driverName?.trim()) },
+    { key: 'roomAllocationDone', label: 'Room Allocation Done', done: departure.hotels.length > 0 && departure.hotels.every((h) => !!h.roomAllocation?.trim()) },
+    { key: 'tripCaptainConfirmed', label: 'Trip Captain Confirmed', done: departure.tripCaptainStatus === 'CONFIRMED' },
+    { key: 'travelerVerificationDone', label: 'Traveler Verification Done', done: travelers.length > 0 && travelers.every((t) => t.verificationStatus === 'VERIFIED') },
+    ...MANUAL_CHECKLIST_ITEMS.map((item) => ({ key: item.key as string, label: item.label, done: !!manual[item.key] })),
+  ];
+
+  const completedCount = items.filter((i) => i.done).length;
+  return { items, completedCount, totalCount: items.length, progress: items.length ? Math.round((completedCount / items.length) * 100) : 0 };
+}
+
+export const updateChecklist = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const departure = await prisma.departure.findFirst({ where: { id, ...orgFilter(req) } });
+    if (!departure) { res.status(404).json({ success: false, error: 'Departure not found' }); return; }
+
+    const current = (departure.manualChecklist ?? {}) as Record<string, boolean>;
+    const next = { ...current };
+    for (const [key, value] of Object.entries(req.body as Record<string, unknown>)) {
+      if (MANUAL_CHECKLIST_KEYS.has(key as any)) next[key] = !!value;
+    }
+
+    const updated = await prisma.departure.update({ where: { id }, data: { manualChecklist: next } });
+    emitOperationsUpdated(id);
+    res.json({ success: true, data: updated.manualChecklist });
+  } catch (e) {
+    console.error('[operations] updateChecklist error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
 
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 function endOfDay(d: Date) { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; }
@@ -294,7 +356,9 @@ export const getDepartureDetail = async (req: AuthenticatedRequest, res: Respons
       pendingPayments, totalPendingAmount,
     };
 
-    res.json({ success: true, data: { ...departure, groupSummary } });
+    const checklist = computeChecklist(departure);
+
+    res.json({ success: true, data: { ...departure, groupSummary, checklist } });
   } catch (e) {
     console.error('[operations] getDepartureDetail error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });

@@ -5,6 +5,7 @@ import {
   getDashboardStats, listDepartures, getDepartureDetail, updateDeparture,
   createTraveler, updateTraveler, deleteTraveler,
   approveTraveler, rejectTraveler, requestTravelerCorrection, regenerateTravelerPortalLink,
+  updateChecklist,
 } from '../controllers/departure.controller.js';
 import { createHotel, updateHotel, deleteHotel } from '../controllers/hotel.controller.js';
 import { createVehicle, updateVehicle, deleteVehicle } from '../controllers/vehicle.controller.js';
@@ -23,6 +24,7 @@ router.get('/dashboard', getDashboardStats);
 router.get('/departures', listDepartures);
 router.get('/departures/:id', getDepartureDetail);
 router.put('/departures/:id', updateDeparture);
+router.patch('/departures/:id/checklist', updateChecklist);
 
 // Travelers (Passenger List)
 router.post('/bookings/:bookingId/travelers', createTraveler);

@@ -67,6 +67,18 @@ export function useUpdateDeparture(id: string) {
   });
 }
 
+export function useUpdateChecklist(departureId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (updates: Record<string, boolean>) =>
+      (await api.patch(`/operations/departures/${departureId}/checklist`, updates)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operations', 'departure', departureId] });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to update checklist'),
+  });
+}
+
 // ─── Travelers (Passenger List) ─────────────────────────────────────────────────
 
 export function useCreateTraveler(departureId: string) {

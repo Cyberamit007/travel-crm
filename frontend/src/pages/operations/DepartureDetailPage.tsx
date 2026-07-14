@@ -12,6 +12,7 @@ import GroupSummaryGrid from '../../components/operations/GroupSummaryGrid';
 import HotelsTab from '../../components/operations/HotelsTab';
 import VehiclesTab from '../../components/operations/VehiclesTab';
 import TimelineTab from '../../components/operations/TimelineTab';
+import ChecklistTab from '../../components/operations/ChecklistTab';
 import DocumentsTab from '../../components/operations/DocumentsTab';
 import NotesTab from '../../components/operations/NotesTab';
 import { cn } from '../../utils/helpers';
@@ -35,6 +36,7 @@ const TABS = [
   { key: 'hotels', label: 'Hotels' },
   { key: 'vehicles', label: 'Vehicles' },
   { key: 'timeline', label: 'Timeline' },
+  { key: 'checklist', label: 'Checklist' },
   { key: 'documents', label: 'Documents' },
   { key: 'notes', label: 'Notes' },
 ] as const;
@@ -169,6 +171,7 @@ export default function DepartureDetailPage() {
       {tab === 'hotels' && <HotelsTab departureId={departure.id} hotels={departure.hotels} />}
       {tab === 'vehicles' && <VehiclesTab departureId={departure.id} vehicles={departure.vehicles} />}
       {tab === 'timeline' && <TimelineTab departureId={departure.id} timeline={departure.timeline} />}
+      {tab === 'checklist' && <ChecklistTab departureId={departure.id} checklist={departure.checklist} />}
       {tab === 'documents' && <DocumentsTab departureId={departure.id} documents={departure.documents} />}
       {tab === 'notes' && <NotesTab departureId={departure.id} notes={departure.notes} />}
 

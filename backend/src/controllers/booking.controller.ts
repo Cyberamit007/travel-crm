@@ -170,11 +170,13 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
     // Operations Panel without any manual action there.
     if (depDate) {
       let destination = departureLocation?.trim() || lead?.destination || 'Unspecified';
+      let tripDays = 1;
       if (packageId) {
         const pkg = await prisma.package.findUnique({ where: { id: packageId }, include: { destination: true } });
         if (pkg?.destination?.name) destination = pkg.destination.name;
+        if (pkg?.days) tripDays = pkg.days;
       }
-      await linkBookingToDeparture(booking.id, orgId(req), packageId || null, depDate, destination).catch(console.error);
+      await linkBookingToDeparture(booking.id, orgId(req), packageId || null, depDate, destination, tripDays).catch(console.error);
     }
 
     // Materialize the headcount into real per-traveler placeholder records,
@@ -272,11 +274,13 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
     if (booking.departureDate) {
       const leadForDest = await prisma.lead.findUnique({ where: { id: existing.leadId }, select: { destination: true } });
       let destination = booking.departureLocation?.trim() || leadForDest?.destination || 'Unspecified';
+      let tripDays = 1;
       if (booking.packageId) {
         const pkg = await prisma.package.findUnique({ where: { id: booking.packageId }, include: { destination: true } });
         if (pkg?.destination?.name) destination = pkg.destination.name;
+        if (pkg?.days) tripDays = pkg.days;
       }
-      await linkBookingToDeparture(booking.id, orgId(req), booking.packageId || null, booking.departureDate, destination).catch(console.error);
+      await linkBookingToDeparture(booking.id, orgId(req), booking.packageId || null, booking.departureDate, destination, tripDays).catch(console.error);
     }
 
     // Top up traveler placeholders if the headcount grew, and back-fill a
