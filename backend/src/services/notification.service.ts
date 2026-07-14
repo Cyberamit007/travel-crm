@@ -11,10 +11,11 @@ export const createNotification = async (
   type: string,
   title: string,
   message: string,
-  leadId?: string
+  leadId?: string,
+  departureId?: string
 ) => {
   const notification = await prisma.notification.create({
-    data: { userId, type, title, message, leadId },
+    data: { userId, type, title, message, leadId, departureId },
   });
   if (io) io.to(`user:${userId}`).emit('notification', notification);
   return notification;
@@ -69,14 +70,15 @@ export const notifyOperationsTeam = async (
   organizationId: string | null,
   type: string,
   title: string,
-  message: string
+  message: string,
+  departureId?: string
 ) => {
   const team = await prisma.user.findMany({
     where: { role: { in: ['ADMIN', 'OPERATIONS'] }, isActive: true, ...(organizationId ? { organizationId } : {}) },
     select: { id: true },
   });
   for (const member of team) {
-    await createNotification(member.id, type, title, message);
+    await createNotification(member.id, type, title, message, undefined, departureId);
   }
 };
 
@@ -141,7 +143,7 @@ export const sendOperationsReminders = async () => {
         where: { type: check.type, message: check.message, createdAt: { gte: dedupWindow } },
       });
       if (!alreadyNotified) {
-        await notifyOperationsTeam(dep.organizationId, check.type, check.title, check.message);
+        await notifyOperationsTeam(dep.organizationId, check.type, check.title, check.message, dep.id);
       }
     }
   }
@@ -177,14 +179,15 @@ export const notifyFinanceTeam = async (
   organizationId: string | null,
   type: string,
   title: string,
-  message: string
+  message: string,
+  departureId?: string
 ) => {
   const team = await prisma.user.findMany({
     where: { role: { in: ['ADMIN', 'FINANCE'] }, isActive: true, ...(organizationId ? { organizationId } : {}) },
     select: { id: true },
   });
   for (const member of team) {
-    await createNotification(member.id, type, title, message);
+    await createNotification(member.id, type, title, message, undefined, departureId);
   }
 };
 
@@ -204,7 +207,7 @@ export const sendFinanceReminders = async () => {
       where: { type: 'OVERDUE_CUSTOMER_PAYMENT', message, createdAt: { gte: dedupWindow } },
     });
     if (!alreadyNotified) {
-      await notifyFinanceTeam(b.organizationId, 'OVERDUE_CUSTOMER_PAYMENT', 'Overdue Customer Payment', message);
+      await notifyFinanceTeam(b.organizationId, 'OVERDUE_CUSTOMER_PAYMENT', 'Overdue Customer Payment', message, b.departureId ?? undefined);
     }
   }
 
@@ -219,7 +222,7 @@ export const sendFinanceReminders = async () => {
       where: { type: 'VENDOR_PAYMENT_DUE', message, createdAt: { gte: dedupWindow } },
     });
     if (!alreadyNotified) {
-      await notifyFinanceTeam(vp.organizationId, 'VENDOR_PAYMENT_DUE', 'Vendor Payment Due', message);
+      await notifyFinanceTeam(vp.organizationId, 'VENDOR_PAYMENT_DUE', 'Vendor Payment Due', message, vp.departureId ?? undefined);
     }
   }
 };

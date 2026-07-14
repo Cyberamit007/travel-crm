@@ -80,7 +80,7 @@ export const updateHotel = async (req: AuthenticatedRequest, res: Response): Pro
     });
     emitOperationsUpdated(existing.departureId);
     if (wasPending && hotel.status === 'CONFIRMED') {
-      await notifyOperationsTeam(existing.departure.organizationId, 'HOTEL_CONFIRMED', 'Hotel Confirmed', `Hotel "${hotel.name}" confirmed for ${existing.departure.destination}`);
+      await notifyOperationsTeam(existing.departure.organizationId, 'HOTEL_CONFIRMED', 'Hotel Confirmed', `Hotel "${hotel.name}" confirmed for ${existing.departure.destination}`, existing.departureId);
     }
 
     res.json({ success: true, data: hotel });

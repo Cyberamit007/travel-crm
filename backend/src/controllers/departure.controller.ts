@@ -115,7 +115,8 @@ export async function linkBookingToDeparture(
     organizationId,
     'NEW_CONFIRMED_BOOKING',
     'New Confirmed Booking',
-    `${destination} — departure on ${departureDate.toDateString()} has a new confirmed booking.`
+    `${destination} — departure on ${departureDate.toDateString()} has a new confirmed booking.`,
+    departure.id
   );
   emitOperationsUpdated(departure.id);
 

@@ -71,7 +71,7 @@ export const updateVehicle = async (req: AuthenticatedRequest, res: Response): P
     });
     emitOperationsUpdated(existing.departureId);
     if (wasPending && vehicle.status === 'CONFIRMED') {
-      await notifyOperationsTeam(existing.departure.organizationId, 'VEHICLE_CONFIRMED', 'Vehicle Confirmed', `Vehicle confirmed for ${existing.departure.destination}`);
+      await notifyOperationsTeam(existing.departure.organizationId, 'VEHICLE_CONFIRMED', 'Vehicle Confirmed', `Vehicle confirmed for ${existing.departure.destination}`, existing.departureId);
     }
 
     res.json({ success: true, data: vehicle });

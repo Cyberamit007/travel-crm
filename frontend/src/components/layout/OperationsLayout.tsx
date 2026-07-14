@@ -156,10 +156,15 @@ export default function OperationsLayout() {
                       notifications.map((n) => (
                         <div
                           key={n.id}
-                          onClick={() => { if (!n.isRead) markOneRead.mutate(n.id); }}
+                          onClick={() => {
+                            if (!n.isRead) markOneRead.mutate(n.id);
+                            setNotifOpen(false);
+                            if (n.departureId) navigate(`/operations/departures/${n.departureId}`);
+                          }}
                           className={cn(
                             'px-4 py-3 border-b border-slate-100 last:border-0 transition-colors',
-                            !n.isRead ? 'bg-primary-50 hover:bg-primary-100 cursor-pointer' : 'hover:bg-slate-50'
+                            n.departureId && 'cursor-pointer',
+                            !n.isRead ? 'bg-primary-50 hover:bg-primary-100' : 'hover:bg-slate-50'
                           )}
                         >
                           <div className="flex items-start gap-2">

@@ -130,7 +130,8 @@ export const submitTravelerDetails = async (req: Request, res: Response): Promis
       booking.organizationId,
       'TRAVELER_SUBMITTED',
       'Traveler Details Submitted',
-      `${updated.name} submitted their details for ${booking.lead.name}'s booking — pending verification.`
+      `${updated.name} submitted their details for ${booking.lead.name}'s booking — pending verification.`,
+      booking.departureId ?? undefined
     );
 
     res.json({ success: true, data: updated });

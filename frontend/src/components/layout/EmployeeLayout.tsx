@@ -162,10 +162,15 @@ export default function EmployeeLayout() {
                       notifications.map((n) => (
                         <div
                           key={n.id}
-                          onClick={() => { if (!n.isRead) markOneRead.mutate(n.id); }}
+                          onClick={() => {
+                            if (!n.isRead) markOneRead.mutate(n.id);
+                            setNotifOpen(false);
+                            if (n.leadId) navigate(`/employee/leads?id=${n.leadId}`);
+                          }}
                           className={cn(
                             'px-4 py-3 border-b border-slate-100 last:border-0 transition-colors',
-                            !n.isRead ? 'bg-primary-50 hover:bg-primary-100 cursor-pointer' : 'hover:bg-slate-50'
+                            n.leadId && 'cursor-pointer',
+                            !n.isRead ? 'bg-primary-50 hover:bg-primary-100' : 'hover:bg-slate-50'
                           )}
                         >
                           <div className="flex items-start gap-2">

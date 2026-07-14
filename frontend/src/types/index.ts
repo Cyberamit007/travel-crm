@@ -179,6 +179,7 @@ export interface Notification {
   userId: string;
   leadId?: string;
   lead?: Pick<Lead, 'id' | 'name'>;
+  departureId?: string;
   createdAt: string;
 }
 

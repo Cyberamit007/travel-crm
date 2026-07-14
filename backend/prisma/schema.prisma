@@ -378,6 +378,11 @@ model Notification {
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
   leadId String?
 
+  // Lets a click on the notification bell jump straight to the relevant trip
+  // instead of only marking the notification read.
+  departure   Departure? @relation(fields: [departureId], references: [id], onDelete: SetNull)
+  departureId String?
+
   createdAt DateTime @default(now())
 
   @@index([userId, isRead])
@@ -876,6 +881,7 @@ model Departure {
   notes     OperationsNote[]
   timeline  DepartureTask[]
   vendorPayments VendorPayment[]
+  notifications  Notification[]
 
   @@index([organizationId])
   @@index([packageId])
