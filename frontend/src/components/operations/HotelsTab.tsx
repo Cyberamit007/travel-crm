@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Building2, Plus, Pencil, Trash2, MapPin, Phone, FileCheck } from 'lucide-react';
-import { useCreateHotel, useUpdateHotel, useDeleteHotel } from '../../hooks/useOperations';
+import { Building2, Plus, Pencil, Trash2, MapPin, Phone, FileCheck, Wand2 } from 'lucide-react';
+import { useCreateHotel, useUpdateHotel, useDeleteHotel, useRoomAllocationSuggestion } from '../../hooks/useOperations';
 import { Hotel } from '../../types/index';
 import Modal from '../ui/Modal';
 import { formatDate, cn } from '../../utils/helpers';
@@ -95,10 +95,71 @@ function HotelFormModal({ open, onClose, defaultValues, onSubmit, isLoading }: {
   );
 }
 
+function RoomAllocationModal({ open, onClose, departureId, hotels }: {
+  open: boolean; onClose: () => void; departureId: string; hotels: Hotel[];
+}) {
+  const { data, isFetching, refetch } = useRoomAllocationSuggestion(departureId);
+  const updateHotel = useUpdateHotel(departureId);
+  const [hotelId, setHotelId] = useState(hotels[0]?.id ?? '');
+  const [text, setText] = useState('');
+
+  useEffect(() => { if (open) refetch(); }, [open]);
+  useEffect(() => { if (data?.data) setText(data.data.summaryText); }, [data]);
+
+  const rooms = data?.data.rooms ?? [];
+
+  return (
+    <Modal
+      open={open} onClose={onClose} title="Suggested Room Allocation" size="lg"
+      footer={<>
+        <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+        <button
+          onClick={() => hotelId && updateHotel.mutate({ id: hotelId, roomAllocation: text } as any, { onSuccess: onClose })}
+          disabled={!hotelId || !text.trim() || updateHotel.isPending}
+          className="btn-primary"
+        >
+          {updateHotel.isPending ? 'Applying…' : 'Apply to Hotel'}
+        </button>
+      </>}
+    >
+      {isFetching ? (
+        <p className="text-sm text-slate-400">Generating suggestion…</p>
+      ) : rooms.length === 0 ? (
+        <p className="text-sm text-slate-400">No traveler details available yet to suggest rooms from.</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="space-y-1.5 max-h-64 overflow-y-auto">
+            {rooms.map((r) => (
+              <div key={r.roomNumber} className="flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-100 text-sm">
+                <span className="font-semibold text-slate-700 flex-shrink-0">Room {r.roomNumber}</span>
+                <span className="text-slate-500 flex-shrink-0">({r.roomType})</span>
+                <span className="text-slate-600 flex-1">{r.travelerNames.join(', ')}</span>
+                {r.note && <span className="text-amber-600 text-xs flex-shrink-0">{r.note}</span>}
+              </div>
+            ))}
+          </div>
+          <div>
+            <label className="label">Apply to Hotel</label>
+            <select value={hotelId} onChange={(e) => setHotelId(e.target.value)} className="input">
+              {hotels.length === 0 && <option value="">Add a hotel first</option>}
+              {hotels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Room Allocation Summary (editable before saving)</label>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} className="input font-mono text-xs" />
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export default function HotelsTab({ departureId, hotels }: { departureId: string; hotels: Hotel[] }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editHotel, setEditHotel] = useState<Hotel | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [allocationOpen, setAllocationOpen] = useState(false);
 
   const createHotel = useCreateHotel(departureId);
   const updateHotel = useUpdateHotel(departureId);
@@ -106,9 +167,14 @@ export default function HotelsTab({ departureId, hotels }: { departureId: string
 
   return (
     <div className="space-y-4">
-      <button onClick={() => setAddOpen(true)} className="btn-primary text-sm">
-        <Plus className="w-4 h-4" />Add Hotel
-      </button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button onClick={() => setAddOpen(true)} className="btn-primary text-sm">
+          <Plus className="w-4 h-4" />Add Hotel
+        </button>
+        <button onClick={() => setAllocationOpen(true)} className="btn-secondary text-sm">
+          <Wand2 className="w-4 h-4" />Suggest Room Allocation
+        </button>
+      </div>
 
       {hotels.length === 0 ? (
         <div className="empty-state">
@@ -165,6 +231,8 @@ export default function HotelsTab({ departureId, hotels }: { departureId: string
       >
         <p className="text-sm text-slate-600">Remove this hotel from the departure?</p>
       </Modal>
+
+      <RoomAllocationModal open={allocationOpen} onClose={() => setAllocationOpen(false)} departureId={departureId} hotels={hotels} />
     </div>
   );
 }

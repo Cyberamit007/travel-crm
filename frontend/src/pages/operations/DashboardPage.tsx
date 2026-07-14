@@ -8,6 +8,7 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveCo
 import { useOpsDashboard } from '../../hooks/useOperations';
 import StatsCard from '../../components/ui/StatsCard';
 import { Skeleton } from '../../components/ui/Skeleton';
+import TravelCalendarWidget from '../../components/operations/TravelCalendarWidget';
 
 const PENDING_COLORS = ['#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444'];
 
@@ -86,6 +87,7 @@ export default function OperationsDashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <TravelCalendarWidget />
             <div className="card p-5">
               <h3 className="font-semibold text-slate-800 mb-4 text-sm">Departures Overview</h3>
               <ResponsiveContainer width="100%" height={220}>

@@ -5,11 +5,14 @@ import {
   getDashboardStats, listDepartures, getDepartureDetail, updateDeparture,
   createTraveler, updateTraveler, deleteTraveler,
   approveTraveler, rejectTraveler, requestTravelerCorrection, regenerateTravelerPortalLink,
-  updateChecklist,
+  updateChecklist, suggestRoomAllocation, getTravelCalendar,
 } from '../controllers/departure.controller.js';
 import { createHotel, updateHotel, deleteHotel } from '../controllers/hotel.controller.js';
 import { createVehicle, updateVehicle, deleteVehicle } from '../controllers/vehicle.controller.js';
-import { listVendors, createVendor, updateVendor, deleteVendor } from '../controllers/vendor.controller.js';
+import {
+  listVendors, createVendor, updateVendor, deleteVendor,
+  getVendorDetail, uploadVendorDocument, deleteVendorDocument,
+} from '../controllers/vendor.controller.js';
 import { updateTaskStatus, createTask } from '../controllers/departureTask.controller.js';
 import { uploadDocument, deleteDocument } from '../controllers/opsDocument.controller.js';
 import { createNote, deleteNote } from '../controllers/opsNote.controller.js';
@@ -19,12 +22,14 @@ router.use(authenticate, requireOperationsOrAdmin);
 
 // Dashboard
 router.get('/dashboard', getDashboardStats);
+router.get('/calendar', getTravelCalendar);
 
 // Departures
 router.get('/departures', listDepartures);
 router.get('/departures/:id', getDepartureDetail);
 router.put('/departures/:id', updateDeparture);
 router.patch('/departures/:id/checklist', updateChecklist);
+router.get('/departures/:id/room-allocation-suggestion', suggestRoomAllocation);
 
 // Travelers (Passenger List)
 router.post('/bookings/:bookingId/travelers', createTraveler);
@@ -50,8 +55,11 @@ router.delete('/vehicles/:id', deleteVehicle);
 // Vendors
 router.get('/vendors', listVendors);
 router.post('/vendors', createVendor);
+router.get('/vendors/:id', getVendorDetail);
 router.put('/vendors/:id', updateVendor);
 router.delete('/vendors/:id', deleteVendor);
+router.post('/vendors/:vendorId/documents', upload.single('file'), uploadVendorDocument);
+router.delete('/vendor-documents/:id', deleteVendorDocument);
 
 // Day-wise timeline tasks
 router.post('/departures/:departureId/tasks', createTask);

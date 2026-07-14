@@ -166,6 +166,66 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
 function endOfDay(d: Date) { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; }
 function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 
+// ─── Travel Calendar + Countdown widgets ─────────────────────────────────────
+// Pure read over existing Departure rows, bucketed by date — no new schema.
+// Each entry doubles as countdown-widget data (daysUntil) and calendar-widget
+// data (bucket), so the frontend can drive both from one call.
+export const getTravelCalendar = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const today = startOfDay(new Date());
+    const tomorrow = addDays(today, 1);
+    const in7 = addDays(today, 7);
+    const in30 = addDays(today, 30);
+    const monthStart = today;
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const departures = await prisma.departure.findMany({
+      where: {
+        ...orgFilter(req),
+        status: { in: ['UPCOMING', 'ACTIVE'] },
+        OR: [{ departureDate: { gte: today, lte: in30 } }, { returnDate: { gte: today, lte: in30 } }],
+      },
+      select: {
+        id: true, destination: true, departureDate: true, returnDate: true, status: true,
+        package: { select: { name: true } },
+        bookings: { select: { numberOfTravelers: true } },
+      },
+      orderBy: { departureDate: 'asc' },
+    });
+
+    const dayMs = 86400000;
+    const items = departures.map((d) => {
+      const daysUntilDeparture = Math.round((startOfDay(d.departureDate).getTime() - today.getTime()) / dayMs);
+      const daysUntilReturn = d.returnDate ? Math.round((startOfDay(d.returnDate).getTime() - today.getTime()) / dayMs) : null;
+      let bucket: string;
+      if (d.status === 'ACTIVE') bucket = 'IN_PROGRESS';
+      else if (d.departureDate >= today && d.departureDate < tomorrow) bucket = 'TODAY';
+      else if (d.departureDate >= tomorrow && d.departureDate < addDays(tomorrow, 1)) bucket = 'TOMORROW';
+      else if (d.departureDate >= today && d.departureDate <= in7) bucket = 'THIS_WEEK';
+      else if (d.departureDate >= today && d.departureDate <= monthEnd) bucket = 'THIS_MONTH';
+      else bucket = 'LATER';
+
+      return {
+        id: d.id,
+        destination: d.destination,
+        packageName: d.package?.name ?? null,
+        departureDate: d.departureDate,
+        returnDate: d.returnDate,
+        status: d.status,
+        totalTravelers: d.bookings.reduce((s, b) => s + b.numberOfTravelers, 0),
+        daysUntilDeparture,
+        daysUntilReturn,
+        bucket,
+      };
+    });
+
+    res.json({ success: true, data: { items, range: { from: monthStart, to: monthEnd } } });
+  } catch (e) {
+    console.error('[operations] getTravelCalendar error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 // ─── Dashboard ─────────────────────────────────────────────────────────────────
 
 export const getDashboardStats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -361,6 +421,71 @@ export const getDepartureDetail = async (req: AuthenticatedRequest, res: Respons
     res.json({ success: true, data: { ...departure, groupSummary, checklist } });
   } catch (e) {
     console.error('[operations] getDepartureDetail error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// ─── Room Allocation Engine ───────────────────────────────────────────────────
+// Pure suggestion, never persisted here — Ops reviews and applies it (or an
+// edited version of it) via the existing Hotel.roomAllocation field on
+// whichever hotel they choose. Grouped per-booking first (a booking is
+// assumed to be one travelling party), then bucketed by room-sharing
+// preference and gender within that booking — children stay bucketed with
+// the rest of their booking's party rather than split out by gender.
+const ROOM_CAPACITY: Record<string, number> = { SINGLE: 1, DOUBLE: 2, TRIPLE: 3, QUAD: 4 };
+
+export const suggestRoomAllocation = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const departure = await prisma.departure.findFirst({
+      where: { id, ...orgFilter(req) },
+      include: { bookings: { include: { travelers: true } } },
+    });
+    if (!departure) { res.status(404).json({ success: false, error: 'Departure not found' }); return; }
+
+    const rooms: {
+      roomNumber: number; roomType: string; bookingId: string;
+      travelerIds: string[]; travelerNames: string[]; note: string | null;
+    }[] = [];
+    let roomNumber = 1;
+
+    for (const booking of departure.bookings) {
+      if (booking.travelers.length === 0) continue;
+
+      const buckets = new Map<string, typeof booking.travelers>();
+      for (const t of booking.travelers) {
+        const roomType = t.roomSharing || booking.roomSharing;
+        const genderKey = t.isChild ? 'FAMILY' : (t.gender || 'UNSPECIFIED');
+        const key = `${roomType}:${genderKey}`;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key)!.push(t);
+      }
+
+      for (const [key, group] of buckets) {
+        const roomType = key.split(':')[0];
+        const capacity = ROOM_CAPACITY[roomType] ?? 2;
+        for (let i = 0; i < group.length; i += capacity) {
+          const chunk = group.slice(i, i + capacity);
+          const notes: string[] = [];
+          if (chunk.some((t) => t.isSeniorCitizen)) notes.push('senior citizen — consider ground floor');
+          if (chunk.some((t) => t.needsExtraMattress)) notes.push('extra mattress needed');
+          rooms.push({
+            roomNumber: roomNumber++,
+            roomType,
+            bookingId: booking.id,
+            travelerIds: chunk.map((t) => t.id),
+            travelerNames: chunk.map((t) => t.name),
+            note: notes.length ? notes.join(', ') : null,
+          });
+        }
+      }
+    }
+
+    const summaryText = rooms.map((r) => `Room ${r.roomNumber} (${r.roomType}): ${r.travelerNames.join(', ')}`).join('\n');
+
+    res.json({ success: true, data: { rooms, summaryText } });
+  } catch (e) {
+    console.error('[operations] suggestRoomAllocation error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };

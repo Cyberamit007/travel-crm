@@ -30,6 +30,7 @@ import OperationsDashboardPage from './pages/operations/DashboardPage';
 import DeparturesPage from './pages/operations/DeparturesPage';
 import DepartureDetailPage from './pages/operations/DepartureDetailPage';
 import VendorsPage from './pages/operations/VendorsPage';
+import VendorDetailPage from './pages/operations/VendorDetailPage';
 import FinanceDashboardPage from './pages/finance/DashboardPage';
 import PaymentVerificationPage from './pages/finance/PaymentVerificationPage';
 import CustomerLedgerPage from './pages/finance/CustomerLedgerPage';
@@ -89,6 +90,7 @@ export default function App() {
         <Route path="operations/departures" element={<DeparturesPage />} />
         <Route path="operations/departures/:id" element={<DepartureDetailPage />} />
         <Route path="operations/vendors" element={<VendorsPage />} />
+        <Route path="operations/vendors/:id" element={<VendorDetailPage />} />
         <Route path="finance" element={<Navigate to="/admin/finance/dashboard" replace />} />
         <Route path="finance/dashboard" element={<FinanceDashboardPage />} />
         <Route path="finance/verification" element={<PaymentVerificationPage />} />
@@ -112,6 +114,7 @@ export default function App() {
         <Route path="departures" element={<DeparturesPage />} />
         <Route path="departures/:id" element={<DepartureDetailPage />} />
         <Route path="vendors" element={<VendorsPage />} />
+        <Route path="vendors/:id" element={<VendorDetailPage />} />
         <Route path="settings" element={<EmployeeSettingsPage />} />
       </Route>
 

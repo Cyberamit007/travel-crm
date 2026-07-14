@@ -2,7 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import {
   ApiResponse, PaginatedResponse, OpsDashboardStats, Departure, DepartureListItem,
-  Traveler, Hotel, Vehicle, Vendor, DepartureTask, OperationsDocument, OperationsNote,
+  Traveler, Hotel, Vehicle, Vendor, VendorDetail, DepartureTask, OperationsDocument, OperationsNote,
+  RoomAllocationSuggestion, TravelCalendarItem, VendorDocument,
 } from '../types/index';
 import toast from 'react-hot-toast';
 
@@ -12,6 +13,14 @@ export function useOpsDashboard() {
   return useQuery<ApiResponse<OpsDashboardStats>>({
     queryKey: ['operations', 'dashboard'],
     queryFn: async () => (await api.get('/operations/dashboard')).data,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useTravelCalendar() {
+  return useQuery<ApiResponse<{ items: TravelCalendarItem[]; range: { from: string; to: string } }>>({
+    queryKey: ['operations', 'calendar'],
+    queryFn: async () => (await api.get('/operations/calendar')).data,
     staleTime: 60 * 1000,
   });
 }
@@ -64,6 +73,14 @@ export function useUpdateDeparture(id: string) {
       toast.success('Departure updated');
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to update departure'),
+  });
+}
+
+export function useRoomAllocationSuggestion(departureId: string | undefined) {
+  return useQuery<ApiResponse<RoomAllocationSuggestion>>({
+    queryKey: ['operations', 'departure', departureId, 'room-allocation-suggestion'],
+    queryFn: async () => (await api.get(`/operations/departures/${departureId}/room-allocation-suggestion`)).data,
+    enabled: false, // fetched on demand when Ops clicks "Suggest Allocation"
   });
 }
 
@@ -289,6 +306,46 @@ export function useDeleteVendor() {
     mutationFn: async (id: string) => (await api.delete(`/operations/vendors/${id}`)).data,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['operations', 'vendors'] }); toast.success('Vendor removed'); },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to remove vendor'),
+  });
+}
+
+export function useVendorDetail(id: string | undefined) {
+  return useQuery<ApiResponse<VendorDetail>>({
+    queryKey: ['operations', 'vendor', id],
+    queryFn: async () => (await api.get(`/operations/vendors/${id}`)).data,
+    enabled: !!id,
+  });
+}
+
+export function useUploadVendorDocument(vendorId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ file, type }: { file: File; type?: string }) => {
+      const form = new FormData();
+      form.append('file', file);
+      if (type) form.append('type', type);
+      const { data } = await api.post(`/operations/vendors/${vendorId}/documents`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return data.data as VendorDocument;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operations', 'vendor', vendorId] });
+      toast.success('Document uploaded');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to upload document'),
+  });
+}
+
+export function useDeleteVendorDocument(vendorId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => (await api.delete(`/operations/vendor-documents/${id}`)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operations', 'vendor', vendorId] });
+      toast.success('Document removed');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to remove document'),
   });
 }
 

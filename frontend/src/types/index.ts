@@ -630,6 +630,7 @@ export interface Hotel {
   roomAllocation?: string;
   vendorName?: string;
   vendorContact?: string;
+  vendorId?: string;
   confirmationNumber?: string;
   status: OpsBookingStatus;
   voucherUrl?: string;
@@ -648,6 +649,7 @@ export interface Vehicle {
   pickupLocation?: string;
   vendorName?: string;
   vendorContact?: string;
+  vendorId?: string;
   status: OpsBookingStatus;
   createdAt: string;
   updatedAt: string;
@@ -661,8 +663,68 @@ export interface Vendor {
   contact?: string;
   notes?: string;
   status: 'ACTIVE' | 'INACTIVE';
+  rating?: number;
+  ratingCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface VendorDocument {
+  id: string;
+  vendorId: string;
+  name: string;
+  type: 'CONTRACT' | 'LICENSE' | 'AGREEMENT' | 'OTHER';
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedById: string;
+  uploadedBy: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+}
+
+export interface VendorTrip {
+  service: 'HOTEL' | 'VEHICLE';
+  id: string;
+  status: OpsBookingStatus;
+  departureId: string;
+  destination: string;
+  departureDate: string;
+  departureStatus: DepartureStatus;
+}
+
+export interface VendorDetail extends Vendor {
+  documents: VendorDocument[];
+  payments: VendorPayment[];
+  upcomingTrips: VendorTrip[];
+  pastTrips: VendorTrip[];
+  paymentSummary: { totalBilled: number; totalPaid: number; totalPending: number; billCount: number };
+}
+
+export interface RoomAllocationSuggestionRoom {
+  roomNumber: number;
+  roomType: string;
+  bookingId: string;
+  travelerIds: string[];
+  travelerNames: string[];
+  note: string | null;
+}
+
+export interface RoomAllocationSuggestion {
+  rooms: RoomAllocationSuggestionRoom[];
+  summaryText: string;
+}
+
+export interface TravelCalendarItem {
+  id: string;
+  destination: string;
+  packageName: string | null;
+  departureDate: string;
+  returnDate: string | null;
+  status: DepartureStatus;
+  totalTravelers: number;
+  daysUntilDeparture: number;
+  daysUntilReturn: number | null;
+  bucket: 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'THIS_MONTH' | 'LATER' | 'IN_PROGRESS';
 }
 
 export interface OperationsDocument {

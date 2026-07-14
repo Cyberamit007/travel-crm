@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Truck, Plus, Pencil, Trash2, Phone } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Truck, Plus, Pencil, Trash2, Phone, Star } from 'lucide-react';
 import { useVendors, useCreateVendor, useUpdateVendor, useDeleteVendor } from '../../hooks/useOperations';
 import { Vendor, VendorType } from '../../types/index';
 import Modal from '../../components/ui/Modal';
@@ -77,6 +78,9 @@ function VendorFormModal({ open, onClose, defaultValues, onSubmit, isLoading }: 
 }
 
 export default function VendorsPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const base = location.pathname.startsWith('/admin') ? '/admin/operations' : '/operations';
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -122,7 +126,11 @@ export default function VendorsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {vendors.map((v) => (
-            <div key={v.id} className="card p-4 space-y-2">
+            <div
+              key={v.id}
+              onClick={() => navigate(`${base}/vendors/${v.id}`)}
+              className="card p-4 space-y-2 cursor-pointer hover:border-primary-300 transition-colors"
+            >
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-semibold text-slate-800 text-sm">{v.name}</p>
@@ -131,12 +139,15 @@ export default function VendorsPage() {
                 <span className={cn('badge', v.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}>{v.status}</span>
               </div>
               {v.contact && <p className="text-xs text-slate-500 flex items-center gap-1"><Phone className="w-3 h-3" />{v.contact}</p>}
+              {v.rating != null && (
+                <p className="text-xs text-slate-500 flex items-center gap-1"><Star className="w-3 h-3 text-amber-400 fill-amber-400" />{v.rating.toFixed(1)} ({v.ratingCount})</p>
+              )}
               {v.notes && <p className="text-xs text-slate-500">{v.notes}</p>}
               <div className="flex items-center gap-2 pt-1">
-                <button onClick={() => setEditVendor(v)} className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
+                <button onClick={(e) => { e.stopPropagation(); setEditVendor(v); }} className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
                   <Pencil className="w-3 h-3" />Edit
                 </button>
-                <button onClick={() => setDeleteId(v.id)} className="text-xs font-medium text-red-500 hover:text-red-600 flex items-center gap-1">
+                <button onClick={(e) => { e.stopPropagation(); setDeleteId(v.id); }} className="text-xs font-medium text-red-500 hover:text-red-600 flex items-center gap-1">
                   <Trash2 className="w-3 h-3" />Remove
                 </button>
               </div>
