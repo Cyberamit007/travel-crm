@@ -11,6 +11,7 @@ import Tabs, { useUrlTab } from '../../components/ui/Tabs';
 import TripOverviewTab from '../../components/operations/TripOverviewTab';
 import PassengerTable from '../../components/operations/PassengerTable';
 import GroupSummaryGrid from '../../components/operations/GroupSummaryGrid';
+import TripProfitabilityCard from '../../components/operations/TripProfitabilityCard';
 import HotelsTab from '../../components/operations/HotelsTab';
 import VehiclesTab from '../../components/operations/VehiclesTab';
 import TimelineTab from '../../components/operations/TimelineTab';
@@ -178,7 +179,12 @@ export default function DepartureDetailPage() {
 
       {tab === 'overview' && <TripOverviewTab departure={departure} onChangeTab={(t) => setTab(t as Tab)} />}
       {tab === 'passengers' && <PassengerTable departure={departure} />}
-      {tab === 'summary' && departure.groupSummary && <GroupSummaryGrid summary={departure.groupSummary} />}
+      {tab === 'summary' && departure.groupSummary && (
+        <div className="space-y-4">
+          {departure.tripProfitability && <TripProfitabilityCard profitability={departure.tripProfitability} />}
+          <GroupSummaryGrid summary={departure.groupSummary} />
+        </div>
+      )}
       {tab === 'hotels' && <HotelsTab departureId={departure.id} hotels={departure.hotels} />}
       {tab === 'vehicles' && <VehiclesTab departureId={departure.id} vehicles={departure.vehicles} />}
       {tab === 'timeline' && <TimelineTab departureId={departure.id} timeline={departure.timeline} />}

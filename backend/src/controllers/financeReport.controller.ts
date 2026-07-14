@@ -218,6 +218,94 @@ export const getExpenseReport = async (req: AuthenticatedRequest, res: Response)
   }
 };
 
+// ─── Trip Profitability (per-departure) ──────────────────────────────────────
+// Same cash-basis formula as the org-wide P&L, scoped to each departure —
+// mirrors the tripProfitability block computed live on getDepartureDetail.
+
+export const getTripProfitabilityReport = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const departures = await prisma.departure.findMany({
+      where: { ...orgFilter(req) },
+      select: {
+        id: true, destination: true, departureDate: true,
+        bookings: { where: { status: 'ACTIVE' }, select: { finalPrice: true, amountPaid: true, refunds: { where: { status: 'PAID' }, select: { amount: true } } } },
+        vendorPayments: { select: { totalAmount: true } },
+        expenses: { where: { status: 'APPROVED' }, select: { amount: true } },
+      },
+      orderBy: { departureDate: 'desc' },
+    });
+
+    const rows = departures
+      .map((d) => {
+        const revenue = d.bookings.reduce((s, b) => s + b.finalPrice, 0);
+        const collected = d.bookings.reduce((s, b) => s + b.amountPaid, 0);
+        const vendorCost = d.vendorPayments.reduce((s, v) => s + v.totalAmount, 0);
+        const expenseCost = d.expenses.reduce((s, e) => s + e.amount, 0);
+        const refunds = d.bookings.reduce((s, b) => s + b.refunds.reduce((rs, r) => rs + r.amount, 0), 0);
+        const netProfit = collected - vendorCost - expenseCost - refunds;
+        return {
+          destination: d.destination, departureDate: d.departureDate.toISOString().slice(0, 10),
+          revenue, collected, vendorCost, expenseCost, refunds, netProfit,
+          marginPct: revenue > 0 ? Math.round((netProfit / revenue) * 1000) / 10 : 0,
+        };
+      })
+      .filter((d) => d.revenue > 0);
+
+    res.json({ success: true, data: { rows } });
+  } catch (e) {
+    console.error('[finance] getTripProfitabilityReport error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// ─── Package Profitability (rolled up across every departure of a package) ──
+
+export const getPackageProfitabilityReport = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const packages = await prisma.package.findMany({
+      where: { ...orgFilter(req) },
+      select: {
+        id: true, name: true, code: true,
+        bookings: { select: { finalPrice: true, amountPaid: true, numberOfTravelers: true, status: true } },
+        departures: {
+          select: {
+            vendorPayments: { select: { totalAmount: true } },
+            expenses: { where: { status: 'APPROVED' }, select: { amount: true } },
+            bookings: { select: { refunds: { where: { status: 'PAID' }, select: { amount: true } } } },
+          },
+        },
+      },
+    });
+
+    const rows = packages
+      .map((p) => {
+        const activeBookings = p.bookings.filter((b) => b.status === 'ACTIVE');
+        const cancelledBookings = p.bookings.filter((b) => b.status === 'CANCELLED');
+        const revenue = activeBookings.reduce((s, b) => s + b.finalPrice, 0);
+        const collected = activeBookings.reduce((s, b) => s + b.amountPaid, 0);
+        const totalPassengers = activeBookings.reduce((s, b) => s + b.numberOfTravelers, 0);
+        const vendorCost = p.departures.reduce((s, d) => s + d.vendorPayments.reduce((vs, v) => vs + v.totalAmount, 0), 0);
+        const expenseCost = p.departures.reduce((s, d) => s + d.expenses.reduce((es, e) => es + e.amount, 0), 0);
+        const refunds = p.departures.reduce((s, d) => s + d.bookings.reduce((bs, b) => bs + b.refunds.reduce((rs, r) => rs + r.amount, 0), 0), 0);
+        const netProfit = collected - vendorCost - expenseCost - refunds;
+        const totalBookings = p.bookings.length;
+        return {
+          name: p.name, code: p.code,
+          totalBookings, totalPassengers,
+          revenue, collected, vendorCost, expenseCost, refunds, netProfit,
+          avgBookingValue: activeBookings.length > 0 ? Math.round(revenue / activeBookings.length) : 0,
+          cancellationPct: totalBookings > 0 ? Math.round((cancelledBookings.length / totalBookings) * 1000) / 10 : 0,
+        };
+      })
+      .filter((p) => p.totalBookings > 0);
+
+    res.json({ success: true, data: { rows } });
+  } catch (e) {
+    console.error('[finance] getPackageProfitabilityReport error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 // ─── Profit & Loss summary ────────────────────────────────────────────────────
 
 export const getProfitLossReport = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -225,21 +313,23 @@ export const getProfitLossReport = async (req: AuthenticatedRequest, res: Respon
     const { start, end } = parseRange(req);
     const bookingOrgFilter = orgId(req) ? { organizationId: orgId(req) } : {};
 
-    const [bookings, vendorPayments, refunds] = await Promise.all([
+    const [bookings, vendorPayments, refunds, expenses] = await Promise.all([
       prisma.booking.findMany({ where: { status: 'ACTIVE', createdAt: { gte: start, lte: end }, ...bookingOrgFilter }, select: { finalPrice: true, amountPaid: true } }),
       prisma.vendorPayment.findMany({ where: { createdAt: { gte: start, lte: end }, ...orgFilter(req) }, select: { totalAmount: true } }),
       prisma.refund.findMany({ where: { status: 'PAID', refundDate: { gte: start, lte: end }, ...orgFilter(req) }, select: { amount: true } }),
+      prisma.expense.findMany({ where: { status: 'APPROVED', approvedAt: { gte: start, lte: end }, ...orgFilter(req) }, select: { amount: true } }),
     ]);
 
     const totalRevenue = bookings.reduce((s, b) => s + b.finalPrice, 0);
     const totalCollected = bookings.reduce((s, b) => s + b.amountPaid, 0);
     const totalVendorCosts = vendorPayments.reduce((s, v) => s + v.totalAmount, 0);
     const totalRefunds = refunds.reduce((s, r) => s + r.amount, 0);
-    const netProfit = totalCollected - totalVendorCosts - totalRefunds;
+    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+    const netProfit = totalCollected - totalVendorCosts - totalExpenses - totalRefunds;
 
     res.json({
       success: true,
-      data: { totalRevenue, totalCollected, totalVendorCosts, totalRefunds, netProfit, bookingCount: bookings.length },
+      data: { totalRevenue, totalCollected, totalVendorCosts, totalExpenses, totalRefunds, netProfit, bookingCount: bookings.length },
     });
   } catch (e) {
     console.error('[finance] getProfitLossReport error:', e);

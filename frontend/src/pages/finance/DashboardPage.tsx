@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   IndianRupee, CalendarDays, TrendingUp, CheckSquare, Wallet, CalendarClock,
   AlertCircle, RotateCcw, Truck, Banknote, Smartphone, CreditCard, Landmark,
-  ArrowRight, FileBarChart, Receipt,
+  ArrowRight, FileBarChart, Receipt, PiggyBank, Award,
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useFinanceDashboard } from '../../hooks/useFinance';
@@ -43,6 +43,8 @@ export default function FinanceDashboardPage() {
         { label: 'Vendor Payments Pending', value: stats.vendorPaymentsPending, icon: Truck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
         { label: "Today's Expenses", value: formatCurrency(stats.todaysExpenses), icon: Receipt, iconBg: 'bg-red-100', iconColor: 'text-red-600' },
         { label: 'Pending Expense Approval', value: stats.pendingExpenseApproval, icon: CheckSquare, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
+        { label: 'Profit This Month', value: formatCurrency(stats.profitThisMonth), icon: PiggyBank, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
+        { label: 'Top Revenue Package', value: stats.topRevenuePackage ? stats.topRevenuePackage.name : '—', icon: Award, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
         { label: 'Cash Collection', value: formatCurrency(stats.cashCollection), icon: Banknote, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
         { label: 'Online Collection', value: formatCurrency(stats.onlineCollection), icon: CreditCard, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
         { label: 'UPI Collection', value: formatCurrency(stats.upiCollection), icon: Smartphone, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
@@ -69,7 +71,7 @@ export default function FinanceDashboardPage() {
 
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 15 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+          {Array.from({ length: 17 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
         </div>
       ) : (
         <>

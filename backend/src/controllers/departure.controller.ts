@@ -412,6 +412,7 @@ export const getDepartureDetail = async (req: AuthenticatedRequest, res: Respons
             },
             travelers: true,
             payments: { select: { status: true, verifiedAt: true } },
+            refunds: { where: { status: 'PAID' }, select: { amount: true } },
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -420,6 +421,8 @@ export const getDepartureDetail = async (req: AuthenticatedRequest, res: Respons
         documents: { include: { uploadedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
         notes: { include: { author: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
         timeline: { orderBy: [{ dayOffset: 'asc' }, { sortOrder: 'asc' }] },
+        vendorPayments: { select: { totalAmount: true } },
+        expenses: { where: { status: 'APPROVED' }, select: { amount: true } },
       },
     });
     if (!departure) { res.status(404).json({ success: false, error: 'Departure not found' }); return; }
@@ -470,6 +473,22 @@ export const getDepartureDetail = async (req: AuthenticatedRequest, res: Respons
 
     const checklist = computeChecklist(departure);
 
+    // Trip profitability — same cash-basis formula as the org-wide Profit & Loss
+    // report, just scoped to this departure's bookings/vendor bills/expenses.
+    // Computed live, never persisted, same idiom as groupSummary above.
+    const tripRevenue = departure.bookings.reduce((s, b) => s + b.finalPrice, 0);
+    const tripCollected = departure.bookings.reduce((s, b) => s + b.amountPaid, 0);
+    const tripVendorCost = departure.vendorPayments.reduce((s, v) => s + v.totalAmount, 0);
+    const tripExpenseCost = departure.expenses.reduce((s, e) => s + e.amount, 0);
+    const tripRefunds = departure.bookings.reduce((s, b) => s + b.refunds.reduce((rs, r) => rs + r.amount, 0), 0);
+    const tripNetProfit = tripCollected - tripVendorCost - tripExpenseCost - tripRefunds;
+    const tripProfitability = {
+      revenue: tripRevenue, collected: tripCollected,
+      vendorCost: tripVendorCost, expenseCost: tripExpenseCost, refunds: tripRefunds,
+      netProfit: tripNetProfit,
+      marginPct: tripRevenue > 0 ? Math.round((tripNetProfit / tripRevenue) * 1000) / 10 : 0,
+    };
+
     // Compact per-booking journey progress for the Trip Workspace overview —
     // reuses the same 15-stage computation as the full Lead Journey Tracker,
     // just without the stage-by-stage detail (that lives on the Lead page).
@@ -491,7 +510,7 @@ export const getDepartureDetail = async (req: AuthenticatedRequest, res: Respons
       return { bookingId: b.id, leadId: b.lead.id, leadName: b.lead.name, ...summary };
     });
 
-    res.json({ success: true, data: { ...departure, groupSummary, checklist, journeySummaries } });
+    res.json({ success: true, data: { ...departure, groupSummary, checklist, tripProfitability, journeySummaries } });
   } catch (e) {
     console.error('[operations] getDepartureDetail error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });

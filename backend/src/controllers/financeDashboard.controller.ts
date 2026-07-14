@@ -31,6 +31,9 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       monthlyByMethod,
       todaysExpenses,
       pendingExpenseApproval,
+      monthlyVendorCosts,
+      monthlyExpenses,
+      monthlyRefunds,
     ] = await Promise.all([
       prisma.payment.aggregate({ where: { status: 'VERIFIED', verifiedAt: { gte: today, lte: todayEnd }, booking: bookingOrgFilter }, _sum: { amount: true } }),
       prisma.payment.aggregate({ where: { status: 'VERIFIED', verifiedAt: { gte: monthStart }, booking: bookingOrgFilter }, _sum: { amount: true } }),
@@ -44,6 +47,9 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       prisma.payment.groupBy({ by: ['method'], where: { status: 'VERIFIED', verifiedAt: { gte: monthStart }, booking: bookingOrgFilter }, _sum: { amount: true } }),
       prisma.expense.aggregate({ where: { status: 'APPROVED', approvedAt: { gte: today, lte: todayEnd }, ...orgFilter(req) }, _sum: { amount: true } }),
       prisma.expense.count({ where: { status: 'PENDING', ...orgFilter(req) } }),
+      prisma.vendorPayment.aggregate({ where: { createdAt: { gte: monthStart }, ...orgFilter(req) }, _sum: { totalAmount: true } }),
+      prisma.expense.aggregate({ where: { status: 'APPROVED', approvedAt: { gte: monthStart }, ...orgFilter(req) }, _sum: { amount: true } }),
+      prisma.refund.aggregate({ where: { status: 'PAID', refundDate: { gte: monthStart }, ...orgFilter(req) }, _sum: { amount: true } }),
     ]);
 
     const totalRevenue = activeBookings.reduce((s, b) => s + b.finalPrice, 0);
@@ -89,6 +95,24 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       .map((d) => ({ id: d.id, label: `${d.destination} — ${d.departureDate.toISOString().slice(0, 10)}`, revenue: d.bookings.reduce((s, b) => s + b.finalPrice, 0) }))
       .filter((d) => d.revenue > 0);
 
+    const profitThisMonth = (monthlyCollections._sum.amount ?? 0)
+      - (monthlyVendorCosts._sum.totalAmount ?? 0)
+      - (monthlyExpenses._sum.amount ?? 0)
+      - (monthlyRefunds._sum.amount ?? 0);
+
+    // Top revenue package — same shape as revenue-by-destination, grouped by package instead
+    const bookingsWithPackage = await prisma.booking.findMany({
+      where: { status: 'ACTIVE', ...bookingOrgFilter },
+      select: { finalPrice: true, package: { select: { id: true, name: true } } },
+    });
+    const byPackage: Record<string, { name: string; revenue: number }> = {};
+    for (const b of bookingsWithPackage) {
+      if (!b.package) continue;
+      if (!byPackage[b.package.id]) byPackage[b.package.id] = { name: b.package.name, revenue: 0 };
+      byPackage[b.package.id].revenue += b.finalPrice;
+    }
+    const topRevenuePackage = Object.values(byPackage).sort((a, b) => b.revenue - a.revenue)[0] ?? null;
+
     res.json({
       success: true,
       data: {
@@ -103,6 +127,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         vendorPaymentsPending,
         todaysExpenses: todaysExpenses._sum.amount ?? 0,
         pendingExpenseApproval,
+        profitThisMonth,
+        topRevenuePackage,
         cashCollection: collectionByMethod.CASH,
         onlineCollection: collectionByMethod.ONLINE,
         upiCollection: collectionByMethod.UPI,

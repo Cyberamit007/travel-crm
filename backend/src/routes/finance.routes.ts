@@ -17,6 +17,7 @@ import {
 import {
   getCollectionReport, getEmployeeCollectionReport, getDestinationRevenueReport, getDepartureRevenueReport,
   getOutstandingReport, getVendorPaymentReport, getRefundReport, getExpenseReport, getProfitLossReport,
+  getTripProfitabilityReport, getPackageProfitabilityReport,
 } from '../controllers/financeReport.controller.js';
 
 const router = Router();
@@ -74,6 +75,8 @@ router.get('/reports/outstanding', getOutstandingReport);
 router.get('/reports/vendor-payments', getVendorPaymentReport);
 router.get('/reports/refunds', getRefundReport);
 router.get('/reports/expenses', getExpenseReport);
+router.get('/reports/trip-profitability', getTripProfitabilityReport);
+router.get('/reports/package-profitability', getPackageProfitabilityReport);
 router.get('/reports/profit-loss', getProfitLossReport);
 
 export default router;

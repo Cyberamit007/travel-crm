@@ -808,9 +808,20 @@ export interface Departure {
   timeline: DepartureTask[];
   groupSummary?: GroupSummary;
   checklist?: Checklist;
+  tripProfitability?: TripProfitability;
   journeySummaries?: JourneySummary[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TripProfitability {
+  revenue: number;
+  collected: number;
+  vendorCost: number;
+  expenseCost: number;
+  refunds: number;
+  netProfit: number;
+  marginPct: number;
 }
 
 export interface JourneySummary {
@@ -955,6 +966,8 @@ export interface FinanceDashboardStats {
   vendorPaymentsPending: number;
   todaysExpenses: number;
   pendingExpenseApproval: number;
+  profitThisMonth: number;
+  topRevenuePackage: { name: string; revenue: number } | null;
   cashCollection: number;
   onlineCollection: number;
   upiCollection: number;

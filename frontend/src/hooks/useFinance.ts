@@ -290,6 +290,20 @@ export function useExpenseReport() {
   });
 }
 
+export function useTripProfitabilityReport() {
+  return useQuery({
+    queryKey: ['finance', 'reports', 'trip-profitability'],
+    queryFn: async () => (await api.get('/finance/reports/trip-profitability')).data,
+  });
+}
+
+export function usePackageProfitabilityReport() {
+  return useQuery({
+    queryKey: ['finance', 'reports', 'package-profitability'],
+    queryFn: async () => (await api.get('/finance/reports/package-profitability')).data,
+  });
+}
+
 export function useProfitLossReport(params: { startDate?: string; endDate?: string }) {
   return useQuery({
     queryKey: ['finance', 'reports', 'profit-loss', params],

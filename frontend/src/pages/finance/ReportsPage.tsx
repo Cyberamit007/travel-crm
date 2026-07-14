@@ -3,11 +3,12 @@ import * as XLSX from 'xlsx';
 import { Download, Printer, FileBarChart } from 'lucide-react';
 import {
   useCollectionReport, useEmployeeCollectionReport, useDestinationRevenueReport, useDepartureRevenueReport,
-  useOutstandingReport, useVendorPaymentReport, useRefundReport, useExpenseReport, useProfitLossReport,
+  useOutstandingReport, useVendorPaymentReport, useRefundReport, useExpenseReport,
+  useTripProfitabilityReport, usePackageProfitabilityReport, useProfitLossReport,
 } from '../../hooks/useFinance';
 import { formatCurrency } from '../../utils/helpers';
 
-type Tab = 'collections' | 'employees' | 'destinations' | 'departures' | 'outstanding' | 'vendors' | 'refunds' | 'expenses' | 'pnl';
+type Tab = 'collections' | 'employees' | 'destinations' | 'departures' | 'outstanding' | 'vendors' | 'refunds' | 'expenses' | 'tripProfit' | 'packageProfit' | 'pnl';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'collections', label: 'Collections' },
@@ -18,6 +19,8 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'vendors', label: 'Vendor Payments' },
   { key: 'refunds', label: 'Refunds' },
   { key: 'expenses', label: 'Expenses' },
+  { key: 'tripProfit', label: 'Trip Profit' },
+  { key: 'packageProfit', label: 'Package Profit' },
   { key: 'pnl', label: 'Profit & Loss' },
 ];
 
@@ -63,6 +66,8 @@ export default function FinanceReportsPage() {
   const vendors = useVendorPaymentReport();
   const refunds = useRefundReport();
   const expenses = useExpenseReport();
+  const tripProfit = useTripProfitabilityReport();
+  const packageProfit = usePackageProfitabilityReport();
   const pnl = useProfitLossReport({});
 
   const handlePrint = () => {
@@ -79,7 +84,9 @@ export default function FinanceReportsPage() {
     tab === 'outstanding' ? (outstanding.data?.data?.rows ?? []) :
     tab === 'vendors' ? (vendors.data?.data?.rows ?? []) :
     tab === 'refunds' ? (refunds.data?.data?.rows ?? []) :
-    tab === 'expenses' ? (expenses.data?.data?.rows ?? []) : [];
+    tab === 'expenses' ? (expenses.data?.data?.rows ?? []) :
+    tab === 'tripProfit' ? (tripProfit.data?.data?.rows ?? []) :
+    tab === 'packageProfit' ? (packageProfit.data?.data?.rows ?? []) : [];
 
   return (
     <div className="space-y-5">
@@ -190,6 +197,33 @@ export default function FinanceReportsPage() {
         ]} />
       )}
 
+      {tab === 'tripProfit' && (
+        <ReportTable rows={tripProfit.data?.data?.rows ?? []} columns={[
+          { key: 'destination', label: 'Destination' },
+          { key: 'departureDate', label: 'Departure Date' },
+          { key: 'revenue', label: 'Revenue', format: formatCurrency },
+          { key: 'collected', label: 'Collected', format: formatCurrency },
+          { key: 'vendorCost', label: 'Vendor Cost', format: formatCurrency },
+          { key: 'expenseCost', label: 'Expenses', format: formatCurrency },
+          { key: 'refunds', label: 'Refunds', format: formatCurrency },
+          { key: 'netProfit', label: 'Net Profit', format: formatCurrency },
+          { key: 'marginPct', label: 'Margin %', format: (v: number) => `${v}%` },
+        ]} />
+      )}
+
+      {tab === 'packageProfit' && (
+        <ReportTable rows={packageProfit.data?.data?.rows ?? []} columns={[
+          { key: 'name', label: 'Package' },
+          { key: 'code', label: 'Code' },
+          { key: 'totalBookings', label: 'Bookings' },
+          { key: 'totalPassengers', label: 'Passengers' },
+          { key: 'revenue', label: 'Revenue', format: formatCurrency },
+          { key: 'netProfit', label: 'Net Profit', format: formatCurrency },
+          { key: 'avgBookingValue', label: 'Avg Booking Value', format: formatCurrency },
+          { key: 'cancellationPct', label: 'Cancellation %', format: (v: number) => `${v}%` },
+        ]} />
+      )}
+
       {tab === 'pnl' && (
         <div className="print-area grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {pnl.data?.data ? (
@@ -197,6 +231,7 @@ export default function FinanceReportsPage() {
               { label: 'Total Revenue', value: pnl.data.data.totalRevenue },
               { label: 'Total Collected', value: pnl.data.data.totalCollected },
               { label: 'Vendor Costs', value: pnl.data.data.totalVendorCosts },
+              { label: 'Expenses', value: pnl.data.data.totalExpenses },
               { label: 'Refunds', value: pnl.data.data.totalRefunds },
               { label: 'Net Profit', value: pnl.data.data.netProfit },
             ].map((s) => (
