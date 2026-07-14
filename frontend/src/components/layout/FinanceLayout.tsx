@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Mountain, LayoutDashboard, CheckSquare, BookOpen, Clock, RotateCcw,
-  Truck, FileBarChart, Bell, LogOut, ChevronDown, Menu, X, Settings, UserCircle,
+  Truck, FileBarChart, Bell, LogOut, ChevronDown, Menu, X, Settings, UserCircle, Receipt,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -18,6 +18,7 @@ const navLinks = [
   { to: '/finance/pending', label: 'Pending Tracker', icon: Clock },
   { to: '/finance/refunds', label: 'Refunds', icon: RotateCcw },
   { to: '/finance/vendor-payments', label: 'Vendor Payments', icon: Truck },
+  { to: '/finance/expenses', label: 'Expenses', icon: Receipt },
   { to: '/finance/reports', label: 'Reports', icon: FileBarChart },
   { to: '/finance/settings', label: 'Settings', icon: Settings },
 ];

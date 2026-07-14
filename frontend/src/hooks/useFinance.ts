@@ -283,6 +283,13 @@ export function useRefundReport() {
   });
 }
 
+export function useExpenseReport() {
+  return useQuery({
+    queryKey: ['finance', 'reports', 'expenses'],
+    queryFn: async () => (await api.get('/finance/reports/expenses')).data,
+  });
+}
+
 export function useProfitLossReport(params: { startDate?: string; endDate?: string }) {
   return useQuery({
     queryKey: ['finance', 'reports', 'profit-loss', params],

@@ -9,9 +9,14 @@ import {
   listVendorPayments, createVendorPayment, updateVendorPayment, deleteVendorPayment, uploadVendorPaymentFile,
 } from '../controllers/vendorPayment.controller.js';
 import { listVendors } from '../controllers/vendor.controller.js';
+import { listDepartures } from '../controllers/departure.controller.js';
+import { getPackages } from '../controllers/packages.controller.js';
+import {
+  listExpenses, createExpense, approveExpense, rejectExpense, deleteExpense,
+} from '../controllers/expense.controller.js';
 import {
   getCollectionReport, getEmployeeCollectionReport, getDestinationRevenueReport, getDepartureRevenueReport,
-  getOutstandingReport, getVendorPaymentReport, getRefundReport, getProfitLossReport,
+  getOutstandingReport, getVendorPaymentReport, getRefundReport, getExpenseReport, getProfitLossReport,
 } from '../controllers/financeReport.controller.js';
 
 const router = Router();
@@ -48,6 +53,18 @@ router.put('/vendor-payments/:id', updateVendorPayment);
 router.delete('/vendor-payments/:id', deleteVendorPayment);
 router.post('/vendor-payments/:id/upload', upload.single('file'), uploadVendorPaymentFile);
 
+// Read-only access to Departures/Packages (owned by Operations/Sales) — Finance
+// needs them to tag an expense to a trip/package.
+router.get('/departures', listDepartures);
+router.get('/packages', getPackages);
+
+// Expenses
+router.get('/expenses', listExpenses);
+router.post('/expenses', upload.single('bill'), createExpense);
+router.put('/expenses/:id/approve', approveExpense);
+router.put('/expenses/:id/reject', rejectExpense);
+router.delete('/expenses/:id', deleteExpense);
+
 // Reports
 router.get('/reports/collections', getCollectionReport);
 router.get('/reports/employee-collections', getEmployeeCollectionReport);
@@ -56,6 +73,7 @@ router.get('/reports/departure-revenue', getDepartureRevenueReport);
 router.get('/reports/outstanding', getOutstandingReport);
 router.get('/reports/vendor-payments', getVendorPaymentReport);
 router.get('/reports/refunds', getRefundReport);
+router.get('/reports/expenses', getExpenseReport);
 router.get('/reports/profit-loss', getProfitLossReport);
 
 export default router;

@@ -915,6 +915,34 @@ export interface VendorPayment {
   updatedAt: string;
 }
 
+export type ExpenseCategory =
+  | 'HOTEL' | 'VEHICLE' | 'DRIVER' | 'GUIDE' | 'MEALS' | 'PERMITS' | 'FUEL' | 'MISCELLANEOUS'
+  | 'OFFICE' | 'MARKETING' | 'SALARY' | 'SOFTWARE' | 'UTILITIES';
+export type ExpenseStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface Expense {
+  id: string;
+  category: ExpenseCategory;
+  amount: number;
+  description?: string;
+  departureId?: string;
+  departure?: { id: string; destination: string; departureDate: string };
+  packageId?: string;
+  package?: { id: string; name: string; code: string };
+  vendorId?: string;
+  vendor?: { id: string; name: string };
+  billUrl?: string;
+  status: ExpenseStatus;
+  approvedById?: string;
+  approvedBy?: Pick<User, 'id' | 'name'>;
+  approvedAt?: string;
+  rejectionReason?: string;
+  createdById: string;
+  createdBy: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface FinanceDashboardStats {
   todaysCollections: number;
   monthlyCollections: number;
@@ -925,6 +953,8 @@ export interface FinanceDashboardStats {
   overduePayments: number;
   refundRequests: number;
   vendorPaymentsPending: number;
+  todaysExpenses: number;
+  pendingExpenseApproval: number;
   cashCollection: number;
   onlineCollection: number;
   upiCollection: number;

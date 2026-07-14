@@ -29,6 +29,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       refundRequests,
       vendorPaymentsPending,
       monthlyByMethod,
+      todaysExpenses,
+      pendingExpenseApproval,
     ] = await Promise.all([
       prisma.payment.aggregate({ where: { status: 'VERIFIED', verifiedAt: { gte: today, lte: todayEnd }, booking: bookingOrgFilter }, _sum: { amount: true } }),
       prisma.payment.aggregate({ where: { status: 'VERIFIED', verifiedAt: { gte: monthStart }, booking: bookingOrgFilter }, _sum: { amount: true } }),
@@ -40,6 +42,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       prisma.refund.count({ where: { status: 'REQUESTED', ...orgFilter(req) } }),
       prisma.vendorPayment.count({ where: { status: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] }, ...orgFilter(req) } }),
       prisma.payment.groupBy({ by: ['method'], where: { status: 'VERIFIED', verifiedAt: { gte: monthStart }, booking: bookingOrgFilter }, _sum: { amount: true } }),
+      prisma.expense.aggregate({ where: { status: 'APPROVED', approvedAt: { gte: today, lte: todayEnd }, ...orgFilter(req) }, _sum: { amount: true } }),
+      prisma.expense.count({ where: { status: 'PENDING', ...orgFilter(req) } }),
     ]);
 
     const totalRevenue = activeBookings.reduce((s, b) => s + b.finalPrice, 0);
@@ -97,6 +101,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         overduePayments: overdueBookings,
         refundRequests,
         vendorPaymentsPending,
+        todaysExpenses: todaysExpenses._sum.amount ?? 0,
+        pendingExpenseApproval,
         cashCollection: collectionByMethod.CASH,
         onlineCollection: collectionByMethod.ONLINE,
         upiCollection: collectionByMethod.UPI,

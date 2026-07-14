@@ -190,6 +190,34 @@ export const getRefundReport = async (req: AuthenticatedRequest, res: Response):
   }
 };
 
+// ─── Expense report ────────────────────────────────────────────────────────
+
+export const getExpenseReport = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const expenses = await prisma.expense.findMany({
+      where: { ...orgFilter(req) },
+      include: {
+        departure: { select: { destination: true } },
+        package: { select: { name: true } },
+        vendor: { select: { name: true } },
+        createdBy: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const rows = expenses.map((e) => ({
+      category: e.category, amount: e.amount, status: e.status,
+      trip: e.departure?.destination ?? '—', package: e.package?.name ?? '—', vendor: e.vendor?.name ?? '—',
+      loggedBy: e.createdBy.name, date: e.createdAt.toISOString().slice(0, 10),
+    }));
+    const totalApproved = expenses.filter((e) => e.status === 'APPROVED').reduce((s, e) => s + e.amount, 0);
+    const totalPending = expenses.filter((e) => e.status === 'PENDING').reduce((s, e) => s + e.amount, 0);
+    res.json({ success: true, data: { rows, totalApproved, totalPending } });
+  } catch (e) {
+    console.error('[finance] getExpenseReport error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 // ─── Profit & Loss summary ────────────────────────────────────────────────────
 
 export const getProfitLossReport = async (req: AuthenticatedRequest, res: Response): Promise<void> => {

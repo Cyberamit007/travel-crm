@@ -37,6 +37,7 @@ import CustomerLedgerPage from './pages/finance/CustomerLedgerPage';
 import PendingTrackerPage from './pages/finance/PendingTrackerPage';
 import RefundsPage from './pages/finance/RefundsPage';
 import VendorPaymentsPage from './pages/finance/VendorPaymentsPage';
+import ExpensesPage from './pages/finance/ExpensesPage';
 import FinanceReportsPage from './pages/finance/ReportsPage';
 
 function RoleRedirect() {
@@ -98,6 +99,7 @@ export default function App() {
         <Route path="finance/pending" element={<PendingTrackerPage />} />
         <Route path="finance/refunds" element={<RefundsPage />} />
         <Route path="finance/vendor-payments" element={<VendorPaymentsPage />} />
+        <Route path="finance/expenses" element={<ExpensesPage />} />
         <Route path="finance/reports" element={<FinanceReportsPage />} />
       </Route>
 
@@ -133,6 +135,7 @@ export default function App() {
         <Route path="pending" element={<PendingTrackerPage />} />
         <Route path="refunds" element={<RefundsPage />} />
         <Route path="vendor-payments" element={<VendorPaymentsPage />} />
+        <Route path="expenses" element={<ExpensesPage />} />
         <Route path="reports" element={<FinanceReportsPage />} />
         <Route path="settings" element={<EmployeeSettingsPage />} />
       </Route>

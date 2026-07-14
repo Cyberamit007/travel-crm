@@ -3,11 +3,11 @@ import * as XLSX from 'xlsx';
 import { Download, Printer, FileBarChart } from 'lucide-react';
 import {
   useCollectionReport, useEmployeeCollectionReport, useDestinationRevenueReport, useDepartureRevenueReport,
-  useOutstandingReport, useVendorPaymentReport, useRefundReport, useProfitLossReport,
+  useOutstandingReport, useVendorPaymentReport, useRefundReport, useExpenseReport, useProfitLossReport,
 } from '../../hooks/useFinance';
 import { formatCurrency } from '../../utils/helpers';
 
-type Tab = 'collections' | 'employees' | 'destinations' | 'departures' | 'outstanding' | 'vendors' | 'refunds' | 'pnl';
+type Tab = 'collections' | 'employees' | 'destinations' | 'departures' | 'outstanding' | 'vendors' | 'refunds' | 'expenses' | 'pnl';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'collections', label: 'Collections' },
@@ -17,6 +17,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'outstanding', label: 'Outstanding' },
   { key: 'vendors', label: 'Vendor Payments' },
   { key: 'refunds', label: 'Refunds' },
+  { key: 'expenses', label: 'Expenses' },
   { key: 'pnl', label: 'Profit & Loss' },
 ];
 
@@ -61,6 +62,7 @@ export default function FinanceReportsPage() {
   const outstanding = useOutstandingReport();
   const vendors = useVendorPaymentReport();
   const refunds = useRefundReport();
+  const expenses = useExpenseReport();
   const pnl = useProfitLossReport({});
 
   const handlePrint = () => {
@@ -76,7 +78,8 @@ export default function FinanceReportsPage() {
     tab === 'departures' ? (departures.data?.data?.rows ?? []) :
     tab === 'outstanding' ? (outstanding.data?.data?.rows ?? []) :
     tab === 'vendors' ? (vendors.data?.data?.rows ?? []) :
-    tab === 'refunds' ? (refunds.data?.data?.rows ?? []) : [];
+    tab === 'refunds' ? (refunds.data?.data?.rows ?? []) :
+    tab === 'expenses' ? (expenses.data?.data?.rows ?? []) : [];
 
   return (
     <div className="space-y-5">
@@ -171,6 +174,19 @@ export default function FinanceReportsPage() {
           { key: 'status', label: 'Status' },
           { key: 'refundDate', label: 'Refund Date' },
           { key: 'transactionId', label: 'Transaction ID' },
+        ]} />
+      )}
+
+      {tab === 'expenses' && (
+        <ReportTable rows={expenses.data?.data?.rows ?? []} columns={[
+          { key: 'category', label: 'Category' },
+          { key: 'amount', label: 'Amount', format: formatCurrency },
+          { key: 'status', label: 'Status' },
+          { key: 'trip', label: 'Trip' },
+          { key: 'package', label: 'Package' },
+          { key: 'vendor', label: 'Vendor' },
+          { key: 'loggedBy', label: 'Logged By' },
+          { key: 'date', label: 'Date' },
         ]} />
       )}
 

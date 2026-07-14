@@ -33,6 +33,7 @@ model Organization {
   vendors       Vendor[]
   refunds       Refund[]
   vendorPayments VendorPayment[]
+  expenses      Expense[]
 
   @@map("organizations")
 }
@@ -86,6 +87,8 @@ model User {
   createdVendorPayments VendorPayment[] @relation("VendorPaymentCreator")
   verifiedTravelers     Traveler[]      @relation("TravelerVerifier")
   uploadedVendorDocuments VendorDocument[] @relation("VendorDocumentUploader")
+  createdExpenses       Expense[]       @relation("ExpenseCreator")
+  approvedExpenses      Expense[]       @relation("ExpenseApprover")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -395,7 +398,7 @@ model ActivityLog {
   id         String  @id @default(uuid())
   action     String
   details    String?
-  entityType String? // LEAD | CAMPAIGN | USER | LEAVE | DEPARTURE | HOTEL | VEHICLE | VENDOR | TRAVELER | PAYMENT | REFUND | VENDOR_PAYMENT | TRAVELER_PORTAL | VENDOR_DOCUMENT
+  entityType String? // LEAD | CAMPAIGN | USER | LEAVE | DEPARTURE | HOTEL | VEHICLE | VENDOR | TRAVELER | PAYMENT | REFUND | VENDOR_PAYMENT | TRAVELER_PORTAL | VENDOR_DOCUMENT | EXPENSE
   entityId   String?
 
   user   User   @relation(fields: [userId], references: [id])
@@ -747,6 +750,7 @@ model Package {
   itineraryItems PackageItinerary[]
   bookings       Booking[]
   departures     Departure[]
+  expenses       Expense[]
 
   @@index([organizationId])
   @@index([destinationId])
@@ -882,6 +886,7 @@ model Departure {
   timeline  DepartureTask[]
   vendorPayments VendorPayment[]
   notifications  Notification[]
+  expenses       Expense[]
 
   @@index([organizationId])
   @@index([packageId])
@@ -962,6 +967,7 @@ model Vendor {
   hotels    Hotel[]         @relation("VendorHotels")
   vehicles  Vehicle[]       @relation("VendorVehicles")
   documents VendorDocument[]
+  expenses  Expense[]
 
   @@index([organizationId])
   @@index([type])
@@ -1115,4 +1121,48 @@ model VendorPayment {
   @@index([organizationId])
   @@index([status])
   @@map("vendor_payments")
+}
+
+// ─── Expense Management ────────────────────────────────────────────────────
+// Non-vendor-bill costs: trip-scoped categories (meals, permits, fuel, misc)
+// and company overhead (office, marketing, salary, software, utilities).
+// departureId/packageId are both optional — null departureId means company
+// overhead, which is tracked for the Expense Report but never allocated to
+// any trip's profitability (that would require an arbitrary allocation rule).
+model Expense {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  category    String          // HOTEL | VEHICLE | DRIVER | GUIDE | MEALS | PERMITS | FUEL | MISCELLANEOUS | OFFICE | MARKETING | SALARY | SOFTWARE | UTILITIES
+  amount      Float
+  description String?
+
+  departureId String?
+  departure   Departure? @relation(fields: [departureId], references: [id], onDelete: SetNull)
+  packageId   String?
+  package     Package?   @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  vendorId    String?
+  vendor      Vendor?    @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  billUrl String?
+
+  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  approvedById String?
+  approvedBy   User?     @relation("ExpenseApprover", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  rejectionReason String?
+
+  createdById String
+  createdBy   User   @relation("ExpenseCreator", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([departureId])
+  @@index([packageId])
+  @@index([category])
+  @@index([status])
+  @@map("expenses")
 }
