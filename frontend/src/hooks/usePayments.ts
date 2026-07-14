@@ -32,6 +32,7 @@ interface RecordPaymentPayload {
   reference?: string;
   notes?: string;
   receiptNo?: string;
+  scheduleItemId?: string;
   proof?: File;
 }
 

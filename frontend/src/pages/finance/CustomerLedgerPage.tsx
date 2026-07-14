@@ -4,6 +4,7 @@ import { useAllBookings } from '../../hooks/useErp';
 import { useCustomerLedger } from '../../hooks/useFinance';
 import LedgerTable from '../../components/finance/LedgerTable';
 import ReceiptView from '../../components/finance/ReceiptView';
+import PaymentScheduleView from '../../components/finance/PaymentScheduleView';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { formatCurrency } from '../../utils/helpers';
 
@@ -89,6 +90,8 @@ export default function CustomerLedgerPage() {
                   </button>
                 </div>
               </div>
+
+              <PaymentScheduleView bookingId={selectedBookingId ?? undefined} editable />
 
               <LedgerTable ledger={ledger} />
 

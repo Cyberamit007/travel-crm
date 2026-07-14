@@ -408,6 +408,7 @@ export interface Payment {
   proofUrl?: string;
   status: PaymentStatus;
   financeNote?: string;
+  scheduleItemId?: string;
   verifiedById?: string;
   verifiedBy?: Pick<User, 'id' | 'name'>;
   verifiedAt?: string;
@@ -620,6 +621,7 @@ export interface PortalBooking {
   amountPaid: number;
   balanceAmount: number;
   travelers: Traveler[];
+  paymentSchedule: PaymentScheduleItem[];
 }
 
 export interface Hotel {
@@ -954,6 +956,21 @@ export interface Expense {
   updatedAt: string;
 }
 
+export type PaymentScheduleItemStatus = 'PENDING' | 'PARTIAL' | 'PAID';
+
+export interface PaymentScheduleItem {
+  id: string;
+  bookingId: string;
+  label: string;
+  sequence: number;
+  amount: number;
+  dueDate: string;
+  status: PaymentScheduleItemStatus;
+  paidAmount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface FinanceDashboardStats {
   todaysCollections: number;
   monthlyCollections: number;
@@ -968,6 +985,7 @@ export interface FinanceDashboardStats {
   pendingExpenseApproval: number;
   profitThisMonth: number;
   topRevenuePackage: { name: string; revenue: number } | null;
+  paymentCompletionPct: number;
   cashCollection: number;
   onlineCollection: number;
   upiCollection: number;

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import {
   ApiResponse, PaginatedResponse, FinanceDashboardStats, Payment, PendingTrackerRow,
-  CustomerLedger, Refund, VendorPayment,
+  CustomerLedger, Refund, VendorPayment, PaymentScheduleItem,
 } from '../types/index';
 import toast from 'react-hot-toast';
 
@@ -85,6 +85,29 @@ export function useCustomerLedger(bookingId: string | undefined) {
     queryKey: ['finance', 'ledger', bookingId],
     queryFn: async () => (await api.get(`/finance/ledger/${bookingId}`)).data,
     enabled: !!bookingId,
+  });
+}
+
+// ─── Payment schedule (installment plan) ─────────────────────────────────────
+
+export function usePaymentSchedule(bookingId: string | undefined) {
+  return useQuery<ApiResponse<PaymentScheduleItem[]>>({
+    queryKey: ['finance', 'schedule', bookingId],
+    queryFn: async () => (await api.get(`/finance/bookings/${bookingId}/schedule`)).data,
+    enabled: !!bookingId,
+  });
+}
+
+export function useUpdateScheduleItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: { id: string; amount?: number; dueDate?: string; label?: string }) =>
+      (await api.put(`/finance/schedule/${id}`, payload)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['finance', 'schedule'] });
+      toast.success('Installment updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to update installment'),
   });
 }
 

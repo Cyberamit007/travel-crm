@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { notifyFinanceTeam, emitFinanceUpdated, createNotification } from '../services/notification.service.js';
+import { allocatePaymentToSchedule } from './paymentSchedule.controller.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 
@@ -45,7 +46,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
     });
     if (!booking) { res.status(404).json({ success: false, error: 'Booking not found' }); return; }
 
-    const { amount, type, method, reference, notes, receiptNo } = req.body;
+    const { amount, type, method, reference, notes, receiptNo, scheduleItemId } = req.body;
 
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
       res.status(400).json({ success: false, error: 'Valid amount is required' }); return;
@@ -66,6 +67,7 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
         proofUrl,
         status: 'PENDING',
         recordedById: req.user!.id,
+        scheduleItemId: scheduleItemId || null,
       },
       include: { recordedBy: { select: { id: true, name: true } } },
     });
@@ -159,6 +161,12 @@ export const approvePayment = async (req: AuthenticatedRequest, res: Response): 
         leadId: payment.booking.leadId,
       },
     });
+
+    if (!isRefund) {
+      await allocatePaymentToSchedule(payment.bookingId, payment.amount, payment.scheduleItemId).catch((err) =>
+        console.error('[payment] schedule allocation error:', err)
+      );
+    }
 
     if (payment.recordedById) {
       await createNotification(payment.recordedById, 'PAYMENT_APPROVED', 'Payment Approved',

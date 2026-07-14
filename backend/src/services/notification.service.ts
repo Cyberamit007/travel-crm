@@ -225,4 +225,35 @@ export const sendFinanceReminders = async () => {
       await notifyFinanceTeam(vp.organizationId, 'VENDOR_PAYMENT_DUE', 'Vendor Payment Due', message, vp.departureId ?? undefined);
     }
   }
+
+  // Payment schedule installments — escalating reminder tiers (due tomorrow /
+  // due today / overdue / final reminder / escalation). Internal-only for now
+  // (Sales/Finance/Admin in-app notification) — customer email/SMS reminders
+  // are a fast-follow once the email service gets built.
+  const in7DaysForSchedule = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const dueScheduleItems = await prisma.paymentScheduleItem.findMany({
+    where: { status: { in: ['PENDING', 'PARTIAL'] }, dueDate: { lte: in7DaysForSchedule } },
+    include: { booking: { select: { organizationId: true, departureId: true, lead: { select: { name: true } } } } },
+  });
+  for (const item of dueScheduleItems) {
+    const daysUntilDue = Math.round((item.dueDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    const outstanding = item.amount - item.paidAmount;
+    const isFinal = item.label === 'Balance Payment';
+
+    let type: string | null = null;
+    let title = '';
+    if (daysUntilDue === 1) { type = isFinal ? 'FINAL_PAYMENT_REMINDER' : 'INSTALLMENT_DUE_TOMORROW'; title = isFinal ? 'Final Payment Due Tomorrow' : 'Installment Due Tomorrow'; }
+    else if (daysUntilDue === 0) { type = isFinal ? 'FINAL_PAYMENT_REMINDER' : 'INSTALLMENT_DUE_TODAY'; title = isFinal ? 'Final Payment Due Today' : 'Installment Due Today'; }
+    else if (daysUntilDue < 0 && daysUntilDue >= -6) { type = 'INSTALLMENT_OVERDUE'; title = 'Installment Overdue'; }
+    else if (daysUntilDue <= -7) { type = 'INSTALLMENT_ESCALATION'; title = 'Overdue Installment — Escalation'; }
+    if (!type) continue;
+
+    const message = `${item.booking.lead.name} — ${item.label} ₹${outstanding.toLocaleString()} ${daysUntilDue >= 0 ? `due ${item.dueDate.toDateString()}` : `overdue since ${item.dueDate.toDateString()}`}.`;
+    const alreadyNotified = await prisma.notification.findFirst({
+      where: { type, message, createdAt: { gte: dedupWindow } },
+    });
+    if (!alreadyNotified) {
+      await notifyFinanceTeam(item.booking.organizationId, type, title, message, item.booking.departureId ?? undefined);
+    }
+  }
 };

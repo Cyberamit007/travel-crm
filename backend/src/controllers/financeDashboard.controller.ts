@@ -34,6 +34,7 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       monthlyVendorCosts,
       monthlyExpenses,
       monthlyRefunds,
+      scheduleTotals,
     ] = await Promise.all([
       prisma.payment.aggregate({ where: { status: 'VERIFIED', verifiedAt: { gte: today, lte: todayEnd }, booking: bookingOrgFilter }, _sum: { amount: true } }),
       prisma.payment.aggregate({ where: { status: 'VERIFIED', verifiedAt: { gte: monthStart }, booking: bookingOrgFilter }, _sum: { amount: true } }),
@@ -50,6 +51,7 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       prisma.vendorPayment.aggregate({ where: { createdAt: { gte: monthStart }, ...orgFilter(req) }, _sum: { totalAmount: true } }),
       prisma.expense.aggregate({ where: { status: 'APPROVED', approvedAt: { gte: monthStart }, ...orgFilter(req) }, _sum: { amount: true } }),
       prisma.refund.aggregate({ where: { status: 'PAID', refundDate: { gte: monthStart }, ...orgFilter(req) }, _sum: { amount: true } }),
+      prisma.paymentScheduleItem.aggregate({ where: { booking: bookingOrgFilter }, _sum: { amount: true, paidAmount: true } }),
     ]);
 
     const totalRevenue = activeBookings.reduce((s, b) => s + b.finalPrice, 0);
@@ -100,6 +102,11 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       - (monthlyExpenses._sum.amount ?? 0)
       - (monthlyRefunds._sum.amount ?? 0);
 
+    const scheduleTotalAmount = scheduleTotals._sum.amount ?? 0;
+    const paymentCompletionPct = scheduleTotalAmount > 0
+      ? Math.round(((scheduleTotals._sum.paidAmount ?? 0) / scheduleTotalAmount) * 1000) / 10
+      : 0;
+
     // Top revenue package — same shape as revenue-by-destination, grouped by package instead
     const bookingsWithPackage = await prisma.booking.findMany({
       where: { status: 'ACTIVE', ...bookingOrgFilter },
@@ -129,6 +136,7 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
         pendingExpenseApproval,
         profitThisMonth,
         topRevenuePackage,
+        paymentCompletionPct,
         cashCollection: collectionByMethod.CASH,
         onlineCollection: collectionByMethod.ONLINE,
         upiCollection: collectionByMethod.UPI,

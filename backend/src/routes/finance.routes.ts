@@ -14,6 +14,7 @@ import { getPackages } from '../controllers/packages.controller.js';
 import {
   listExpenses, createExpense, approveExpense, rejectExpense, deleteExpense,
 } from '../controllers/expense.controller.js';
+import { getPaymentSchedule, updateScheduleItem } from '../controllers/paymentSchedule.controller.js';
 import {
   getCollectionReport, getEmployeeCollectionReport, getDestinationRevenueReport, getDepartureRevenueReport,
   getOutstandingReport, getVendorPaymentReport, getRefundReport, getExpenseReport, getProfitLossReport,
@@ -35,6 +36,10 @@ router.put('/payments/:id/request-correction', requestCorrection);
 // Customer ledger + pending tracker
 router.get('/ledger/:bookingId', getCustomerLedger);
 router.get('/pending-tracker', getPendingTracker);
+
+// Payment schedule (installment plan)
+router.get('/bookings/:bookingId/schedule', getPaymentSchedule);
+router.put('/schedule/:itemId', updateScheduleItem);
 
 // Refunds
 router.get('/refunds', listRefunds);

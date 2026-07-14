@@ -6,6 +6,7 @@ import {
   CheckCircle2, Clock, AlertTriangle, XCircle, Upload, FileCheck,
 } from 'lucide-react';
 import { usePortalBooking, useSubmitTraveler, useUploadTravelerDocument } from '../../hooks/usePortal';
+import PaymentScheduleStepper from '../../components/finance/PaymentScheduleStepper';
 import { Traveler } from '../../types/index';
 import { formatDate, formatCurrency, cn } from '../../utils/helpers';
 import { Skeleton } from '../../components/ui/Skeleton';
@@ -403,6 +404,16 @@ export default function TravelerPortalPage() {
           </div>
         </div>
       </div>
+
+      {/* Payment schedule — read-only; customer sees what's due next without needing to log in anywhere */}
+      {booking.paymentSchedule.length > 0 && (
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-6">
+          <div className="card p-4 space-y-3">
+            <p className="text-sm font-bold text-slate-800">Payment Schedule</p>
+            <PaymentScheduleStepper items={booking.paymentSchedule} />
+          </div>
+        </div>
+      )}
 
       {/* Travelers */}
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-4">

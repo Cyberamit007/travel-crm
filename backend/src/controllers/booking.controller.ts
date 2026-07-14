@@ -3,6 +3,7 @@ import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { generateTasksFromItinerary } from './bookingTask.controller.js';
 import { linkBookingToDeparture, createPlaceholderTravelers, issueTravelerPortalToken } from './departure.controller.js';
+import { generatePaymentSchedule } from './paymentSchedule.controller.js';
 import { notifyFinanceTeam } from '../services/notification.service.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
@@ -196,6 +197,7 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
     await createPlaceholderTravelers(booking.id, Number(numberOfTravelers), {
       name: travelerName, mobile: lead?.phone, email: lead?.email,
     }).catch(console.error);
+    await generatePaymentSchedule(booking.id, price, depDate).catch(console.error);
     let travelerPortalToken: string | null = null;
     if (!booking.travelerPortalTokenHash) {
       travelerPortalToken = await issueTravelerPortalToken(booking.id, depDate).catch(() => null);
@@ -310,6 +312,7 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
     await createPlaceholderTravelers(booking.id, booking.numberOfTravelers, {
       name: booking.travelerName, mobile: leadForDest?.phone, email: leadForDest?.email,
     }).catch(console.error);
+    await generatePaymentSchedule(booking.id, booking.finalPrice, booking.departureDate).catch(console.error);
     let travelerPortalToken: string | null = null;
     if (!booking.travelerPortalTokenHash) {
       travelerPortalToken = await issueTravelerPortalToken(booking.id, booking.departureDate).catch(() => null);

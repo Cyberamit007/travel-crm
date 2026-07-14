@@ -627,6 +627,7 @@ model Booking {
   tasks        BookingTask[]
   travelers    Traveler[]
   refunds      Refund[]
+  paymentSchedule PaymentScheduleItem[]
 
   @@index([organizationId])
   @@index([leadId])
@@ -808,6 +809,13 @@ model Payment {
   recordedById String
   recordedBy   User   @relation("PaymentRecorder", fields: [recordedById], references: [id])
 
+  // Optional tag for which installment this payment is meant to settle — purely
+  // informational at recording time; the actual allocation (see approvePayment
+  // in payment.controller.ts) always applies in schedule sequence order so a
+  // lump-sum payment can still cover more than one installment.
+  scheduleItemId String?
+  scheduleItem   PaymentScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
@@ -815,6 +823,33 @@ model Payment {
   @@index([createdAt])
   @@index([status])
   @@map("payments")
+}
+
+// ─── Payment Schedule (installment plan) ─────────────────────────────────────
+// Purely additive on top of Booking.balanceAmount/balanceDueDate, which keep
+// working exactly as before — this is an informational/reminder-scheduling
+// layer, auto-generated once at booking confirmation and editable afterward.
+model PaymentScheduleItem {
+  id        String  @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  label      String                          // "Advance" | "Installment 1" | "Installment 2" | "Balance Payment"
+  sequence   Int
+  amount     Float
+  dueDate    DateTime
+  status     String  @default("PENDING")     // PENDING | PARTIAL | PAID — "overdue" is derived from dueDate at read time, not persisted
+  paidAmount Float   @default(0)
+
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookingId])
+  @@index([dueDate])
+  @@index([status])
+  @@map("payment_schedule_items")
 }
 
 // ─── Booking Tasks ────────────────────────────────────────────────────────────

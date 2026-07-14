@@ -35,6 +35,11 @@ export const getPortalBooking = async (req: Request, res: Response): Promise<voi
     const booking = await resolveBookingByToken(req.params.token);
     if (!booking) { res.status(404).json({ success: false, error: 'This link is invalid or has expired. Please contact your travel agent for a new one.' }); return; }
 
+    const paymentSchedule = await prisma.paymentScheduleItem.findMany({
+      where: { bookingId: booking.id },
+      orderBy: { sequence: 'asc' },
+    });
+
     res.json({
       success: true,
       data: {
@@ -49,6 +54,7 @@ export const getPortalBooking = async (req: Request, res: Response): Promise<voi
         amountPaid: booking.amountPaid,
         balanceAmount: booking.balanceAmount,
         travelers: booking.travelers,
+        paymentSchedule,
       },
     });
   } catch (e) {
