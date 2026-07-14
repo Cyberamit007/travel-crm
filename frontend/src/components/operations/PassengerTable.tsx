@@ -34,6 +34,15 @@ const VERIFICATION_STATUS_LABEL: Record<string, string> = {
   CORRECTION_REQUESTED: 'Correction Requested',
 };
 
+const PHONE_PATTERN = /^[6-9]\d{9}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-red-500 text-xs mt-1">{message}</p>;
+}
+
 interface TravelerForm {
   name: string;
   mobile?: string;
@@ -64,7 +73,7 @@ function TravelerFormModal({
   open: boolean; onClose: () => void; defaultValues?: Partial<Traveler>;
   onSubmit: (data: TravelerForm) => void; isLoading: boolean;
 }) {
-  const { register, handleSubmit } = useForm<TravelerForm>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<TravelerForm>({
     defaultValues: {
       name: defaultValues?.name ?? '',
       mobile: defaultValues?.mobile ?? '',
@@ -105,15 +114,28 @@ function TravelerFormModal({
       <form id="traveler-form" onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <label className="label">Full Name *</label>
-          <input {...register('name', { required: true })} className="input" placeholder="Traveler name" />
+          <input
+            {...register('name', { required: 'Name is required', minLength: { value: 2, message: 'Name is too short' }, maxLength: { value: 100, message: 'Name is too long' } })}
+            className="input" placeholder="Traveler name"
+          />
+          <FieldError message={errors.name?.message} />
         </div>
         <div>
           <label className="label">Mobile</label>
-          <input {...register('mobile')} className="input" placeholder="+91-" />
+          <input
+            {...register('mobile', { validate: (v) => !v || PHONE_PATTERN.test(v) || 'Enter a valid 10-digit mobile number' })}
+            className="input" placeholder="98765 43210"
+          />
+          <FieldError message={errors.mobile?.message} />
         </div>
         <div>
           <label className="label">Email</label>
-          <input type="email" {...register('email')} className="input" placeholder="traveler@email.com" />
+          <input
+            type="email"
+            {...register('email', { validate: (v) => !v || EMAIL_PATTERN.test(v) || 'Enter a valid email address' })}
+            className="input" placeholder="traveler@email.com"
+          />
+          <FieldError message={errors.email?.message} />
         </div>
         <div>
           <label className="label">Gender</label>
@@ -126,11 +148,29 @@ function TravelerFormModal({
         </div>
         <div>
           <label className="label">Date of Birth</label>
-          <input type="date" {...register('dob')} className="input" />
+          <input
+            type="date" max={todayISO()}
+            {...register('dob', {
+              validate: (v) => {
+                if (!v) return true;
+                const d = new Date(v);
+                if (d > new Date()) return 'Date of birth cannot be in the future';
+                if (new Date().getFullYear() - d.getFullYear() > 120) return 'Enter a valid date of birth';
+                return true;
+              },
+            })}
+            className="input"
+          />
+          <FieldError message={errors.dob?.message} />
         </div>
         <div>
           <label className="label">Age</label>
-          <input type="number" {...register('age')} className="input" placeholder="Age" />
+          <input
+            type="number"
+            {...register('age', { min: { value: 0, message: 'Age cannot be negative' }, max: { value: 120, message: 'Enter a valid age' } })}
+            className="input" placeholder="Age"
+          />
+          <FieldError message={errors.age?.message} />
         </div>
         <div>
           <label className="label">Blood Group</label>
@@ -155,7 +195,17 @@ function TravelerFormModal({
         </div>
         <div>
           <label className="label">Government ID Number</label>
-          <input {...register('govIdNumber')} className="input" placeholder="ID number" />
+          <input
+            {...register('govIdNumber', {
+              validate: (v) => {
+                if (!v) return true;
+                if (watch('govIdType') === 'AADHAR') return /^\d{12}$/.test(v.replace(/\s/g, '')) || 'Aadhar number must be 12 digits';
+                return v.trim().length >= 4 || 'Enter a valid ID number';
+              },
+            })}
+            className="input" placeholder="ID number"
+          />
+          <FieldError message={errors.govIdNumber?.message} />
         </div>
         <div>
           <label className="label">Seat Number</label>
@@ -190,7 +240,11 @@ function TravelerFormModal({
         </div>
         <div>
           <label className="label">Emergency Contact Phone</label>
-          <input {...register('emergencyContactPhone')} className="input" />
+          <input
+            {...register('emergencyContactPhone', { validate: (v) => !v || PHONE_PATTERN.test(v) || 'Enter a valid 10-digit mobile number' })}
+            className="input"
+          />
+          <FieldError message={errors.emergencyContactPhone?.message} />
         </div>
         <div className="sm:col-span-2 flex flex-wrap gap-4">
           <label className="flex items-center gap-2 text-sm text-slate-700">

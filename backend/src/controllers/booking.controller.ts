@@ -48,6 +48,15 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
     if (!travelerName?.trim()) { res.status(400).json({ success: false, error: 'Traveler name is required' }); return; }
     if (!numberOfTravelers || isNaN(Number(numberOfTravelers))) { res.status(400).json({ success: false, error: 'Number of travelers is required' }); return; }
     if (finalPrice === undefined || isNaN(Number(finalPrice))) { res.status(400).json({ success: false, error: 'Final price is required' }); return; }
+    if (aadharNumber && !/^\d{12}$/.test(String(aadharNumber).replace(/\s/g, ''))) {
+      res.status(400).json({ success: false, error: 'Aadhar number must be 12 digits' }); return;
+    }
+    if (amountPaid !== undefined && Number(amountPaid) > Number(finalPrice)) {
+      res.status(400).json({ success: false, error: 'Amount paid cannot exceed the final price' }); return;
+    }
+    if (departureDate && returnDate && new Date(returnDate) < new Date(departureDate)) {
+      res.status(400).json({ success: false, error: 'Return date cannot be before departure date' }); return;
+    }
 
     // amountPaid is never credited directly — it only increases once Finance
     // verifies a payment (see payment.controller.ts). The advance entered here
@@ -144,7 +153,7 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
     }
 
     // Create notification for lead assignee
-    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true, destination: true } });
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { assignedToId: true, destination: true, phone: true, email: true } });
     if (lead?.assignedToId) {
       await prisma.notification.create({
         data: {
@@ -179,10 +188,14 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
       await linkBookingToDeparture(booking.id, orgId(req), packageId || null, depDate, destination, tripDays).catch(console.error);
     }
 
-    // Materialize the headcount into real per-traveler placeholder records,
-    // and issue a Traveler Portal link (only if this booking doesn't already
-    // have one) so the customer can submit their own details.
-    await createPlaceholderTravelers(booking.id, Number(numberOfTravelers)).catch(console.error);
+    // Materialize the headcount into real per-traveler placeholder records —
+    // Traveler 1 is seeded with the booking contact's name/phone/email, since
+    // that's who almost always ends up being the first traveler — and issue a
+    // Traveler Portal link (only if this booking doesn't already have one) so
+    // the customer can submit the rest of their own details.
+    await createPlaceholderTravelers(booking.id, Number(numberOfTravelers), {
+      name: travelerName, mobile: lead?.phone, email: lead?.email,
+    }).catch(console.error);
     let travelerPortalToken: string | null = null;
     if (!booking.travelerPortalTokenHash) {
       travelerPortalToken = await issueTravelerPortalToken(booking.id, depDate).catch(() => null);
@@ -223,6 +236,15 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
       tourType, specialRequest, bookingNotes, finalPrice,
       balanceDueDate, status, packageId, departureDate, returnDate,
     } = req.body;
+
+    if (aadharNumber && !/^\d{12}$/.test(String(aadharNumber).replace(/\s/g, ''))) {
+      res.status(400).json({ success: false, error: 'Aadhar number must be 12 digits' }); return;
+    }
+    const effectiveDepartureDate = departureDate !== undefined ? departureDate : existing.departureDate;
+    const effectiveReturnDate = returnDate !== undefined ? returnDate : existing.returnDate;
+    if (effectiveDepartureDate && effectiveReturnDate && new Date(effectiveReturnDate) < new Date(effectiveDepartureDate)) {
+      res.status(400).json({ success: false, error: 'Return date cannot be before departure date' }); return;
+    }
 
     // amountPaid is intentionally not accepted here — it only changes via
     // Finance payment verification (payment.controller.ts) or a paid Refund.
@@ -271,8 +293,8 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
     });
 
     // Re-link to a Departure if the departure date or package changed.
+    const leadForDest = await prisma.lead.findUnique({ where: { id: existing.leadId }, select: { destination: true, phone: true, email: true } });
     if (booking.departureDate) {
-      const leadForDest = await prisma.lead.findUnique({ where: { id: existing.leadId }, select: { destination: true } });
       let destination = booking.departureLocation?.trim() || leadForDest?.destination || 'Unspecified';
       let tripDays = 1;
       if (booking.packageId) {
@@ -285,7 +307,9 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
 
     // Top up traveler placeholders if the headcount grew, and back-fill a
     // Traveler Portal link for any booking confirmed before this feature shipped.
-    await createPlaceholderTravelers(booking.id, booking.numberOfTravelers).catch(console.error);
+    await createPlaceholderTravelers(booking.id, booking.numberOfTravelers, {
+      name: booking.travelerName, mobile: leadForDest?.phone, email: leadForDest?.email,
+    }).catch(console.error);
     let travelerPortalToken: string | null = null;
     if (!booking.travelerPortalTokenHash) {
       travelerPortalToken = await issueTravelerPortalToken(booking.id, booking.departureDate).catch(() => null);

@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../types/index.js';
 import { emitOperationsUpdated, notifyOperationsTeam, createNotification } from '../services/notification.service.js';
 import { generateOpsTasksFromItinerary, generateStandardOpsTasks } from './departureTask.controller.js';
 import { computeJourney } from './journey.controller.js';
+import { validateTravelerInput } from '../utils/travelerValidation.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 const orgFilter = (req: AuthenticatedRequest) => (orgId(req) ? { organizationId: orgId(req) } : {});
@@ -23,17 +24,33 @@ function ageFromDob(dob: Date): number {
 // via the Traveler Portal, or Operations to edit directly. Idempotent: only
 // tops up the count, never duplicates travelers that already exist (so it's
 // safe to call again from updateBooking if numberOfTravelers changes).
-export async function createPlaceholderTravelers(bookingId: string, numberOfTravelers: number): Promise<void> {
+//
+// The person who made the booking is, in practice, almost always Traveler 1 —
+// so that first placeholder is seeded with the booking's contact name/phone/
+// email instead of being left blank like the rest. It's still just a
+// starting point: the customer (or Ops) can edit it via the normal flows,
+// and it doesn't affect verificationStatus, which still starts PENDING.
+export async function createPlaceholderTravelers(
+  bookingId: string,
+  numberOfTravelers: number,
+  primaryContact?: { name?: string | null; mobile?: string | null; email?: string | null }
+): Promise<void> {
   const existingCount = await prisma.traveler.count({ where: { bookingId } });
   if (existingCount >= numberOfTravelers) return;
 
   const toCreate = numberOfTravelers - existingCount;
   await prisma.traveler.createMany({
-    data: Array.from({ length: toCreate }, (_, i) => ({
-      bookingId,
-      name: `Traveler ${existingCount + i + 1}`,
-      verificationStatus: 'PENDING',
-    })),
+    data: Array.from({ length: toCreate }, (_, i) => {
+      const index = existingCount + i;
+      const isPrimary = index === 0 && !!primaryContact;
+      return {
+        bookingId,
+        name: isPrimary && primaryContact?.name?.trim() ? primaryContact.name.trim() : `Traveler ${index + 1}`,
+        mobile: isPrimary ? primaryContact?.mobile?.trim() || null : null,
+        email: isPrimary ? primaryContact?.email?.trim() || null : null,
+        verificationStatus: 'PENDING',
+      };
+    }),
   });
 }
 
@@ -636,6 +653,8 @@ export const createTraveler = async (req: AuthenticatedRequest, res: Response): 
       govIdType, govIdNumber, govIdDocumentUrl, medicalConditions, arrivalDetails, departureDetails,
     } = req.body;
     if (!name?.trim()) { res.status(400).json({ success: false, error: 'Traveler name is required' }); return; }
+    const validationError = validateTravelerInput(req.body);
+    if (validationError) { res.status(400).json({ success: false, error: validationError }); return; }
 
     const dobDate = dob ? new Date(dob) : null;
     const resolvedAge = age !== undefined && age !== null && age !== '' ? Number(age) : (dobDate ? ageFromDob(dobDate) : null);
@@ -696,6 +715,9 @@ export const updateTraveler = async (req: AuthenticatedRequest, res: Response): 
     if (orgId(req) && existing.booking.organizationId !== orgId(req)) { res.status(404).json({ success: false, error: 'Traveler not found' }); return; }
 
     const b = req.body;
+    const validationError = validateTravelerInput(b);
+    if (validationError) { res.status(400).json({ success: false, error: validationError }); return; }
+
     const dobDate = b.dob !== undefined ? (b.dob ? new Date(b.dob) : null) : existing.dob;
     const resolvedAge = b.age !== undefined
       ? (b.age === null || b.age === '' ? null : Number(b.age))

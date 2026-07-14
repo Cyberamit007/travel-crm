@@ -221,7 +221,14 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
             </div>
             <div>
               <label className="label">Return Date</label>
-              <input type="date" {...register('returnDate')} className="input" />
+              <input
+                type="date"
+                {...register('returnDate', {
+                  validate: (v, formValues) => !v || !formValues.departureDate || v >= formValues.departureDate || 'Return date cannot be before departure date',
+                })}
+                className="input"
+              />
+              {errors.returnDate && <p className="text-red-500 text-xs mt-1">{errors.returnDate.message}</p>}
             </div>
           </div>
         </div>
@@ -246,7 +253,11 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
             </div>
             <div>
               <label className="label">Aadhar Card No.</label>
-              <input {...register('aadharNumber')} className="input font-mono" placeholder="XXXX XXXX XXXX" maxLength={14} />
+              <input
+                {...register('aadharNumber', { validate: (v) => !v || /^\d{12}$/.test(v.replace(/\s/g, '')) || 'Aadhar number must be 12 digits' })}
+                className="input font-mono" placeholder="XXXX XXXX XXXX" maxLength={14}
+              />
+              {errors.aadharNumber && <p className="text-red-500 text-xs mt-1">{errors.aadharNumber.message}</p>}
             </div>
             <div>
               <label className="label">Food Preference</label>
@@ -314,7 +325,16 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
             </div>
             <div>
               <label className="label">Amount Paid (₹)</label>
-              <input type="number" min={0} step="0.01" {...register('amountPaid', { valueAsNumber: true })} className="input" />
+              <input
+                type="number" min={0} step="0.01"
+                {...register('amountPaid', {
+                  valueAsNumber: true,
+                  min: { value: 0, message: 'Must be ≥ 0' },
+                  validate: (v, formValues) => !(v > Number(formValues.finalPrice || 0)) || 'Amount paid cannot exceed the final price',
+                })}
+                className="input"
+              />
+              {errors.amountPaid && <p className="text-red-500 text-xs mt-1">{errors.amountPaid.message}</p>}
             </div>
           </div>
 

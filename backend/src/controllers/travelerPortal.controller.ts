@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { createHash } from 'node:crypto';
 import prisma from '../lib/prisma.js';
 import { notifyOperationsTeam } from '../services/notification.service.js';
+import { validateTravelerInput } from '../utils/travelerValidation.js';
 
 // ─── Traveler Portal (public, token-gated — no authenticate middleware) ─────
 // The only surface in the app a customer can reach without logging in. Every
@@ -73,6 +74,9 @@ export const submitTravelerDetails = async (req: Request, res: Response): Promis
     }
 
     const b = req.body;
+    const validationError = validateTravelerInput(b);
+    if (validationError) { res.status(400).json({ success: false, error: validationError }); return; }
+
     const dobDate = b.dob !== undefined ? (b.dob ? new Date(b.dob) : null) : traveler.dob;
     const resolvedAge = b.age !== undefined
       ? (b.age === null || b.age === '' ? null : Number(b.age))

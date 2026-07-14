@@ -22,7 +22,7 @@ function VendorFormModal({ open, onClose, defaultValues, onSubmit, isLoading }: 
   open: boolean; onClose: () => void; defaultValues?: Partial<Vendor>;
   onSubmit: (data: VendorForm) => void; isLoading: boolean;
 }) {
-  const { register, handleSubmit } = useForm<VendorForm>({
+  const { register, handleSubmit, formState: { errors } } = useForm<VendorForm>({
     defaultValues: {
       name: defaultValues?.name ?? '',
       type: defaultValues?.type ?? 'HOTEL',
@@ -43,7 +43,8 @@ function VendorFormModal({ open, onClose, defaultValues, onSubmit, isLoading }: 
       <form id="vendor-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
           <label className="label">Vendor Name *</label>
-          <input {...register('name', { required: true })} className="input" />
+          <input {...register('name', { required: 'Vendor name is required', minLength: { value: 2, message: 'Name is too short' } })} className="input" />
+          {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -66,7 +67,11 @@ function VendorFormModal({ open, onClose, defaultValues, onSubmit, isLoading }: 
         </div>
         <div>
           <label className="label">Contact Number</label>
-          <input {...register('contact')} className="input" />
+          <input
+            {...register('contact', { validate: (v) => !v || /^[0-9+\-\s()]{7,15}$/.test(v) || 'Enter a valid contact number' })}
+            className="input"
+          />
+          {errors.contact && <p className="text-red-500 text-xs mt-1">{errors.contact.message}</p>}
         </div>
         <div>
           <label className="label">Notes</label>

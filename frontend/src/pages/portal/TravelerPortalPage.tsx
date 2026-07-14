@@ -10,6 +10,15 @@ import { Traveler } from '../../types/index';
 import { formatDate, formatCurrency, cn } from '../../utils/helpers';
 import { Skeleton } from '../../components/ui/Skeleton';
 
+const PHONE_PATTERN = /^[6-9]\d{9}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-red-500 text-xs mt-1">{message}</p>;
+}
+
 const STATUS_META: Record<string, { label: string; icon: typeof Clock; classes: string }> = {
   PENDING: { label: 'Awaiting Your Details', icon: Clock, classes: 'bg-slate-100 text-slate-600' },
   SUBMITTED: { label: 'Pending Review', icon: Clock, classes: 'bg-amber-50 text-amber-700' },
@@ -49,7 +58,7 @@ function TravelerCard({ traveler, token, index }: { traveler: Traveler; token: s
   const meta = STATUS_META[traveler.verificationStatus] ?? STATUS_META.PENDING;
   const StatusIcon = meta.icon;
 
-  const { register, handleSubmit } = useForm<TravelerFormValues>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<TravelerFormValues>({
     defaultValues: {
       name: traveler.name?.startsWith('Traveler ') ? '' : traveler.name,
       mobile: traveler.mobile ?? '',
@@ -122,15 +131,28 @@ function TravelerCard({ traveler, token, index }: { traveler: Traveler; token: s
             <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <label className="label">Full Name *</label>
-                <input {...register('name', { required: true })} className="input" placeholder="As per government ID" />
+                <input
+                  {...register('name', { required: 'Name is required', minLength: { value: 2, message: 'Name is too short' }, maxLength: { value: 100, message: 'Name is too long' } })}
+                  className="input" placeholder="As per government ID"
+                />
+                <FieldError message={errors.name?.message} />
               </div>
               <div>
                 <label className="label">Mobile</label>
-                <input {...register('mobile')} className="input" placeholder="+91-" />
+                <input
+                  {...register('mobile', { validate: (v) => !v || PHONE_PATTERN.test(v) || 'Enter a valid 10-digit mobile number' })}
+                  className="input" placeholder="98765 43210"
+                />
+                <FieldError message={errors.mobile?.message} />
               </div>
               <div>
                 <label className="label">Email</label>
-                <input type="email" {...register('email')} className="input" />
+                <input
+                  type="email"
+                  {...register('email', { validate: (v) => !v || EMAIL_PATTERN.test(v) || 'Enter a valid email address' })}
+                  className="input"
+                />
+                <FieldError message={errors.email?.message} />
               </div>
               <div>
                 <label className="label">Gender</label>
@@ -143,7 +165,21 @@ function TravelerCard({ traveler, token, index }: { traveler: Traveler; token: s
               </div>
               <div>
                 <label className="label">Date of Birth</label>
-                <input type="date" {...register('dob')} className="input" />
+                <input
+                  type="date" max={todayISO()}
+                  {...register('dob', {
+                    validate: (v) => {
+                      if (!v) return true;
+                      const d = new Date(v);
+                      if (d > new Date()) return 'Date of birth cannot be in the future';
+                      const age = new Date().getFullYear() - d.getFullYear();
+                      if (age > 120) return 'Enter a valid date of birth';
+                      return true;
+                    },
+                  })}
+                  className="input"
+                />
+                <FieldError message={errors.dob?.message} />
               </div>
               <div>
                 <label className="label">Blood Group</label>
@@ -182,7 +218,11 @@ function TravelerCard({ traveler, token, index }: { traveler: Traveler; token: s
               </div>
               <div>
                 <label className="label">Emergency Contact Phone</label>
-                <input {...register('emergencyContactPhone')} className="input" />
+                <input
+                  {...register('emergencyContactPhone', { validate: (v) => !v || PHONE_PATTERN.test(v) || 'Enter a valid 10-digit mobile number' })}
+                  className="input"
+                />
+                <FieldError message={errors.emergencyContactPhone?.message} />
               </div>
               <div>
                 <label className="label">Government ID Type</label>
@@ -196,7 +236,17 @@ function TravelerCard({ traveler, token, index }: { traveler: Traveler; token: s
               </div>
               <div>
                 <label className="label">Government ID Number</label>
-                <input {...register('govIdNumber')} className="input" />
+                <input
+                  {...register('govIdNumber', {
+                    validate: (v) => {
+                      if (!v) return true;
+                      if (watch('govIdType') === 'AADHAR') return /^\d{12}$/.test(v.replace(/\s/g, '')) || 'Aadhar number must be 12 digits';
+                      return v.trim().length >= 4 || 'Enter a valid ID number';
+                    },
+                  })}
+                  className="input"
+                />
+                <FieldError message={errors.govIdNumber?.message} />
               </div>
               <div className="sm:col-span-2">
                 <label className="label">Upload Government ID (photo/scan)</label>
