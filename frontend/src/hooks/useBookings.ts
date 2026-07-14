@@ -66,3 +66,29 @@ export function useUpdateBooking() {
     onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to update booking'),
   });
 }
+
+export function useMarkReviewCollected(leadId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (bookingId: string) => (await api.put(`/bookings/${bookingId}/mark-review-collected`)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['booking', leadId] });
+      qc.invalidateQueries({ queryKey: ['lead-journey', leadId] });
+      toast.success('Review marked as collected');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to update'),
+  });
+}
+
+export function useMarkReferralReceived(leadId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (bookingId: string) => (await api.put(`/bookings/${bookingId}/mark-referral-received`)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['booking', leadId] });
+      qc.invalidateQueries({ queryKey: ['lead-journey', leadId] });
+      toast.success('Referral marked as received');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to update'),
+  });
+}

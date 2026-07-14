@@ -6,9 +6,10 @@ import {
   IndianRupee, ChevronRight, CreditCard, Trash2, Plus, CheckSquare, AlertTriangle,
 } from 'lucide-react';
 import { Lead, LeadStatus, Booking, Payment, BookingTask, TaskStatus, TaskType, TaskDepartment } from '../../types/index';
-import { useLead, useUpdateLead, useTransferLead } from '../../hooks/useLeads';
-import { useBookingByLead } from '../../hooks/useBookings';
+import { useLead, useUpdateLead, useTransferLead, useLeadJourney } from '../../hooks/useLeads';
+import { useBookingByLead, useMarkReviewCollected, useMarkReferralReceived } from '../../hooks/useBookings';
 import { useBookingPayments, useRecordPayment, useDeletePayment } from '../../hooks/usePayments';
+import JourneyTracker from './JourneyTracker';
 import { useBookingTasks, useUpdateTask, useCreateTask } from '../../hooks/useTasks';
 import { useUsers } from '../../hooks/useUsers';
 import BookingConfirmModal from './BookingConfirmModal';
@@ -741,8 +742,24 @@ function OverviewTab({ lead, canAct, onUpdateLead, booking, onEditBooking }: {
   lead: Lead; canAct: boolean; onUpdateLead: (data: any) => void;
   booking?: Booking | null; onEditBooking: () => void;
 }) {
+  const { data: journeyData } = useLeadJourney(lead.id);
+  const markReview = useMarkReviewCollected(lead.id);
+  const markReferral = useMarkReferralReceived(lead.id);
+
   return (
     <div className="space-y-5">
+      {/* Customer Journey Tracker */}
+      {journeyData?.data && (
+        <div className="card p-4">
+          <JourneyTracker
+            journey={journeyData.data}
+            onMarkReviewCollected={canAct && booking ? () => markReview.mutate(booking.id) : undefined}
+            onMarkReferralReceived={canAct && booking ? () => markReferral.mutate(booking.id) : undefined}
+            isPending={markReview.isPending || markReferral.isPending}
+          />
+        </div>
+      )}
+
       {/* Booking summary */}
       {lead.status === 'CONFIRMED' && booking && (
         <BookingSummary booking={booking} onEdit={onEditBooking} />

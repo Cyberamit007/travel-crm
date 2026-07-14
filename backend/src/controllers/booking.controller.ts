@@ -296,3 +296,39 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
+
+// ─── Journey Tracker terminal stages ─────────────────────────────────────────
+// Review/referral collection has no dedicated workflow in this app yet — these
+// are simple one-click "mark as done" actions so the journey tracker can
+// actually reach its last two stages.
+export const markReviewCollected = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.booking.findFirst({ where: { id, ...(orgId(req) ? { organizationId: orgId(req) } : {}) } });
+    if (!existing) { res.status(404).json({ success: false, error: 'Booking not found' }); return; }
+
+    const booking = await prisma.booking.update({
+      where: { id },
+      data: { reviewSubmittedAt: existing.reviewSubmittedAt ?? new Date() },
+    });
+    res.json({ success: true, data: booking });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+export const markReferralReceived = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.booking.findFirst({ where: { id, ...(orgId(req) ? { organizationId: orgId(req) } : {}) } });
+    if (!existing) { res.status(404).json({ success: false, error: 'Booking not found' }); return; }
+
+    const booking = await prisma.booking.update({
+      where: { id },
+      data: { referralReceivedAt: existing.referralReceivedAt ?? new Date() },
+    });
+    res.json({ success: true, data: booking });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};

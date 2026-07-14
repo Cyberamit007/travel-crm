@@ -6,6 +6,7 @@ import {
   PaginatedResponse,
   ApiResponse,
   ActivityLog,
+  Journey,
 } from '../types/index';
 import toast from 'react-hot-toast';
 
@@ -38,6 +39,17 @@ export function useLead(id: string | null) {
     queryKey: ['lead', id],
     queryFn: async () => {
       const { data } = await api.get(`/leads/${id}`);
+      return data;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useLeadJourney(id: string | null) {
+  return useQuery<ApiResponse<Journey>>({
+    queryKey: ['lead-journey', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/leads/${id}/journey`);
       return data;
     },
     enabled: !!id,

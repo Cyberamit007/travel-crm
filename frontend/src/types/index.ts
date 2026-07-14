@@ -481,6 +481,20 @@ export interface Booking {
   updatedAt: string;
 }
 
+export interface JourneyStage {
+  key: string;
+  label: string;
+  done: boolean;
+  at: string | null;
+}
+
+export interface Journey {
+  stages: JourneyStage[];
+  completedCount: number;
+  totalCount: number;
+  currentStage: string | null;
+}
+
 export interface BookingWithLead extends Booking {
   lead: Pick<Lead, 'id' | 'name' | 'phone' | 'email' | 'destination' | 'preferredDate'> & {
     assignedTo?: Pick<User, 'id' | 'name'>;
