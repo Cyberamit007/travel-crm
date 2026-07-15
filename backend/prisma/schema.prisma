@@ -1270,6 +1270,27 @@ model AutomationExecution {
   @@map("automation_executions")
 }
 
+// ─── Error Log ────────────────────────────────────────────────────────────────
+// Populated only by the global Express error-handling middleware (index.ts),
+// only for 500-level responses — powers System Health's "Recent Errors"
+// widget. Not full APM; userId is informational only (no FK, same loose
+// convention as ActivityLog.entityId) since errors can occur for
+// unauthenticated requests too.
+model ErrorLog {
+  id         String   @id @default(uuid())
+  message    String
+  stack      String?
+  path       String?
+  method     String?
+  statusCode Int?
+  userId     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("error_logs")
+}
+
 // Transactional vendor bills — a Vendor (master record) can have many of these
 // across many departures. Not fields on Vendor itself.
 

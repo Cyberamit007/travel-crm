@@ -18,6 +18,7 @@ import { runTrackedJob } from './services/jobTracker.service.js';
 import { processDueAutomationExecutions } from './services/automationEngine.service.js';
 import logger from './utils/logger.js';
 import { JWTPayload } from './types/index.js';
+import prisma from './lib/prisma.js';
 import { UPLOAD_DIR_PATH } from './middleware/upload.js';
 
 const app = express();
@@ -85,6 +86,22 @@ app.use('/api/uploads', express.static(UPLOAD_DIR_PATH));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'Travel CRM API' });
+});
+
+// Global error handler — must be registered after all routes. Only 500-level
+// responses get persisted to ErrorLog (powers System Health's Recent Errors
+// widget); this never throws itself, so a logging failure can't take down
+// the response.
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const statusCode = (err as { statusCode?: number; status?: number }).statusCode ?? (err as { status?: number }).status ?? 500;
+  logger.error(`Unhandled error: ${err.message}`, { stack: err.stack, path: req.path, method: req.method });
+  if (statusCode >= 500) {
+    const userId = (req as unknown as { user?: { id?: string } }).user?.id;
+    prisma.errorLog.create({
+      data: { message: err.message, stack: err.stack, path: req.path, method: req.method, statusCode, userId },
+    }).catch(() => {});
+  }
+  res.status(statusCode).json({ success: false, error: statusCode >= 500 ? 'Internal server error' : err.message });
 });
 
 io.use((socket, next) => {

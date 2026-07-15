@@ -1079,6 +1079,27 @@ export interface AutomationRule {
   updatedAt: string;
 }
 
+export interface SystemHealth {
+  database: { connected: boolean; pingMs: number };
+  jobs: { jobName: string; success: number; failed: number; running: number; lastRun: string | null }[];
+  failedJobs24h: number;
+  notificationsPending: number;
+  storageUsedBytes: number;
+  recentErrors: { id: string; message: string; stack?: string; path?: string; method?: string; statusCode?: number; userId?: string; createdAt: string }[];
+}
+
+export interface SearchResults {
+  leads?: { id: string; name: string; phone: string; status: string }[];
+  bookings?: { id: string; bookingNumber?: string; travelerName: string; leadId: string }[];
+  payments?: { id: string; amount: number; reference?: string; receiptNo?: string; bookingId: string }[];
+  packages?: { id: string; name: string; code: string }[];
+  hotels?: { id: string; name: string; departureId: string }[];
+  vehicles?: { id: string; vehicleNumber?: string; driverName?: string; departureId: string }[];
+  vendors?: { id: string; name: string; type: string }[];
+  users?: { id: string; name: string; email: string; role: string }[];
+  travelers?: { id: string; name: string; bookingId: string; departureId?: string }[];
+}
+
 export interface ExecutiveDashboardStats {
   todaysRevenue: number;
   monthlyRevenue: number;

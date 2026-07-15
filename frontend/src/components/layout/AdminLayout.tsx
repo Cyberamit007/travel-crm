@@ -5,7 +5,7 @@ import {
   LogOut, ChevronDown, Menu, X, UserCircle, Megaphone,
   MessageSquarePlus, Activity, BarChart2, Building2,
   UserCheck, Database, ChevronRight, Package, BookOpen,
-  Contact, Wallet, Map, Home, Gauge, LineChart, FolderKanban, Settings2, Zap,
+  Contact, Wallet, Map, Home, Gauge, LineChart, FolderKanban, Settings2, Zap, HeartPulse,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -15,6 +15,7 @@ import Avatar from '../ui/Avatar';
 import FeedbackButton from '../feedback/FeedbackButton';
 import { formatRelativeTime, cn } from '../../utils/helpers';
 import { SEVERITY_DOT, CATEGORIES } from '../../utils/notificationMeta';
+import GlobalSearch from './GlobalSearch';
 
 // ─── Nav Configuration ────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ const NAV: NavEntry[] = [
   { type: 'item', to: '/admin/feedback', label: 'Feedback', icon: MessageSquarePlus },
   { type: 'item', to: '/admin/automation-builder', label: 'Automation Builder', icon: Zap },
   { type: 'item', to: '/admin/business-rules', label: 'Business Rules', icon: Settings2 },
+  { type: 'item', to: '/admin/system-health', label: 'System Health', icon: HeartPulse },
   { type: 'item', to: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -344,6 +346,8 @@ export default function AdminLayout() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <GlobalSearch />
+
             {/* Notifications */}
             <div ref={notifRef} className="relative">
               <button
