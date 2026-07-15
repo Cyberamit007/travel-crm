@@ -403,6 +403,12 @@ model ActivityLog {
   entityType String? // LEAD | CAMPAIGN | USER | LEAVE | DEPARTURE | HOTEL | VEHICLE | VENDOR | TRAVELER | PAYMENT | REFUND | VENDOR_PAYMENT | TRAVELER_PORTAL | VENDOR_DOCUMENT | EXPENSE
   entityId   String?
 
+  // Before/after snapshot for a real audit diff — only populated at the
+  // handful of highest-value mutation points (payment/refund/expense status
+  // changes, booking edits), not every activityLog.create call in the app.
+  oldValue Json?
+  newValue Json?
+
   user   User   @relation(fields: [userId], references: [id])
   userId String
 

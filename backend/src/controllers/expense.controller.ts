@@ -100,6 +100,7 @@ export const approveExpense = async (req: AuthenticatedRequest, res: Response): 
         action: 'Expense Approved',
         details: `₹${expense.amount.toLocaleString()} ${expense.category} expense approved by ${req.user?.name}`,
         entityType: 'EXPENSE', entityId: id, userId: req.user!.id,
+        oldValue: { status: expense.status }, newValue: { status: 'APPROVED' },
       },
     });
 
@@ -136,6 +137,7 @@ export const rejectExpense = async (req: AuthenticatedRequest, res: Response): P
         action: 'Expense Rejected',
         details: `₹${expense.amount.toLocaleString()} ${expense.category} expense rejected by ${req.user?.name}: ${reason.trim()}`,
         entityType: 'EXPENSE', entityId: id, userId: req.user!.id,
+        oldValue: { status: expense.status }, newValue: { status: 'REJECTED', rejectionReason: reason.trim() },
       },
     });
 

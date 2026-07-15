@@ -7,6 +7,9 @@ interface ActivityParams {
   limit?: number;
   entityType?: string;
   userId?: string;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export function useActivityFeed(params?: ActivityParams) {

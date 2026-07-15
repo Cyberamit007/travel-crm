@@ -189,6 +189,8 @@ export interface ActivityLog {
   details?: string;
   entityType?: string;
   entityId?: string;
+  oldValue?: Record<string, unknown>;
+  newValue?: Record<string, unknown>;
   userId: string;
   user: Pick<User, 'id' | 'name' | 'avatar' | 'role'>;
   leadId?: string;

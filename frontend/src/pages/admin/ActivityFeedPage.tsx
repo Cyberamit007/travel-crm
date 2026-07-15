@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Filter } from 'lucide-react';
+import { Activity, Search } from 'lucide-react';
 import { useActivityFeed } from '../../hooks/useActivity';
 import { ActivityLog } from '../../types/index';
 import Avatar from '../../components/ui/Avatar';
@@ -17,7 +17,49 @@ const ACTION_EMOJI: Record<string, string> = {
   'Employee Created': '👤',
   'Employee Updated': '👥',
   'Leave Approved': '📅',
+  'Payment Approved': '💰',
+  'Payment Rejected': '❌',
+  'Refund Approved': '↩️',
+  'Refund Paid': '✅',
+  'Refund Rejected': '❌',
+  'Expense Approved': '💳',
+  'Expense Rejected': '❌',
+  'Booking Updated': '📋',
 };
+
+// Matches the ActivityLog.entityType comment in schema.prisma — every value
+// ever actually written by activityLog.create calls across the codebase.
+const ENTITY_TYPES = [
+  '', 'LEAD', 'CAMPAIGN', 'USER', 'LEAVE', 'DEPARTURE', 'HOTEL', 'VEHICLE',
+  'VENDOR', 'TRAVELER', 'PAYMENT', 'REFUND', 'VENDOR_PAYMENT', 'TRAVELER_PORTAL',
+  'VENDOR_DOCUMENT', 'EXPENSE',
+];
+
+function formatDiffValue(v: unknown): string {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'number') return v.toLocaleString();
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  return String(v);
+}
+
+function DiffRow({ oldValue, newValue }: { oldValue?: Record<string, unknown>; newValue?: Record<string, unknown> }) {
+  if (!oldValue && !newValue) return null;
+  const keys = Array.from(new Set([...Object.keys(oldValue ?? {}), ...Object.keys(newValue ?? {})]));
+  if (keys.length === 0) return null;
+
+  return (
+    <div className="ml-7 mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+      {keys.map((k) => (
+        <div key={k} className="text-xs">
+          <span className="text-slate-400">{k}: </span>
+          <span className="text-red-500 line-through">{formatDiffValue(oldValue?.[k])}</span>
+          <span className="text-slate-400 mx-1">→</span>
+          <span className="text-emerald-600 font-medium">{formatDiffValue(newValue?.[k])}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function LogRow({ log }: { log: ActivityLog }) {
   const emoji = Object.entries(ACTION_EMOJI).find(([k]) => log.action.includes(k.split(' ')[1] || k))?.[1]
@@ -45,6 +87,7 @@ function LogRow({ log }: { log: ActivityLog }) {
         {log.details && (
           <p className="text-xs text-slate-500 mt-0.5 ml-7 truncate">{log.details}</p>
         )}
+        <DiffRow oldValue={log.oldValue} newValue={log.newValue} />
       </div>
     </div>
   );
@@ -53,7 +96,13 @@ function LogRow({ log }: { log: ActivityLog }) {
 export default function ActivityFeedPage() {
   const [page, setPage] = useState(1);
   const [entityType, setEntityType] = useState('');
-  const { data, isLoading } = useActivityFeed({ page, limit: 50, entityType: entityType || undefined });
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const { data, isLoading } = useActivityFeed({
+    page, limit: 50, entityType: entityType || undefined,
+    search: search || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined,
+  });
 
   const logs = data?.data ?? [];
   const meta = data?.meta;
@@ -62,25 +111,28 @@ export default function ActivityFeedPage() {
     <div className="space-y-5 max-w-4xl">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Global Activity Feed</h2>
-          <p className="text-sm text-slate-500 mt-0.5">All system-wide actions and events</p>
+          <h2 className="text-xl font-bold text-slate-900">Audit Center</h2>
+          <p className="text-sm text-slate-500 mt-0.5">Every important action, who did it, when, and what changed</p>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
-        <Filter className="w-4 h-4 text-slate-400" />
-        {['', 'LEAD', 'CAMPAIGN', 'USER', 'LEAVE'].map((t) => (
-          <button
-            key={t}
-            onClick={() => { setEntityType(t); setPage(1); }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-              entityType === t ? 'bg-primary-600 text-white border-primary-600' : 'border-slate-200 text-slate-600 hover:border-slate-300'
-            }`}
-          >
-            {t || 'All'}
-          </button>
-        ))}
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search action or details..."
+            className="input pl-9 py-1.5 text-sm"
+          />
+        </div>
+        <select value={entityType} onChange={(e) => { setEntityType(e.target.value); setPage(1); }} className="input py-1.5 text-sm w-auto">
+          {ENTITY_TYPES.map((t) => <option key={t} value={t}>{t || 'All Entities'}</option>)}
+        </select>
+        <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="input py-1.5 text-sm w-auto" />
+        <span className="text-slate-400 text-sm">→</span>
+        <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="input py-1.5 text-sm w-auto" />
       </div>
 
       <div className="card p-4">

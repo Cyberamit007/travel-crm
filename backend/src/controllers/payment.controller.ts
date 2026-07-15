@@ -167,6 +167,8 @@ export const approvePayment = async (req: AuthenticatedRequest, res: Response): 
         entityId: id,
         userId: req.user!.id,
         leadId: payment.booking.leadId,
+        oldValue: { status: payment.status },
+        newValue: { status: 'VERIFIED', bookingAmountPaid: newAmountPaid, bookingBalanceAmount: newBalance },
       },
     });
 
@@ -217,6 +219,8 @@ export const rejectPayment = async (req: AuthenticatedRequest, res: Response): P
         entityId: id,
         userId: req.user!.id,
         leadId: payment.booking.leadId,
+        oldValue: { status: payment.status },
+        newValue: { status: 'REJECTED', financeNote: reason.trim() },
       },
     });
 

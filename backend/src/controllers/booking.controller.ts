@@ -285,12 +285,27 @@ export const updateBooking = async (req: AuthenticatedRequest, res: Response): P
       },
     });
 
+    // Diff the fields an Admin/audit trail would actually care about — not
+    // every column, just the ones that carry meaning when they change.
+    const diffFields = ['travelerName', 'numberOfTravelers', 'finalPrice', 'status', 'packageId', 'departureDate', 'returnDate', 'balanceDueDate'] as const;
+    const oldValue: Record<string, unknown> = {};
+    const newValue: Record<string, unknown> = {};
+    for (const field of diffFields) {
+      const before = existing[field];
+      const after = booking[field];
+      const beforeStr = before instanceof Date ? before.toISOString() : before;
+      const afterStr = after instanceof Date ? after.toISOString() : after;
+      if (beforeStr !== afterStr) { oldValue[field] = before; newValue[field] = after; }
+    }
+
     await prisma.activityLog.create({
       data: {
         action: 'Booking Updated',
         details: `Booking details updated by ${req.user?.name}`,
         userId: req.user!.id,
         leadId: existing.leadId,
+        oldValue: Object.keys(oldValue).length ? oldValue : undefined,
+        newValue: Object.keys(newValue).length ? newValue : undefined,
       },
     });
 

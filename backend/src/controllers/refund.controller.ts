@@ -74,7 +74,11 @@ export const approveRefund = async (req: AuthenticatedRequest, res: Response): P
       data: { status: 'APPROVED', approvedById: req.user!.id },
     });
     await prisma.activityLog.create({
-      data: { action: 'Refund Approved', details: `₹${refund.amount.toLocaleString()} refund approved by ${req.user?.name}`, entityType: 'REFUND', entityId: id, userId: req.user!.id },
+      data: {
+        action: 'Refund Approved', details: `₹${refund.amount.toLocaleString()} refund approved by ${req.user?.name}`,
+        entityType: 'REFUND', entityId: id, userId: req.user!.id,
+        oldValue: { status: refund.status }, newValue: { status: 'APPROVED' },
+      },
     });
     emitFinanceUpdated();
     res.json({ success: true, data: updated });
@@ -104,7 +108,12 @@ export const markRefundPaid = async (req: AuthenticatedRequest, res: Response): 
     ]);
 
     await prisma.activityLog.create({
-      data: { action: 'Refund Paid', details: `₹${refund.amount.toLocaleString()} refund paid to ${refund.booking.lead.name}`, entityType: 'REFUND', entityId: id, userId: req.user!.id, leadId: refund.booking.leadId },
+      data: {
+        action: 'Refund Paid', details: `₹${refund.amount.toLocaleString()} refund paid to ${refund.booking.lead.name}`,
+        entityType: 'REFUND', entityId: id, userId: req.user!.id, leadId: refund.booking.leadId,
+        oldValue: { status: refund.status, bookingAmountPaid: refund.booking.amountPaid },
+        newValue: { status: 'PAID', transactionId: transactionId?.trim() || null, bookingAmountPaid: newAmountPaid },
+      },
     });
 
     // Every paid refund automatically gets a numbered refund voucher.
@@ -133,7 +142,11 @@ export const rejectRefund = async (req: AuthenticatedRequest, res: Response): Pr
       data: { status: 'REJECTED', remarks: remarks?.trim() || refund.remarks, approvedById: req.user!.id },
     });
     await prisma.activityLog.create({
-      data: { action: 'Refund Rejected', details: `Refund rejected by ${req.user?.name}`, entityType: 'REFUND', entityId: id, userId: req.user!.id },
+      data: {
+        action: 'Refund Rejected', details: `Refund rejected by ${req.user?.name}`,
+        entityType: 'REFUND', entityId: id, userId: req.user!.id,
+        oldValue: { status: refund.status }, newValue: { status: 'REJECTED', remarks: remarks?.trim() || refund.remarks },
+      },
     });
     emitFinanceUpdated();
     res.json({ success: true, data: updated });
