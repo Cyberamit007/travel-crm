@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
-import * as XLSX from 'xlsx';
 import {
-  BarChart2, Download, TrendingUp, Users, CheckCircle,
+  BarChart2, Download, FileDown, TrendingUp, Users, CheckCircle,
   XCircle, Loader2, Megaphone, AlertTriangle,
 } from 'lucide-react';
 import {
@@ -15,6 +14,7 @@ import {
   useCampaignReport,
   useDailyTrend,
 } from '../../hooks/useReports';
+import { exportRowsToExcel, exportRowsToCSV } from '../../utils/reportExport';
 import Avatar from '../../components/ui/Avatar';
 import { cn } from '../../utils/helpers';
 
@@ -59,14 +59,6 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: s
   );
 }
 
-function exportToExcel(filename: string, rows: Record<string, any>[], sheetName = 'Report') {
-  if (!rows.length) return;
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  XLSX.writeFile(wb, filename);
-}
-
 export default function ReportsPage() {
   const [period, setPeriod] = useState<Period>('30d');
   const [customStart, setCustomStart] = useState('');
@@ -102,10 +94,13 @@ export default function ReportsPage() {
   const campaigns = campaignData?.data?.campaigns ?? [];
   const trend = trendData?.data?.trend ?? [];
 
-  const handleExport = () => {
+  const handleExport = (format: 'xlsx' | 'csv') => {
     const date = `${startDate}-to-${endDate}`;
+    const doExport = format === 'xlsx' ? exportRowsToExcel : exportRowsToCSV;
+    const ext = format;
+
     if (activeTab === 'leads') {
-      exportToExcel(`lead-analytics-${date}.xlsx`, [
+      doExport(`lead-analytics-${date}.${ext}`, [
         ...(leadSummary ? [
           { Metric: 'Total Leads', Value: leadSummary.totalLeads },
           { Metric: 'Confirmed', Value: leadSummary.confirmedLeads },
@@ -113,18 +108,18 @@ export default function ReportsPage() {
           { Metric: 'Conversion Rate %', Value: leadSummary.conversionRate },
         ] : []),
         ...byStatus.map((r: any) => ({ 'By Status': r.name, Count: r.count })),
-      ], 'Lead Analytics');
+      ]);
     } else if (activeTab === 'performance') {
-      exportToExcel(`employee-performance-${date}.xlsx`, employees.map((e: any) => ({
+      doExport(`employee-performance-${date}.${ext}`, employees.map((e: any) => ({
         Employee: e.name,
         'Total Leads': e.totalLeads,
         Confirmed: e.confirmed,
         Lost: e.lost,
         'Follow-ups': e.followUps,
         'Conversion Rate %': e.conversionRate,
-      })), 'Performance');
+      })));
     } else if (activeTab === 'campaigns') {
-      exportToExcel(`campaign-report-${date}.xlsx`, campaigns.map((c: any) => ({
+      doExport(`campaign-report-${date}.${ext}`, campaigns.map((c: any) => ({
         Campaign: c.name,
         Status: c.status,
         Destination: c.destination || '',
@@ -132,20 +127,20 @@ export default function ReportsPage() {
         Confirmed: c.confirmed,
         Lost: c.lost,
         'Conversion Rate %': c.conversionRate,
-      })), 'Campaigns');
+      })));
     } else if (activeTab === 'lost_reasons') {
-      exportToExcel(`lost-reasons-${date}.xlsx`, lostReasons.map((r: any) => ({
+      doExport(`lost-reasons-${date}.${ext}`, lostReasons.map((r: any) => ({
         Reason: r.reason,
         Count: r.count,
         'Percentage %': lostTotal > 0 ? ((r.count / lostTotal) * 100).toFixed(1) : 0,
-      })), 'Lost Reasons');
+      })));
     } else if (activeTab === 'trend') {
-      exportToExcel(`daily-trend-${date}.xlsx`, trend.map((t: any) => ({
+      doExport(`daily-trend-${date}.${ext}`, trend.map((t: any) => ({
         Date: t.date,
         'Leads Created': t.created,
         Confirmed: t.confirmed,
         Lost: t.lost,
-      })), 'Daily Trend');
+      })));
     }
   };
 
@@ -157,10 +152,16 @@ export default function ReportsPage() {
           <h2 className="text-xl font-bold text-slate-900">Reports</h2>
           <p className="text-sm text-slate-500 mt-0.5">Performance insights and analytics</p>
         </div>
-        <button onClick={handleExport} className="btn-secondary flex items-center gap-2 text-sm">
-          <Download className="w-4 h-4" />
-          Export Excel
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => handleExport('csv')} className="btn-secondary flex items-center gap-2 text-sm">
+            <FileDown className="w-4 h-4" />
+            CSV
+          </button>
+          <button onClick={() => handleExport('xlsx')} className="btn-secondary flex items-center gap-2 text-sm">
+            <Download className="w-4 h-4" />
+            Export Excel
+          </button>
+        </div>
       </div>
 
       {/* Period selector */}

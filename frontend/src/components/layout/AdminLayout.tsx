@@ -5,7 +5,7 @@ import {
   LogOut, ChevronDown, Menu, X, UserCircle, Megaphone,
   MessageSquarePlus, Activity, BarChart2, Building2,
   UserCheck, Database, ChevronRight, Package, BookOpen,
-  Contact, Wallet, Map, Home, Gauge, LineChart,
+  Contact, Wallet, Map, Home, Gauge, LineChart, FolderKanban,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -53,6 +53,7 @@ const NAV: NavEntry[] = [
   },
 
   { type: 'divider', label: 'SYSTEM' },
+  { type: 'item', to: '/admin/report-center', label: 'Report Center', icon: FolderKanban },
   { type: 'item', to: '/admin/reports',  label: 'Reports',  icon: BarChart2 },
   { type: 'item', to: '/admin/activity', label: 'Activity', icon: Activity },
   { type: 'item', to: '/admin/feedback', label: 'Feedback', icon: MessageSquarePlus },

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
-import { Download, Printer, FileBarChart } from 'lucide-react';
+import { Download, FileDown, Printer, FileBarChart } from 'lucide-react';
 import {
   useCollectionReport, useEmployeeCollectionReport, useDestinationRevenueReport, useDepartureRevenueReport,
   useOutstandingReport, useVendorPaymentReport, useRefundReport, useExpenseReport,
   useTripProfitabilityReport, usePackageProfitabilityReport, useProfitLossReport,
 } from '../../hooks/useFinance';
+import { exportRowsToExcel, exportRowsToCSV } from '../../utils/reportExport';
 import { formatCurrency } from '../../utils/helpers';
 
 type Tab = 'collections' | 'employees' | 'destinations' | 'departures' | 'outstanding' | 'vendors' | 'refunds' | 'expenses' | 'tripProfit' | 'packageProfit' | 'pnl';
@@ -23,14 +23,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'packageProfit', label: 'Package Profit' },
   { key: 'pnl', label: 'Profit & Loss' },
 ];
-
-function exportToExcel(filename: string, rows: Record<string, any>[]) {
-  if (!rows.length) return;
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Report');
-  XLSX.writeFile(wb, filename);
-}
 
 function ReportTable({ rows, columns }: { rows: Record<string, any>[]; columns: { key: string; label: string; format?: (v: any) => string }[] }) {
   if (rows.length === 0) return <div className="empty-state"><p className="text-sm text-slate-400">No data for this report</p></div>;
@@ -97,7 +89,8 @@ export default function FinanceReportsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handlePrint} className="btn-secondary text-sm"><Printer className="w-4 h-4" />Print / PDF</button>
-          <button onClick={() => exportToExcel(`${tab}-report.xlsx`, currentRows)} disabled={currentRows.length === 0} className="btn-primary text-sm"><Download className="w-4 h-4" />Export Excel</button>
+          <button onClick={() => exportRowsToCSV(`${tab}-report.csv`, currentRows)} disabled={currentRows.length === 0} className="btn-secondary text-sm"><FileDown className="w-4 h-4" />CSV</button>
+          <button onClick={() => exportRowsToExcel(`${tab}-report.xlsx`, currentRows)} disabled={currentRows.length === 0} className="btn-primary text-sm"><Download className="w-4 h-4" />Export Excel</button>
         </div>
       </div>
 
