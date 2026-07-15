@@ -286,7 +286,7 @@ export default function EmployeeDashboard() {
       </div>
 
       {/* Row 1 — KPI Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
         <StatsCard
           label="My Leads"
           value={leads.length}
@@ -318,6 +318,14 @@ export default function EmployeeDashboard() {
           iconBg="bg-green-100"
           iconColor="text-green-600"
           onClick={() => navigate('/employee/leads?status=CONFIRMED')}
+        />
+        <StatsCard
+          label="Lost"
+          value={stats.lost.length}
+          icon={XCircle}
+          iconBg="bg-slate-100"
+          iconColor="text-slate-500"
+          onClick={() => navigate('/employee/leads?status=LOST')}
         />
         <StatsCard
           label="Overdue"

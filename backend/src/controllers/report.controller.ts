@@ -157,7 +157,10 @@ export const getPerformanceReport = async (req: AuthenticatedRequest, res: Respo
           prisma.lead.count({ where: { ...baseWhere, assignedToId: emp.id } }),
           prisma.lead.count({ where: { ...baseWhere, assignedToId: emp.id, status: 'CONFIRMED' } }),
           prisma.lead.count({ where: { ...baseWhere, assignedToId: emp.id, status: 'LOST' } }),
-          (prisma as any).followUp.count({ where: { lead: { ...org }, userId: emp.id, scheduledAt: { gte: start, lte: end } } }).catch(() => 0),
+          // Follow-ups live as fields on Lead itself (followUpDate/followUpDone) —
+          // there is no separate FollowUp model. Count this employee's leads with
+          // a follow-up scheduled in the selected range.
+          prisma.lead.count({ where: { ...org, assignedToId: emp.id, followUpDate: { gte: start, lte: end } } }),
         ]);
         return {
           id: emp.id,
