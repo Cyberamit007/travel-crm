@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { notifyFinanceTeam, emitFinanceUpdated, createNotification } from '../services/notification.service.js';
+import { generateFinanceDocument } from './financeDocument.controller.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 const orgFilter = (req: AuthenticatedRequest) => (orgId(req) ? { organizationId: orgId(req) } : {});
@@ -105,6 +106,12 @@ export const markRefundPaid = async (req: AuthenticatedRequest, res: Response): 
     await prisma.activityLog.create({
       data: { action: 'Refund Paid', details: `₹${refund.amount.toLocaleString()} refund paid to ${refund.booking.lead.name}`, entityType: 'REFUND', entityId: id, userId: req.user!.id, leadId: refund.booking.leadId },
     });
+
+    // Every paid refund automatically gets a numbered refund voucher.
+    await generateFinanceDocument({
+      type: 'REFUND_VOUCHER', bookingId: refund.bookingId, refundId: id, reason: refund.reason, generatedById: req.user!.id,
+    }).catch((err) => console.error('[refund] voucher generation error:', err));
+
     emitFinanceUpdated();
     res.json({ success: true, data: updated });
   } catch (e) {

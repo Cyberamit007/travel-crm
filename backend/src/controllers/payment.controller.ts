@@ -3,6 +3,7 @@ import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { notifyFinanceTeam, emitFinanceUpdated, createNotification } from '../services/notification.service.js';
 import { allocatePaymentToSchedule } from './paymentSchedule.controller.js';
+import { generateFinanceDocument } from './financeDocument.controller.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 
@@ -166,6 +167,10 @@ export const approvePayment = async (req: AuthenticatedRequest, res: Response): 
       await allocatePaymentToSchedule(payment.bookingId, payment.amount, payment.scheduleItemId).catch((err) =>
         console.error('[payment] schedule allocation error:', err)
       );
+      // Every successful payment automatically gets a numbered receipt.
+      await generateFinanceDocument({
+        type: 'RECEIPT', bookingId: payment.bookingId, paymentId: payment.id, generatedById: req.user!.id,
+      }).catch((err) => console.error('[payment] receipt generation error:', err));
     }
 
     if (payment.recordedById) {

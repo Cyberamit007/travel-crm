@@ -15,6 +15,7 @@ import {
   listExpenses, createExpense, approveExpense, rejectExpense, deleteExpense,
 } from '../controllers/expense.controller.js';
 import { getPaymentSchedule, updateScheduleItem } from '../controllers/paymentSchedule.controller.js';
+import { createFinanceDocument, listFinanceDocuments } from '../controllers/financeDocument.controller.js';
 import {
   getCollectionReport, getEmployeeCollectionReport, getDestinationRevenueReport, getDepartureRevenueReport,
   getOutstandingReport, getVendorPaymentReport, getRefundReport, getExpenseReport, getProfitLossReport,
@@ -40,6 +41,10 @@ router.get('/pending-tracker', getPendingTracker);
 // Payment schedule (installment plan)
 router.get('/bookings/:bookingId/schedule', getPaymentSchedule);
 router.put('/schedule/:itemId', updateScheduleItem);
+
+// Finance documents (invoices/receipts/credit notes/debit notes/refund vouchers)
+router.get('/documents', listFinanceDocuments);
+router.post('/documents', createFinanceDocument);
 
 // Refunds
 router.get('/refunds', listRefunds);

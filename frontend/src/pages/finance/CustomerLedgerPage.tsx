@@ -5,6 +5,7 @@ import { useCustomerLedger } from '../../hooks/useFinance';
 import LedgerTable from '../../components/finance/LedgerTable';
 import ReceiptView from '../../components/finance/ReceiptView';
 import PaymentScheduleView from '../../components/finance/PaymentScheduleView';
+import FinanceDocumentsPanel from '../../components/finance/FinanceDocumentsPanel';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { formatCurrency } from '../../utils/helpers';
 
@@ -94,6 +95,8 @@ export default function CustomerLedgerPage() {
               <PaymentScheduleView bookingId={selectedBookingId ?? undefined} editable />
 
               <LedgerTable ledger={ledger} />
+
+              <FinanceDocumentsPanel bookingId={selectedBookingId!} />
 
               {/* Off-screen (not display:none, so it still renders for printing) —
                   shown only while body.printing is active, via print CSS. */}

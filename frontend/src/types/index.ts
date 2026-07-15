@@ -971,6 +971,25 @@ export interface PaymentScheduleItem {
   updatedAt: string;
 }
 
+export type FinanceDocumentType = 'TAX_INVOICE' | 'RECEIPT' | 'CREDIT_NOTE' | 'DEBIT_NOTE' | 'REFUND_VOUCHER';
+
+export interface FinanceDocument {
+  id: string;
+  type: FinanceDocumentType;
+  documentNumber: string;
+  bookingId: string;
+  paymentId?: string;
+  refundId?: string;
+  amount: number;
+  taxAmount: number;
+  status: 'GENERATED' | 'CANCELLED';
+  pdfUrl?: string;
+  generatedById: string;
+  generatedBy: Pick<User, 'id' | 'name'>;
+  generatedAt: string;
+  createdAt: string;
+}
+
 export interface FinanceDashboardStats {
   todaysCollections: number;
   monthlyCollections: number;

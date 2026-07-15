@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import {
   ApiResponse, PaginatedResponse, FinanceDashboardStats, Payment, PendingTrackerRow,
-  CustomerLedger, Refund, VendorPayment, PaymentScheduleItem,
+  CustomerLedger, Refund, VendorPayment, PaymentScheduleItem, FinanceDocument,
 } from '../types/index';
 import toast from 'react-hot-toast';
 
@@ -108,6 +108,29 @@ export function useUpdateScheduleItem() {
       toast.success('Installment updated');
     },
     onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to update installment'),
+  });
+}
+
+// ─── Finance documents (invoices/receipts/credit notes/debit notes/vouchers) ─
+
+export function useFinanceDocuments(bookingId: string | undefined) {
+  return useQuery<ApiResponse<FinanceDocument[]>>({
+    queryKey: ['finance', 'documents', bookingId],
+    queryFn: async () => (await api.get(`/finance/documents?bookingId=${bookingId}`)).data,
+    enabled: !!bookingId,
+  });
+}
+
+export function useGenerateFinanceDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { type: string; bookingId: string; amount?: number; taxAmount?: number; reason?: string }) =>
+      (await api.post('/finance/documents', payload)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['finance', 'documents'] });
+      toast.success('Document generated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to generate document'),
   });
 }
 

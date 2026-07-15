@@ -34,6 +34,7 @@ model Organization {
   refunds       Refund[]
   vendorPayments VendorPayment[]
   expenses      Expense[]
+  financeDocuments FinanceDocument[]
 
   @@map("organizations")
 }
@@ -89,6 +90,7 @@ model User {
   uploadedVendorDocuments VendorDocument[] @relation("VendorDocumentUploader")
   createdExpenses       Expense[]       @relation("ExpenseCreator")
   approvedExpenses      Expense[]       @relation("ExpenseApprover")
+  generatedFinanceDocuments FinanceDocument[] @relation("FinanceDocumentGenerator")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -628,6 +630,7 @@ model Booking {
   travelers    Traveler[]
   refunds      Refund[]
   paymentSchedule PaymentScheduleItem[]
+  financeDocuments FinanceDocument[]
 
   @@index([organizationId])
   @@index([leadId])
@@ -815,6 +818,8 @@ model Payment {
   // lump-sum payment can still cover more than one installment.
   scheduleItemId String?
   scheduleItem   PaymentScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
+
+  financeDocuments FinanceDocument[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -1115,10 +1120,52 @@ model Refund {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  financeDocuments FinanceDocument[]
+
   @@index([bookingId])
   @@index([organizationId])
   @@index([status])
   @@map("refunds")
+}
+
+// ─── Finance Documents (Invoice / Receipt / Credit Note / Debit Note / Refund
+// Voucher) — persisted, numbered records so a document can always be looked
+// up and re-downloaded later. snapshotJson freezes the customer/package/amount
+// details at generation time so a later edit to the booking never retroactively
+// rewrites a historical document. RECEIPT auto-generates when a payment is
+// verified; REFUND_VOUCHER auto-generates when a refund is marked paid; the
+// rest (TAX_INVOICE / CREDIT_NOTE / DEBIT_NOTE) are generated on demand.
+model FinanceDocument {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  type           String                          // TAX_INVOICE | RECEIPT | CREDIT_NOTE | DEBIT_NOTE | REFUND_VOUCHER
+  documentNumber String        @unique            // e.g. RCPT-2026-000042 — sequential per type per year
+
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  paymentId String?
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  refundId  String?
+  refund    Refund?  @relation(fields: [refundId], references: [id], onDelete: SetNull)
+
+  amount       Float
+  taxAmount    Float  @default(0)
+  status       String @default("GENERATED")      // GENERATED | CANCELLED
+  pdfUrl       String?
+  snapshotJson Json
+
+  generatedById String
+  generatedBy   User     @relation("FinanceDocumentGenerator", fields: [generatedById], references: [id])
+  generatedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([type])
+  @@index([organizationId])
+  @@map("finance_documents")
 }
 
 // Transactional vendor bills — a Vendor (master record) can have many of these
