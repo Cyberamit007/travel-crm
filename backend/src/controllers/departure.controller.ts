@@ -136,7 +136,7 @@ const MANUAL_CHECKLIST_ITEMS = [
 ] as const;
 const MANUAL_CHECKLIST_KEYS = new Set(MANUAL_CHECKLIST_ITEMS.map((i) => i.key));
 
-function computeChecklist(departure: {
+export function computeChecklist(departure: {
   hotels: { status: string; roomAllocation: string | null }[];
   vehicles: { status: string; driverName: string | null }[];
   tripCaptainStatus: string;

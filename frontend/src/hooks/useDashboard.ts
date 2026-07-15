@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
+import { ExecutiveDashboardStats } from '../types/index';
 
 export interface LeadAgeDistribution {
   fresh: number;   // < 1 day
@@ -61,5 +62,17 @@ export function useDashboardStats() {
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     refetchInterval: 5 * 60 * 1000, // auto-refresh every 5 min
+  });
+}
+
+export function useExecutiveDashboard() {
+  return useQuery<{ success: boolean; data: ExecutiveDashboardStats }>({
+    queryKey: ['executive-dashboard'],
+    queryFn: async () => {
+      const { data } = await api.get('/executive/dashboard');
+      return data;
+    },
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 }

@@ -1001,6 +1001,36 @@ export interface FinanceDocument {
   createdAt: string;
 }
 
+export interface ExecutiveDashboardStats {
+  todaysRevenue: number;
+  monthlyRevenue: number;
+  outstandingAmount: number;
+  collectionsToday: number;
+  refundsPending: number;
+  upcomingDepartures: number;
+  tripsInProgress: number;
+  activeBookings: number;
+  pendingPayments: number;
+  pendingTravelerVerification: number;
+  pendingHotelConfirmation: number;
+  pendingVehicleConfirmation: number;
+  topSellingPackage: { name: string; bookings: number; revenue: number } | null;
+  topDestination: { destination: string; revenue: number } | null;
+  topCampaign: { name: string; revenue: number } | null;
+  topEmployee: { name: string; revenue: number } | null;
+  totalCustomers: number;
+  newCustomersThisMonth: number;
+  customerRetentionPct: number;
+  conversionRatePct: number;
+  businessHealthScore: number;
+  businessHealthBreakdown: {
+    collectionRatePct: number;
+    checklistProgressAvg: number;
+    onTimeReadinessPct: number;
+    conversionRatePct: number;
+  };
+}
+
 export interface FinanceDashboardStats {
   todaysCollections: number;
   monthlyCollections: number;
