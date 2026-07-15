@@ -15,6 +15,7 @@ import routes from './routes/index.js';
 import { setSocketServer, sendFollowUpReminders, sendOperationsReminders, updateDepartureStatuses, sendFinanceReminders } from './services/notification.service.js';
 import { runMetaSync } from './services/metaSync.service.js';
 import { runTrackedJob } from './services/jobTracker.service.js';
+import { processDueAutomationExecutions } from './services/automationEngine.service.js';
 import logger from './utils/logger.js';
 import { JWTPayload } from './types/index.js';
 import { UPLOAD_DIR_PATH } from './middleware/upload.js';
@@ -132,6 +133,10 @@ cron.schedule('*/30 * * * *', async () => {
 cron.schedule('*/15 * * * *', async () => {
   logger.info('Running Meta campaign sync...');
   await runTrackedJob('meta-campaign-sync', runMetaSync);
+});
+
+cron.schedule('*/5 * * * *', async () => {
+  await runTrackedJob('automation-execution-sweep', processDueAutomationExecutions);
 });
 
 const PORT = process.env.PORT || 5000;

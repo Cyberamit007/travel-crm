@@ -1047,6 +1047,38 @@ export interface EmployeeAnalytics {
   taskCompletionRatePct: number | null; customerRating: number | null;
 }
 
+export type AutomationTriggerType =
+  | 'LEAD_CREATED' | 'BOOKING_CONFIRMED' | 'PAYMENT_OVERDUE' | 'TASK_OVERDUE'
+  | 'TRAVELER_VERIFICATION_PENDING' | 'HOTEL_PENDING' | 'VEHICLE_PENDING';
+export type AutomationConditionOperator = 'equals' | 'notEquals' | 'contains' | 'greaterThan' | 'lessThan';
+export type AutomationActionType = 'ASSIGN_EMPLOYEE' | 'NOTIFY_EMPLOYEE' | 'NOTIFY_MANAGER' | 'SCHEDULE_FOLLOWUP' | 'SEND_REMINDER';
+
+export interface AutomationCondition {
+  field: string;
+  operator: AutomationConditionOperator;
+  value: string;
+}
+
+export interface AutomationAction {
+  type: AutomationActionType;
+  config: Record<string, string>;
+}
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  triggerType: AutomationTriggerType;
+  triggerConfig: Record<string, unknown>;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+  delayMinutes: number | null;
+  isActive: boolean;
+  createdById: string;
+  createdBy: { id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ExecutiveDashboardStats {
   todaysRevenue: number;
   monthlyRevenue: number;

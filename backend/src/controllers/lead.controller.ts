@@ -3,6 +3,7 @@ import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { createLead, getLeadStats } from '../services/lead.service.js';
 import { createNotification, emitLeadUpdated } from '../services/notification.service.js';
+import { fireEvent } from '../services/automationEngine.service.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -191,6 +192,11 @@ export const createLeadManual = async (req: AuthenticatedRequest, res: Response)
         lead.id,
       );
     }
+
+    await fireEvent('LEAD_CREATED', {
+      leadId: lead.id, name: lead.name, phone: lead.phone, source: lead.source,
+      destination: lead.destination, assignedToId: lead.assignedToId, organizationId: lead.organizationId,
+    }).catch((err) => console.error('[automation] LEAD_CREATED fireEvent error:', err));
 
     emitLeadUpdated(lead.id);
     res.status(201).json({ success: true, data: lead });

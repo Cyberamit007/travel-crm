@@ -12,6 +12,7 @@ import ExecutiveDashboardPage from './pages/admin/ExecutiveDashboardPage';
 import BusinessIntelligencePage from './pages/admin/BusinessIntelligencePage';
 import ReportCenterPage from './pages/admin/ReportCenterPage';
 import BusinessRulesPage from './pages/admin/BusinessRulesPage';
+import AutomationBuilderPage from './pages/admin/AutomationBuilderPage';
 import EmployeeDashboard from './components/dashboard/EmployeeDashboard';
 import AdminLeadsPage from './pages/admin/LeadsPage';
 import AdminCampaignsPage from './pages/admin/CampaignsPage';
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="business-intelligence" element={<BusinessIntelligencePage />} />
         <Route path="report-center" element={<ReportCenterPage />} />
         <Route path="business-rules" element={<BusinessRulesPage />} />
+        <Route path="automation-builder" element={<AutomationBuilderPage />} />
         <Route path="leads" element={<AdminLeadsPage />} />
         <Route path="campaigns" element={<AdminCampaignsPage />} />
         <Route path="employees" element={<Navigate to="/admin/organization" replace />} />

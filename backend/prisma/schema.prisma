@@ -92,6 +92,7 @@ model User {
   approvedExpenses      Expense[]       @relation("ExpenseApprover")
   generatedFinanceDocuments FinanceDocument[] @relation("FinanceDocumentGenerator")
   updatedBusinessRules      BusinessRule[]    @relation("BusinessRuleUpdater")
+  createdAutomationRules    AutomationRule[]  @relation("AutomationRuleCreator")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -1221,6 +1222,52 @@ model ScheduledJobRun {
   @@index([jobName])
   @@index([createdAt])
   @@map("scheduled_job_runs")
+}
+
+// ─── Automation Builder ───────────────────────────────────────────────────────
+// Form-based (not a drag-and-drop canvas) trigger/condition/action engine —
+// additive on top of the existing hardcoded automation chains (createLead,
+// createBooking's cascade), which are NOT modified or replaced. fireEvent()
+// in automationEngine.service.ts is called as one more fire-and-forget step
+// at the end of those flows.
+model AutomationRule {
+  id            String  @id @default(uuid())
+  name          String
+  triggerType   String                        // LEAD_CREATED | BOOKING_CONFIRMED | PAYMENT_OVERDUE | TASK_OVERDUE | TRAVELER_VERIFICATION_PENDING | HOTEL_PENDING | VEHICLE_PENDING
+  triggerConfig Json    @default("{}")
+  conditions    Json    @default("[]")         // [{ field, operator, value }]
+  actions       Json    @default("[]")         // [{ type, config }]
+  delayMinutes  Int?
+  isActive      Boolean @default(true)
+
+  createdById String
+  createdBy   User   @relation("AutomationRuleCreator", fields: [createdById], references: [id])
+
+  executions AutomationExecution[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([triggerType, isActive])
+  @@map("automation_rules")
+}
+
+// Makes "Delay" + "Next Action" work without a real job queue — a cron sweep
+// (processDueAutomationExecutions) executes rows whose scheduledFor has passed.
+model AutomationExecution {
+  id             String   @id @default(uuid())
+  ruleId         String
+  rule           AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  triggerContext Json
+  status         String   @default("PENDING") // PENDING | EXECUTED | CANCELLED | FAILED
+  scheduledFor   DateTime
+  executedAt     DateTime?
+  errorMessage   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, scheduledFor])
+  @@map("automation_executions")
 }
 
 // Transactional vendor bills — a Vendor (master record) can have many of these

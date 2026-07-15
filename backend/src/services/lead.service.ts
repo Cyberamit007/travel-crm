@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { createNotification } from './notification.service.js';
+import { fireEvent } from './automationEngine.service.js';
 
 export interface CreateLeadInput {
   name: string;
@@ -102,6 +103,13 @@ export const createLead = async (
       lead.id,
     );
   }
+
+  // Additive — runs alongside the assignment/notification above, never
+  // replaces it. Any admin-defined LEAD_CREATED automation rules fire here.
+  await fireEvent('LEAD_CREATED', {
+    leadId: lead.id, name: lead.name, phone: lead.phone, source: lead.source,
+    destination: lead.destination, assignedToId: lead.assignedToId, organizationId: lead.organizationId,
+  }).catch((err) => console.error('[automation] LEAD_CREATED fireEvent error:', err));
 
   return lead;
 };

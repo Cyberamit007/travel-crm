@@ -5,6 +5,7 @@ import { generateTasksFromItinerary } from './bookingTask.controller.js';
 import { linkBookingToDeparture, createPlaceholderTravelers, issueTravelerPortalToken } from './departure.controller.js';
 import { generatePaymentSchedule } from './paymentSchedule.controller.js';
 import { notifyFinanceTeam } from '../services/notification.service.js';
+import { fireEvent } from '../services/automationEngine.service.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 
@@ -202,6 +203,14 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
     if (!booking.travelerPortalTokenHash) {
       travelerPortalToken = await issueTravelerPortalToken(booking.id, depDate).catch(() => null);
     }
+
+    // Additive — any admin-defined BOOKING_CONFIRMED automation rules fire
+    // here, alongside (not instead of) the cascade above.
+    await fireEvent('BOOKING_CONFIRMED', {
+      leadId, bookingId: booking.id, assignedToId: lead?.assignedToId ?? undefined,
+      organizationId: orgId(req), finalPrice: price, packageId: packageId || undefined,
+      destination: lead?.destination ?? undefined,
+    }).catch((err) => console.error('[automation] BOOKING_CONFIRMED fireEvent error:', err));
 
     // Return the full booking with relations
     const fullBooking = await prisma.booking.findUnique({
