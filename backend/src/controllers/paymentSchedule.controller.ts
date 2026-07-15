@@ -2,28 +2,34 @@ import { Response } from 'express';
 import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { emitFinanceUpdated } from '../services/notification.service.js';
+import { getRuleNumber } from '../services/businessRule.service.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
 
-const ADVANCE_PCT = 0.2;
-const BALANCE_DAYS_BEFORE_DEPARTURE = 7;
 const MS_PER_DAY = 86400000;
 
 // ─── Auto-generate a default installment split at booking confirmation ──────
 // Advance now → (0-2 installments spaced between today and the departure) →
-// Balance due BALANCE_DAYS_BEFORE_DEPARTURE days before departure. Purely
-// additive on top of Booking.balanceAmount/balanceDueDate — this is an
-// informational/reminder-scheduling layer, generated once (idempotent) and
-// editable afterward via updateScheduleItem.
+// Balance due N days before departure. Purely additive on top of
+// Booking.balanceAmount/balanceDueDate — this is an informational/reminder-
+// scheduling layer, generated once (idempotent) and editable afterward via
+// updateScheduleItem. Both thresholds are BusinessRule-configurable
+// (PAYMENT_ADVANCE_PCT, PAYMENT_BALANCE_DAYS_BEFORE_DEPARTURE), falling back
+// to 20% / 7 days if no rule has been set.
 export async function generatePaymentSchedule(bookingId: string, finalPrice: number, departureDate: Date | null): Promise<void> {
   const existing = await prisma.paymentScheduleItem.count({ where: { bookingId } });
   if (existing > 0) return;
   if (finalPrice <= 0) return;
 
+  const [advancePct, balanceDaysBeforeDeparture] = await Promise.all([
+    getRuleNumber('PAYMENT_ADVANCE_PCT', 0.2),
+    getRuleNumber('PAYMENT_BALANCE_DAYS_BEFORE_DEPARTURE', 7),
+  ]);
+
   const now = new Date();
   const items: { label: string; sequence: number; amount: number; dueDate: Date }[] = [];
 
-  const advance = Math.round(finalPrice * ADVANCE_PCT);
+  const advance = Math.round(finalPrice * advancePct);
   items.push({ label: 'Advance', sequence: 0, amount: advance, dueDate: now });
 
   const remaining = finalPrice - advance;
@@ -33,7 +39,7 @@ export async function generatePaymentSchedule(bookingId: string, finalPrice: num
   }
 
   const balanceDue = departureDate
-    ? new Date(departureDate.getTime() - BALANCE_DAYS_BEFORE_DEPARTURE * MS_PER_DAY)
+    ? new Date(departureDate.getTime() - balanceDaysBeforeDeparture * MS_PER_DAY)
     : new Date(now.getTime() + 30 * MS_PER_DAY);
   const effectiveBalanceDue = balanceDue > now ? balanceDue : now;
   const daysUntilBalance = Math.round((effectiveBalanceDue.getTime() - now.getTime()) / MS_PER_DAY);

@@ -26,6 +26,7 @@ import financeRoutes from './finance.routes.js';
 import travelerPortalRoutes from './travelerPortal.routes.js';
 import executiveRoutes from './executive.routes.js';
 import analyticsRoutes from './analytics.routes.js';
+import businessRuleRoutes from './businessRule.routes.js';
 
 const router = Router();
 
@@ -58,5 +59,6 @@ router.use('/finance', financeRoutes);
 router.use('/portal', travelerPortalRoutes);
 router.use('/executive', executiveRoutes);
 router.use('/analytics', analyticsRoutes);
+router.use('/business-rules', businessRuleRoutes);
 
 export default router;

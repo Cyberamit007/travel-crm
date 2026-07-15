@@ -91,6 +91,7 @@ model User {
   createdExpenses       Expense[]       @relation("ExpenseCreator")
   approvedExpenses      Expense[]       @relation("ExpenseApprover")
   generatedFinanceDocuments FinanceDocument[] @relation("FinanceDocumentGenerator")
+  updatedBusinessRules      BusinessRule[]    @relation("BusinessRuleUpdater")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -1180,6 +1181,46 @@ model FinanceDocument {
   @@index([type])
   @@index([organizationId])
   @@map("finance_documents")
+}
+
+// ─── Business Rules Engine ───────────────────────────────────────────────────
+// Every threshold that used to be a hardcoded constant (advance %, reminder
+// windows, escalation hours) reads from here via getRule()/getRuleNumber()
+// (backend/src/services/businessRule.service.ts), falling back to that same
+// original hardcoded value when no row exists — so behavior is unchanged
+// until an Admin actually edits a rule.
+model BusinessRule {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  category    String   // SALES | OPERATIONS | FINANCE | CUSTOMER | SYSTEM
+
+  updatedById String?
+  updatedBy   User?    @relation("BusinessRuleUpdater", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("business_rules")
+}
+
+// ─── Scheduled Job run history ───────────────────────────────────────────────
+// One row per cron execution (backend/src/index.ts) — powers the System
+// Health dashboard's Background Jobs / Failed Jobs widgets.
+model ScheduledJobRun {
+  id           String    @id @default(uuid())
+  jobName      String
+  startedAt    DateTime
+  finishedAt   DateTime?
+  status       String    @default("RUNNING") // RUNNING | SUCCESS | FAILED
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([jobName])
+  @@index([createdAt])
+  @@map("scheduled_job_runs")
 }
 
 // Transactional vendor bills — a Vendor (master record) can have many of these

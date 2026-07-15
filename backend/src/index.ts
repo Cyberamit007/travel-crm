@@ -14,6 +14,7 @@ import path from 'path';
 import routes from './routes/index.js';
 import { setSocketServer, sendFollowUpReminders, sendOperationsReminders, updateDepartureStatuses, sendFinanceReminders } from './services/notification.service.js';
 import { runMetaSync } from './services/metaSync.service.js';
+import { runTrackedJob } from './services/jobTracker.service.js';
 import logger from './utils/logger.js';
 import { JWTPayload } from './types/index.js';
 import { UPLOAD_DIR_PATH } from './middleware/upload.js';
@@ -112,23 +113,25 @@ io.on('connection', (socket) => {
 
 cron.schedule('*/30 * * * *', async () => {
   logger.info('Running follow-up reminder check...');
-  await sendFollowUpReminders();
+  await runTrackedJob('follow-up-reminders', sendFollowUpReminders);
 });
 
 cron.schedule('*/30 * * * *', async () => {
   logger.info('Running operations reminder check...');
-  await updateDepartureStatuses().catch((err) => logger.error('Departure status sweep error', err));
-  await sendOperationsReminders().catch((err) => logger.error('Operations reminder cron error', err));
+  await runTrackedJob('operations-reminders', async () => {
+    await updateDepartureStatuses();
+    await sendOperationsReminders();
+  });
 });
 
 cron.schedule('*/30 * * * *', async () => {
   logger.info('Running finance reminder check...');
-  await sendFinanceReminders().catch((err) => logger.error('Finance reminder cron error', err));
+  await runTrackedJob('finance-reminders', sendFinanceReminders);
 });
 
 cron.schedule('*/15 * * * *', async () => {
   logger.info('Running Meta campaign sync...');
-  await runMetaSync().catch((err) => logger.error('Meta sync cron error', err));
+  await runTrackedJob('meta-campaign-sync', runMetaSync);
 });
 
 const PORT = process.env.PORT || 5000;

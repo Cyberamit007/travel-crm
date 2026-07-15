@@ -2,6 +2,7 @@
 import { Server } from 'socket.io';
 
 import prisma from '../lib/prisma.js';
+import { getRuleNumber } from './businessRule.service.js';
 let io: Server | null = null;
 
 export const setSocketServer = (socketServer: Server) => { io = socketServer; };
@@ -72,7 +73,8 @@ export const createNotification = async (
 
 export const sendFollowUpReminders = async () => {
   const now = new Date();
-  const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+  const dueSoonMinutes = await getRuleNumber('FOLLOWUP_DUE_SOON_MINUTES', 60);
+  const oneHourLater = new Date(now.getTime() + dueSoonMinutes * 60 * 1000);
 
   const dueLeads = await prisma.lead.findMany({
     where: { status: 'FOLLOW_UP_SCHEDULED', followUpDone: false, followUpDate: { gte: now, lte: oneHourLater }, assignedToId: { not: null } },
@@ -104,11 +106,10 @@ export const sendFollowUpReminders = async () => {
     }
   }
 
-  // Real escalation — beyond ESCALATION_HOURS overdue, notify Admin (not just
-  // re-fire to the same assignee). Hardcoded for now; becomes a configurable
-  // BusinessRule in a later phase.
-  const ESCALATION_HOURS = 24;
-  const escalationCutoff = new Date(now.getTime() - ESCALATION_HOURS * 60 * 60 * 1000);
+  // Real escalation — beyond the configurable threshold overdue, notify Admin
+  // (not just re-fire to the same assignee).
+  const escalationHours = await getRuleNumber('FOLLOWUP_ESCALATION_HOURS', 24);
+  const escalationCutoff = new Date(now.getTime() - escalationHours * 60 * 60 * 1000);
   const severelyOverdueLeads = overdueLeads.filter((l) => l.followUpDate && l.followUpDate < escalationCutoff);
   for (const lead of severelyOverdueLeads) {
     const alreadyEscalated = await prisma.notification.findFirst({
@@ -121,7 +122,7 @@ export const sendFollowUpReminders = async () => {
     });
     for (const admin of admins) {
       await createNotification(admin.id, 'FOLLOW_UP_ESCALATED', 'Follow-up Escalated',
-        `${lead.name}'s follow-up has been overdue for over ${ESCALATION_HOURS} hours and still hasn't been actioned.`, lead.id);
+        `${lead.name}'s follow-up has been overdue for over ${escalationHours} hours and still hasn't been actioned.`, lead.id);
     }
   }
 };
