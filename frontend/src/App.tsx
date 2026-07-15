@@ -9,6 +9,7 @@ import WelcomePage from './pages/WelcomePage';
 import TravelerPortalPage from './pages/portal/TravelerPortalPage';
 import AdminDashboard from './components/dashboard/AdminDashboard';
 import ExecutiveDashboardPage from './pages/admin/ExecutiveDashboardPage';
+import BusinessIntelligencePage from './pages/admin/BusinessIntelligencePage';
 import EmployeeDashboard from './components/dashboard/EmployeeDashboard';
 import AdminLeadsPage from './pages/admin/LeadsPage';
 import AdminCampaignsPage from './pages/admin/CampaignsPage';
@@ -77,6 +78,7 @@ export default function App() {
         <Route index element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="executive" element={<ExecutiveDashboardPage />} />
+        <Route path="business-intelligence" element={<BusinessIntelligencePage />} />
         <Route path="leads" element={<AdminLeadsPage />} />
         <Route path="campaigns" element={<AdminCampaignsPage />} />
         <Route path="employees" element={<Navigate to="/admin/organization" replace />} />

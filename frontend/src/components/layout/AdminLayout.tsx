@@ -5,7 +5,7 @@ import {
   LogOut, ChevronDown, Menu, X, UserCircle, Megaphone,
   MessageSquarePlus, Activity, BarChart2, Building2,
   UserCheck, Database, ChevronRight, Package, BookOpen,
-  Contact, Wallet, Map, Home, Gauge,
+  Contact, Wallet, Map, Home, Gauge, LineChart,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -27,6 +27,7 @@ type NavEntry =
 const NAV: NavEntry[] = [
   { type: 'item', to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { type: 'item', to: '/admin/executive', label: 'Executive Dashboard', icon: Gauge },
+  { type: 'item', to: '/admin/business-intelligence', label: 'Business Intelligence', icon: LineChart },
 
   { type: 'divider', label: 'CRM' },
   {

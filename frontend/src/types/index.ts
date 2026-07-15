@@ -1001,6 +1001,44 @@ export interface FinanceDocument {
   createdAt: string;
 }
 
+export interface PackageAnalytics {
+  id: string; name: string; code: string;
+  bookings: number; passengers: number; revenue: number; expenses: number; profit: number;
+  averageRating: number | null; cancellationPct: number; upcomingTrips: number; mostPopularMonth: string | null;
+}
+
+export interface DestinationAnalytics {
+  destination: string; revenue: number; profit: number; trips: number; passengers: number;
+  growthPct: number | null; refundPct: number; topPackages: string[];
+}
+
+export interface CampaignAnalytics {
+  id: string; name: string;
+  leadsGenerated: number; bookings: number; revenue: number; expenses: number;
+  roi: number | null; costPerLead: number | null; costPerBooking: number | null;
+  conversionRatePct: number; bestPerformingMonth: string | null;
+}
+
+export interface CustomerAnalyticsRow {
+  name: string; phone: string; totalSpending: number; lifetimeValue: number;
+  tripsCompleted: number; tripsUpcoming: number; tripsCancelled: number;
+  preferredDestination: string | null; preferredPackage: string | null;
+  referralCount: number; isReturning: boolean;
+}
+
+export interface CustomerAnalytics {
+  summary: { totalCustomers: number; returningCustomers: number; averageSpending: number; totalReferrals: number };
+  customers: CustomerAnalyticsRow[];
+}
+
+export interface EmployeeAnalytics {
+  id: string; name: string;
+  assignedLeads: number; activeLeads: number; bookings: number; revenueGenerated: number;
+  conversionRatePct: number; avgResponseTimeHours: number | null;
+  pendingFollowUps: number; completedFollowUps: number;
+  taskCompletionRatePct: number | null; customerRating: number | null;
+}
+
 export interface ExecutiveDashboardStats {
   todaysRevenue: number;
   monthlyRevenue: number;
