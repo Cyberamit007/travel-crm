@@ -6,16 +6,65 @@ let io: Server | null = null;
 
 export const setSocketServer = (socketServer: Server) => { io = socketServer; };
 
+// ─── Notification taxonomy ───────────────────────────────────────────────────
+// Layered on top of the existing free-string `type` — every known type gets a
+// sensible category/severity default here so existing call sites (which
+// don't pass these explicitly) still get meaningfully categorized
+// notifications. `channel` stays IN_APP-only everywhere: EMAIL/SMS/WHATSAPP
+// are architecture-ready tags for a future integration, never dispatched.
+const TYPE_META: Record<string, { category: string; severity: string }> = {
+  FOLLOW_UP_DUE: { category: 'SALES', severity: 'REMINDER' },
+  FOLLOW_UP_OVERDUE: { category: 'SALES', severity: 'WARNING' },
+  FOLLOW_UP_ESCALATED: { category: 'SALES', severity: 'CRITICAL' },
+  LEAD_STATUS_CHANGED: { category: 'SALES', severity: 'INFO' },
+  NEW_LEAD_ASSIGNED: { category: 'SALES', severity: 'INFO' },
+  DEPARTURE_APPROACHING: { category: 'OPERATIONS', severity: 'REMINDER' },
+  HOTEL_PENDING: { category: 'OPERATIONS', severity: 'WARNING' },
+  HOTEL_CONFIRMED: { category: 'OPERATIONS', severity: 'SUCCESS' },
+  VEHICLE_PENDING: { category: 'OPERATIONS', severity: 'WARNING' },
+  VEHICLE_CONFIRMED: { category: 'OPERATIONS', severity: 'SUCCESS' },
+  ROOM_ALLOCATION_PENDING: { category: 'OPERATIONS', severity: 'WARNING' },
+  TRIP_CAPTAIN_PENDING: { category: 'OPERATIONS', severity: 'WARNING' },
+  PAYMENT_PENDING_OPS: { category: 'OPERATIONS', severity: 'WARNING' },
+  NEW_CONFIRMED_BOOKING: { category: 'OPERATIONS', severity: 'INFO' },
+  TRAVELER_SUBMITTED: { category: 'OPERATIONS', severity: 'INFO' },
+  TRAVELER_REJECTED: { category: 'OPERATIONS', severity: 'WARNING' },
+  TRAVELER_CORRECTION_REQUESTED: { category: 'OPERATIONS', severity: 'WARNING' },
+  NEW_PAYMENT_SUBMITTED: { category: 'FINANCE', severity: 'INFO' },
+  PAYMENT_APPROVED: { category: 'FINANCE', severity: 'SUCCESS' },
+  PAYMENT_REJECTED: { category: 'FINANCE', severity: 'WARNING' },
+  PAYMENT_CORRECTION_REQUESTED: { category: 'FINANCE', severity: 'WARNING' },
+  OVERDUE_CUSTOMER_PAYMENT: { category: 'FINANCE', severity: 'WARNING' },
+  VENDOR_PAYMENT_DUE: { category: 'FINANCE', severity: 'REMINDER' },
+  INSTALLMENT_DUE_TOMORROW: { category: 'FINANCE', severity: 'REMINDER' },
+  INSTALLMENT_DUE_TODAY: { category: 'FINANCE', severity: 'REMINDER' },
+  FINAL_PAYMENT_REMINDER: { category: 'FINANCE', severity: 'REMINDER' },
+  INSTALLMENT_OVERDUE: { category: 'FINANCE', severity: 'WARNING' },
+  INSTALLMENT_ESCALATION: { category: 'FINANCE', severity: 'CRITICAL' },
+  NEW_EXPENSE_SUBMITTED: { category: 'FINANCE', severity: 'INFO' },
+  EXPENSE_APPROVED: { category: 'FINANCE', severity: 'SUCCESS' },
+  EXPENSE_REJECTED: { category: 'FINANCE', severity: 'WARNING' },
+  REFUND_REQUESTED: { category: 'FINANCE', severity: 'INFO' },
+};
+const DEFAULT_META = { category: 'SYSTEM', severity: 'INFO' };
+
 export const createNotification = async (
   userId: string,
   type: string,
   title: string,
   message: string,
   leadId?: string,
-  departureId?: string
+  departureId?: string,
+  severity?: string,
+  category?: string
 ) => {
+  const meta = TYPE_META[type] ?? DEFAULT_META;
   const notification = await prisma.notification.create({
-    data: { userId, type, title, message, leadId, departureId },
+    data: {
+      userId, type, title, message, leadId, departureId,
+      severity: severity ?? meta.severity,
+      category: category ?? meta.category,
+    },
   });
   if (io) io.to(`user:${userId}`).emit('notification', notification);
   return notification;
@@ -54,6 +103,27 @@ export const sendFollowUpReminders = async () => {
         `Follow-up with ${lead.name} is overdue! Please take action immediately.`, lead.id);
     }
   }
+
+  // Real escalation — beyond ESCALATION_HOURS overdue, notify Admin (not just
+  // re-fire to the same assignee). Hardcoded for now; becomes a configurable
+  // BusinessRule in a later phase.
+  const ESCALATION_HOURS = 24;
+  const escalationCutoff = new Date(now.getTime() - ESCALATION_HOURS * 60 * 60 * 1000);
+  const severelyOverdueLeads = overdueLeads.filter((l) => l.followUpDate && l.followUpDate < escalationCutoff);
+  for (const lead of severelyOverdueLeads) {
+    const alreadyEscalated = await prisma.notification.findFirst({
+      where: { leadId: lead.id, type: 'FOLLOW_UP_ESCALATED', createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
+    });
+    if (alreadyEscalated) continue;
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN', isActive: true, ...(lead.organizationId ? { organizationId: lead.organizationId } : {}) },
+      select: { id: true },
+    });
+    for (const admin of admins) {
+      await createNotification(admin.id, 'FOLLOW_UP_ESCALATED', 'Follow-up Escalated',
+        `${lead.name}'s follow-up has been overdue for over ${ESCALATION_HOURS} hours and still hasn't been actioned.`, lead.id);
+    }
+  }
 };
 
 export const emitLeadUpdated = (leadId: string) => {
@@ -71,14 +141,15 @@ export const notifyOperationsTeam = async (
   type: string,
   title: string,
   message: string,
-  departureId?: string
+  departureId?: string,
+  severity?: string
 ) => {
   const team = await prisma.user.findMany({
     where: { role: { in: ['ADMIN', 'OPERATIONS'] }, isActive: true, ...(organizationId ? { organizationId } : {}) },
     select: { id: true },
   });
   for (const member of team) {
-    await createNotification(member.id, type, title, message, undefined, departureId);
+    await createNotification(member.id, type, title, message, undefined, departureId, severity);
   }
 };
 
@@ -180,14 +251,15 @@ export const notifyFinanceTeam = async (
   type: string,
   title: string,
   message: string,
-  departureId?: string
+  departureId?: string,
+  severity?: string
 ) => {
   const team = await prisma.user.findMany({
     where: { role: { in: ['ADMIN', 'FINANCE'] }, isActive: true, ...(organizationId ? { organizationId } : {}) },
     select: { id: true },
   });
   for (const member of team) {
-    await createNotification(member.id, type, title, message, undefined, departureId);
+    await createNotification(member.id, type, title, message, undefined, departureId, severity);
   }
 };
 

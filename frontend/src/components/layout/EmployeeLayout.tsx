@@ -12,6 +12,7 @@ import { useFollowUpNotifications } from '../../hooks/useFollowUpNotifications';
 import Avatar from '../ui/Avatar';
 import FeedbackButton from '../feedback/FeedbackButton';
 import { formatRelativeTime, cn } from '../../utils/helpers';
+import { SEVERITY_DOT, CATEGORIES } from '../../utils/notificationMeta';
 
 const navLinks = [
   { to: '/employee/dashboard',  label: 'Dashboard',    icon: LayoutDashboard },
@@ -30,6 +31,7 @@ export default function EmployeeLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notifCategory, setNotifCategory] = useState('');
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -40,6 +42,7 @@ export default function EmployeeLayout() {
   useFollowUpNotifications();
 
   const notifications = notifData?.data ?? [];
+  const filteredNotifications = notifCategory ? notifications.filter((n) => n.category === notifCategory) : notifications;
   const unreadCount = notifData?.meta?.unreadCount ?? 0;
 
   const pageTitle = navLinks.find((l) => location.pathname.startsWith(l.to))?.label ?? 'Employee';
@@ -155,11 +158,25 @@ export default function EmployeeLayout() {
                       </button>
                     )}
                   </div>
+                  <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-100 overflow-x-auto scrollbar-thin">
+                    {['', ...CATEGORIES].map((c) => (
+                      <button
+                        key={c || 'all'}
+                        onClick={() => setNotifCategory(c)}
+                        className={cn(
+                          'px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap border transition-colors',
+                          notifCategory === c ? 'bg-primary-600 text-white border-primary-600' : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                        )}
+                      >
+                        {c || 'All'}
+                      </button>
+                    ))}
+                  </div>
                   <div className="max-h-[60vh] sm:max-h-80 overflow-y-auto scrollbar-thin">
-                    {notifications.length === 0 ? (
+                    {filteredNotifications.length === 0 ? (
                       <div className="px-4 py-8 text-center text-slate-400 text-sm">No notifications</div>
                     ) : (
-                      notifications.map((n) => (
+                      filteredNotifications.map((n) => (
                         <div
                           key={n.id}
                           onClick={() => {
@@ -174,7 +191,7 @@ export default function EmployeeLayout() {
                           )}
                         >
                           <div className="flex items-start gap-2">
-                            {!n.isRead && <span className="mt-1.5 w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" />}
+                            <span className={cn('mt-1.5 w-2 h-2 rounded-full flex-shrink-0', SEVERITY_DOT[n.severity])} />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-slate-800">{n.title}</p>
                               <p className="text-xs text-slate-500 mt-0.5">{n.message}</p>

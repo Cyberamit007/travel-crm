@@ -377,6 +377,14 @@ model Notification {
   message String
   isRead  Boolean @default(false)
 
+  // Taxonomy layered on top of the existing free-string `type` — additive,
+  // every pre-existing call site keeps working via the defaults below.
+  // `channel` is architecture-ready only: non-IN_APP values are tagged for a
+  // future integration but never actually dispatched outside this app today.
+  category String? // SALES | OPERATIONS | FINANCE | CUSTOMER | SYSTEM
+  severity String  @default("INFO") // INFO | REMINDER | SUCCESS | WARNING | CRITICAL
+  channel  String  @default("IN_APP") // IN_APP | EMAIL | SMS | WHATSAPP
+
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
 

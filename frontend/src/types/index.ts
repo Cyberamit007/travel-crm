@@ -170,6 +170,9 @@ export interface LeadComment {
   updatedAt: string;
 }
 
+export type NotificationCategory = 'SALES' | 'OPERATIONS' | 'FINANCE' | 'CUSTOMER' | 'SYSTEM';
+export type NotificationSeverity = 'INFO' | 'REMINDER' | 'SUCCESS' | 'WARNING' | 'CRITICAL';
+
 export interface Notification {
   id: string;
   type: NotificationType;
@@ -180,6 +183,9 @@ export interface Notification {
   leadId?: string;
   lead?: Pick<Lead, 'id' | 'name'>;
   departureId?: string;
+  category?: NotificationCategory;
+  severity: NotificationSeverity;
+  channel: 'IN_APP' | 'EMAIL' | 'SMS' | 'WHATSAPP';
   createdAt: string;
 }
 
