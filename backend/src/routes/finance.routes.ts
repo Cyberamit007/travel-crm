@@ -6,7 +6,7 @@ import { listPaymentsForVerification, approvePayment, rejectPayment, requestCorr
 import { getCustomerLedger, getPendingTracker } from '../controllers/ledger.controller.js';
 import { listRefunds, createRefund, approveRefund, markRefundPaid, rejectRefund } from '../controllers/refund.controller.js';
 import {
-  listVendorPayments, createVendorPayment, updateVendorPayment, deleteVendorPayment, uploadVendorPaymentFile,
+  listVendorPayments, createVendorPayment, updateVendorPayment, deleteVendorPayment, uploadVendorPaymentFile, getVendorLedger,
 } from '../controllers/vendorPayment.controller.js';
 import { listVendors } from '../controllers/vendor.controller.js';
 import { listDepartures } from '../controllers/departure.controller.js';
@@ -58,6 +58,7 @@ router.put('/refunds/:id/reject', rejectRefund);
 router.get('/vendors', listVendors);
 
 // Vendor payments
+router.get('/vendors/:id/ledger', getVendorLedger);
 router.get('/vendor-payments', listVendorPayments);
 router.post('/vendor-payments', createVendorPayment);
 router.put('/vendor-payments/:id', updateVendorPayment);

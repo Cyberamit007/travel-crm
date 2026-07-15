@@ -909,6 +909,17 @@ export interface Refund {
   updatedAt: string;
 }
 
+export interface VendorLedger extends Vendor {
+  payments: VendorPayment[];
+  ledger: {
+    totalBilled: number;
+    totalPaid: number;
+    totalOutstanding: number;
+    billCount: number;
+    overdueCount: number;
+  };
+}
+
 export interface VendorPayment {
   id: string;
   vendorId: string;

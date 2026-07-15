@@ -52,6 +52,13 @@ export const recordPayment = async (req: AuthenticatedRequest, res: Response): P
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
       res.status(400).json({ success: false, error: 'Valid amount is required' }); return;
     }
+    // Write-offs close out a balance the company has decided not to pursue —
+    // restricted to Admin since, unlike every other payment type, it isn't
+    // backed by real money changing hands and shouldn't be something any
+    // Sales/Finance user can apply unilaterally.
+    if (type === 'WRITE_OFF' && req.user?.role !== 'ADMIN') {
+      res.status(403).json({ success: false, error: 'Only an Admin can record a write-off' }); return;
+    }
 
     const paymentAmount = Number(amount);
     const proofUrl = req.file ? `/api/uploads/${req.file.filename}` : null;

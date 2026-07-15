@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import {
   ApiResponse, PaginatedResponse, FinanceDashboardStats, Payment, PendingTrackerRow,
-  CustomerLedger, Refund, VendorPayment, PaymentScheduleItem, FinanceDocument,
+  CustomerLedger, Refund, VendorPayment, PaymentScheduleItem, FinanceDocument, VendorLedger,
 } from '../types/index';
 import toast from 'react-hot-toast';
 
@@ -213,6 +213,16 @@ export function useFinanceVendors() {
   return useQuery<ApiResponse<Array<{ id: string; name: string; type: string; status: string }>>>({
     queryKey: ['finance', 'vendors'],
     queryFn: async () => (await api.get('/finance/vendors')).data,
+  });
+}
+
+// ─── Vendor ledger ───────────────────────────────────────────────────────────
+
+export function useVendorLedger(vendorId: string | undefined) {
+  return useQuery<ApiResponse<VendorLedger>>({
+    queryKey: ['finance', 'vendor-ledger', vendorId],
+    queryFn: async () => (await api.get(`/finance/vendors/${vendorId}/ledger`)).data,
+    enabled: !!vendorId,
   });
 }
 

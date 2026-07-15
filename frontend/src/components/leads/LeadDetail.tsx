@@ -569,6 +569,7 @@ function TaskRow({ task, onStatusChange }: { task: BookingTask; onStatusChange: 
 // ─── Payments Tab ─────────────────────────────────────────────────────────────
 
 function PaymentsTab({ booking }: { booking: Booking }) {
+  const { user } = useAuthStore();
   const { data, isLoading } = useBookingPayments(booking.id);
   const recordPayment = useRecordPayment();
   const deletePayment = useDeletePayment();
@@ -586,6 +587,8 @@ function PaymentsTab({ booking }: { booking: Booking }) {
     PARTIAL: 'bg-amber-100 text-amber-700',
     FINAL: 'bg-emerald-100 text-emerald-700',
     REFUND: 'bg-red-100 text-red-700',
+    CREDIT_ADJUSTMENT: 'bg-purple-100 text-purple-700',
+    WRITE_OFF: 'bg-slate-200 text-slate-700',
   };
   const statusColors: Record<string, string> = {
     PENDING: 'bg-amber-50 text-amber-700',
@@ -658,6 +661,8 @@ function PaymentsTab({ booking }: { booking: Booking }) {
                 <option value="PARTIAL">Partial</option>
                 <option value="FINAL">Final</option>
                 <option value="REFUND">Refund</option>
+                <option value="CREDIT_ADJUSTMENT">Credit Adjustment</option>
+                {user?.role === 'ADMIN' && <option value="WRITE_OFF">Write-off (Admin only)</option>}
               </select>
             </div>
             <div>

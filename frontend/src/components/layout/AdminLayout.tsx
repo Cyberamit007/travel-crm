@@ -68,6 +68,7 @@ const SUB_LABELS: Record<string, string> = {
   'finance/pending': 'Pending Tracker',
   'finance/refunds': 'Refunds',
   'finance/vendor-payments': 'Vendor Payments',
+  'finance/vendor-ledger': 'Vendor Ledger',
   'finance/expenses': 'Expenses',
   'finance/reports': 'Reports',
   'operations/dashboard': 'Dashboard',

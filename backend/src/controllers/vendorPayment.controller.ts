@@ -125,6 +125,46 @@ export const deleteVendorPayment = async (req: AuthenticatedRequest, res: Respon
   }
 };
 
+// ─── Vendor Ledger — full financial picture for one vendor, across every bill
+// they've ever had ─────────────────────────────────────────────────────────
+// Mirrors getCustomerLedger's exact pattern (ledger.controller.ts): one
+// deep-include query, then a JS reduce for running totals — computed live,
+// never persisted. Exists as its own Finance-scoped endpoint because
+// Operations already has a vendor detail view (VendorDetailPage.tsx) but
+// it's guarded by requireOperationsOrAdmin and unreachable by the FINANCE
+// role.
+export const getVendorLedger = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const vendor = await prisma.vendor.findFirst({
+      where: { id, ...orgFilter(req) },
+      include: {
+        payments: {
+          include: { departure: { select: { id: true, destination: true, departureDate: true } }, createdBy: { select: { id: true, name: true } } },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!vendor) { res.status(404).json({ success: false, error: 'Vendor not found' }); return; }
+
+    const totalBilled = vendor.payments.reduce((s, p) => s + p.totalAmount, 0);
+    const totalPaid = vendor.payments.reduce((s, p) => s + p.advancePaid, 0);
+    const totalOutstanding = vendor.payments.reduce((s, p) => s + p.balanceAmount, 0);
+    const overdueCount = vendor.payments.filter((p) => p.status === 'OVERDUE').length;
+
+    res.json({
+      success: true,
+      data: {
+        ...vendor,
+        ledger: { totalBilled, totalPaid, totalOutstanding, billCount: vendor.payments.length, overdueCount },
+      },
+    });
+  } catch (e) {
+    console.error('[finance] getVendorLedger error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 export const uploadVendorPaymentFile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
