@@ -93,6 +93,9 @@ model User {
   generatedFinanceDocuments FinanceDocument[] @relation("FinanceDocumentGenerator")
   updatedBusinessRules      BusinessRule[]    @relation("BusinessRuleUpdater")
   createdAutomationRules    AutomationRule[]  @relation("AutomationRuleCreator")
+  createdPackages      Package[]           @relation("PackageCreatedBy")
+  modifiedPackages     Package[]           @relation("PackageLastModifiedBy")
+  packageAuditLogs     PackageAuditLog[]   @relation("PackageAuditUser")
 
   @@index([organizationId])
   @@index([departmentId])
@@ -761,8 +764,14 @@ model Package {
   images  String @default("[]")                  // JSON array of image URLs
   gallery String @default("[]")                  // JSON array of gallery URLs
 
-  isPopular Boolean @default(false)
-  status    String  @default("ACTIVE")            // ACTIVE | INACTIVE | DRAFT
+  isPopular   Boolean @default(false)
+  status      String  @default("ACTIVE")           // ACTIVE | INACTIVE | DRAFT
+  packageType String  @default("GIT")              // GIT | FIT
+
+  createdById      String?
+  createdBy        User?   @relation("PackageCreatedBy", fields: [createdById], references: [id])
+  lastModifiedById String?
+  lastModifiedBy   User?   @relation("PackageLastModifiedBy", fields: [lastModifiedById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -771,12 +780,41 @@ model Package {
   bookings       Booking[]
   departures     Departure[]
   expenses       Expense[]
+  auditLogs      PackageAuditLog[]
 
   @@index([organizationId])
   @@index([destinationId])
   @@index([tourCategoryId])
   @@index([status])
+  @@index([packageType])
   @@map("packages")
+}
+
+// ─── Package Audit Log ────────────────────────────────────────────────────────
+
+model PackageAuditLog {
+  id        String   @id @default(uuid())
+  packageId String?                        // null after package is deleted; preserve audit history
+  package   Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  userId     String
+  user       User   @relation("PackageAuditUser", fields: [userId], references: [id])
+  userName   String
+  employeeId String?
+  userRole   String
+
+  action        String   // CREATE | UPDATE | DELETE
+  changedFields String?  // JSON: [{ field, from, to }]
+  packageName   String?  // denormalized for DELETE records
+  packageCode   String?
+  packageType   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([packageId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("package_audit_logs")
 }
 
 // ─── Package Itinerary (Day-Wise Workflow Template) ───────────────────────────

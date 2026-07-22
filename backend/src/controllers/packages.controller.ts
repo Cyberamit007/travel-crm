@@ -3,6 +3,8 @@ import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../types/index.js';
 
 const orgId = (req: AuthenticatedRequest) => req.user?.organizationId ?? null;
+const userId = (req: AuthenticatedRequest) => req.user?.id ?? '';
+const userRole = (req: AuthenticatedRequest) => req.user?.role ?? 'EMPLOYEE';
 
 const parseList = (raw: any): string[] => {
   if (Array.isArray(raw)) return raw.filter(Boolean);
@@ -13,13 +15,71 @@ const parseList = (raw: any): string[] => {
   return [];
 };
 
+// ─── Permission helpers ───────────────────────────────────────────────────────
+
+function canCreatePackage(role: string, packageType: string): boolean {
+  if (role === 'ADMIN') return true;
+  return packageType === 'FIT'; // employees can create FIT
+}
+
+function canMutatePackage(role: string, packageType: string, createdById: string | null, actorId: string): boolean {
+  if (role === 'ADMIN') return true;
+  if (packageType === 'GIT') return false; // only admin can mutate GIT
+  return createdById === actorId; // FIT: only creator
+}
+
+// ─── Audit helpers ────────────────────────────────────────────────────────────
+
+async function recordAudit(opts: {
+  packageId: string;
+  req: AuthenticatedRequest;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  changedFields?: { field: string; from: any; to: any }[];
+  packageName?: string;
+  packageCode?: string;
+  packageType?: string;
+}) {
+  const { packageId, req, action, changedFields, packageName, packageCode, packageType } = opts;
+  await prisma.packageAuditLog.create({
+    data: {
+      packageId,
+      userId: req.user!.id,
+      userName: req.user!.name ?? req.user!.email,
+      employeeId: (req.user as any)?.employeeId ?? null,
+      userRole: req.user!.role,
+      action,
+      changedFields: changedFields && changedFields.length > 0 ? JSON.stringify(changedFields) : null,
+      packageName: packageName ?? null,
+      packageCode: packageCode ?? null,
+      packageType: packageType ?? null,
+    },
+  });
+}
+
+function diffPackage(
+  old: Record<string, any>,
+  next: Record<string, any>,
+  fields: string[],
+): { field: string; from: any; to: any }[] {
+  return fields
+    .filter((f) => String(old[f] ?? '') !== String(next[f] ?? ''))
+    .map((f) => ({ field: f, from: old[f] ?? null, to: next[f] ?? null }));
+}
+
+const AUDITED_FIELDS = [
+  'name', 'code', 'description', 'overview', 'nights', 'days', 'status', 'packageType',
+  'destinationId', 'tourCategoryId', 'pricePerPerson', 'offerPrice', 'isPopular',
+  'difficultyLevel', 'pickupLocation', 'dropLocation', 'cancellationPolicy', 'termsAndConditions',
+];
+
 // ─── List packages ────────────────────────────────────────────────────────────
 
 export const getPackages = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { status, destinationId, tourCategoryId, search, difficultyLevel } = req.query;
+    const { status, destinationId, tourCategoryId, search, difficultyLevel, packageType } = req.query;
     const where: any = { organizationId: orgId(req) };
     if (status) where.status = status;
+    if (packageType) where.packageType = packageType;
     if (destinationId) where.destinationId = destinationId;
     if (tourCategoryId) where.tourCategoryId = tourCategoryId;
     if (difficultyLevel) where.difficultyLevel = difficultyLevel;
@@ -36,6 +96,8 @@ export const getPackages = async (req: AuthenticatedRequest, res: Response): Pro
       include: {
         destination: { select: { id: true, name: true, country: true, state: true } },
         tourCategory: { select: { id: true, name: true, icon: true } },
+        createdBy: { select: { id: true, name: true, employeeId: true } },
+        lastModifiedBy: { select: { id: true, name: true } },
         _count: { select: { itineraryItems: true, bookings: true } },
       },
       orderBy: [{ isPopular: 'desc' }, { name: 'asc' }],
@@ -57,6 +119,8 @@ export const getPackage = async (req: AuthenticatedRequest, res: Response): Prom
       include: {
         destination: { select: { id: true, name: true, country: true, state: true } },
         tourCategory: { select: { id: true, name: true, icon: true } },
+        createdBy: { select: { id: true, name: true, employeeId: true } },
+        lastModifiedBy: { select: { id: true, name: true } },
         itineraryItems: { orderBy: [{ dayOffset: 'asc' }, { sortOrder: 'asc' }] },
         _count: { select: { bookings: true } },
       },
@@ -68,26 +132,60 @@ export const getPackage = async (req: AuthenticatedRequest, res: Response): Prom
   }
 };
 
+// ─── Get package audit trail ──────────────────────────────────────────────────
+
+export const getPackageAudit = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (userRole(req) !== 'ADMIN') {
+      res.status(403).json({ success: false, error: 'Only admins can view the audit trail' }); return;
+    }
+    const { id } = req.params;
+    const pkg = await prisma.package.findFirst({ where: { id, organizationId: orgId(req) }, select: { id: true } });
+    if (!pkg) { res.status(404).json({ success: false, error: 'Package not found' }); return; }
+
+    const logs = await prisma.packageAuditLog.findMany({
+      where: { packageId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    res.json({ success: true, data: logs });
+  } catch {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 // ─── Create package ───────────────────────────────────────────────────────────
 
 export const createPackage = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const {
       name, code, description, overview, destinationId, tourCategoryId,
-      nights, days, inclusions, exclusions, highlights, thingsToCarry,
+      nights, inclusions, exclusions, highlights, thingsToCarry,
       pricePerPerson, priceSingle, priceDouble, priceTriple, priceQuad, offerPrice,
       capacityMin, capacityMax, difficultyLevel, bestSeason,
       pickupLocation, dropLocation, cancellationPolicy, termsAndConditions, packageNotes,
       images, gallery, isPopular, status,
+      packageType = 'GIT',
     } = req.body;
 
     if (!name?.trim()) { res.status(400).json({ success: false, error: 'Package name is required' }); return; }
     if (!code?.trim()) { res.status(400).json({ success: false, error: 'Package code is required' }); return; }
-    if (!nights || isNaN(Number(nights))) { res.status(400).json({ success: false, error: 'Nights is required' }); return; }
-    if (!days || isNaN(Number(days))) { res.status(400).json({ success: false, error: 'Days is required' }); return; }
+    if (nights === undefined || nights === '' || isNaN(Number(nights))) {
+      res.status(400).json({ success: false, error: 'Stay nights is required' }); return;
+    }
     if (pricePerPerson === undefined || isNaN(Number(pricePerPerson))) {
       res.status(400).json({ success: false, error: 'Price per person is required' }); return;
     }
+    if (!['GIT', 'FIT'].includes(packageType)) {
+      res.status(400).json({ success: false, error: 'Invalid package type' }); return;
+    }
+
+    if (!canCreatePackage(userRole(req), packageType)) {
+      res.status(403).json({ success: false, error: 'Only Admin can create GIT packages' }); return;
+    }
+
+    const stayNights = Number(nights);
+    const totalDays = stayNights + 2;
 
     const pkg = await prisma.package.create({
       data: {
@@ -98,8 +196,11 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
         overview: overview?.trim() || null,
         destinationId: destinationId || null,
         tourCategoryId: tourCategoryId || null,
-        nights: Number(nights),
-        days: Number(days),
+        nights: stayNights,
+        days: totalDays,
+        packageType,
+        createdById: userId(req),
+        lastModifiedById: userId(req),
         inclusions: JSON.stringify(parseList(inclusions)),
         exclusions: JSON.stringify(parseList(exclusions)),
         highlights: JSON.stringify(parseList(highlights)),
@@ -127,7 +228,34 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
       include: {
         destination: { select: { id: true, name: true, country: true, state: true } },
         tourCategory: { select: { id: true, name: true, icon: true } },
+        createdBy: { select: { id: true, name: true, employeeId: true } },
+        lastModifiedBy: { select: { id: true, name: true } },
       },
+    });
+
+    // Auto-generate travel day itinerary
+    const itineraryData = [
+      {
+        packageId: pkg.id, dayOffset: 0, title: 'Departure Journey',
+        description: 'Departure from origin city. Journey to destination begins.',
+        taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0,
+      },
+      ...Array.from({ length: stayNights }, (_, i) => ({
+        packageId: pkg.id, dayOffset: i + 1, title: `Day ${i + 1}`,
+        description: '',
+        taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: i + 1,
+      })),
+      {
+        packageId: pkg.id, dayOffset: stayNights + 1, title: 'Return Journey',
+        description: 'Return journey to origin city.',
+        taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: stayNights + 1,
+      },
+    ];
+    await prisma.packageItinerary.createMany({ data: itineraryData });
+
+    await recordAudit({
+      packageId: pkg.id, req, action: 'CREATE',
+      packageName: pkg.name, packageCode: pkg.code, packageType: pkg.packageType,
     });
 
     res.status(201).json({ success: true, data: pkg });
@@ -148,55 +276,105 @@ export const updatePackage = async (req: AuthenticatedRequest, res: Response): P
     const existing = await prisma.package.findFirst({ where: { id, organizationId: orgId(req) } });
     if (!existing) { res.status(404).json({ success: false, error: 'Package not found' }); return; }
 
+    if (!canMutatePackage(userRole(req), existing.packageType, existing.createdById, userId(req))) {
+      if (existing.packageType === 'GIT') {
+        res.status(403).json({ success: false, error: 'Only Admin can edit GIT packages' }); return;
+      }
+      res.status(403).json({ success: false, error: 'You can only edit FIT packages you created' }); return;
+    }
+
     const {
       name, code, description, overview, destinationId, tourCategoryId,
-      nights, days, inclusions, exclusions, highlights, thingsToCarry,
+      nights, inclusions, exclusions, highlights, thingsToCarry,
       pricePerPerson, priceSingle, priceDouble, priceTriple, priceQuad, offerPrice,
       capacityMin, capacityMax, difficultyLevel, bestSeason,
       pickupLocation, dropLocation, cancellationPolicy, termsAndConditions, packageNotes,
       images, gallery, isPopular, status,
     } = req.body;
 
+    const oldNights = existing.nights;
+    const newNights = nights !== undefined ? Number(nights) : oldNights;
+    const newDays = newNights + 2;
+    const nightsChanged = nights !== undefined && newNights !== oldNights;
+
+    const nextData: Record<string, any> = {
+      name: name?.trim() ?? existing.name,
+      code: code ? code.trim().toUpperCase() : existing.code,
+      description: description !== undefined ? description?.trim() || null : existing.description,
+      overview: overview !== undefined ? overview?.trim() || null : existing.overview,
+      destinationId: destinationId !== undefined ? destinationId || null : existing.destinationId,
+      tourCategoryId: tourCategoryId !== undefined ? tourCategoryId || null : existing.tourCategoryId,
+      nights: newNights,
+      days: newDays,
+      inclusions: inclusions !== undefined ? JSON.stringify(parseList(inclusions)) : existing.inclusions,
+      exclusions: exclusions !== undefined ? JSON.stringify(parseList(exclusions)) : existing.exclusions,
+      highlights: highlights !== undefined ? JSON.stringify(parseList(highlights)) : existing.highlights,
+      thingsToCarry: thingsToCarry !== undefined ? JSON.stringify(parseList(thingsToCarry)) : existing.thingsToCarry,
+      pricePerPerson: pricePerPerson !== undefined ? Number(pricePerPerson) : existing.pricePerPerson,
+      priceSingle: priceSingle !== undefined ? (priceSingle != null ? Number(priceSingle) : null) : existing.priceSingle,
+      priceDouble: priceDouble !== undefined ? (priceDouble != null ? Number(priceDouble) : null) : existing.priceDouble,
+      priceTriple: priceTriple !== undefined ? (priceTriple != null ? Number(priceTriple) : null) : existing.priceTriple,
+      priceQuad: priceQuad !== undefined ? (priceQuad != null ? Number(priceQuad) : null) : existing.priceQuad,
+      offerPrice: offerPrice !== undefined ? (offerPrice != null ? Number(offerPrice) : null) : existing.offerPrice,
+      capacityMin: capacityMin !== undefined ? (capacityMin != null ? Number(capacityMin) : null) : existing.capacityMin,
+      capacityMax: capacityMax !== undefined ? (capacityMax != null ? Number(capacityMax) : null) : existing.capacityMax,
+      difficultyLevel: difficultyLevel !== undefined ? difficultyLevel || null : existing.difficultyLevel,
+      bestSeason: bestSeason !== undefined ? JSON.stringify(parseList(bestSeason)) : existing.bestSeason,
+      pickupLocation: pickupLocation !== undefined ? pickupLocation?.trim() || null : existing.pickupLocation,
+      dropLocation: dropLocation !== undefined ? dropLocation?.trim() || null : existing.dropLocation,
+      cancellationPolicy: cancellationPolicy !== undefined ? cancellationPolicy?.trim() || null : existing.cancellationPolicy,
+      termsAndConditions: termsAndConditions !== undefined ? termsAndConditions?.trim() || null : existing.termsAndConditions,
+      packageNotes: packageNotes !== undefined ? packageNotes?.trim() || null : existing.packageNotes,
+      images: images !== undefined ? JSON.stringify(parseList(images)) : existing.images,
+      gallery: gallery !== undefined ? JSON.stringify(parseList(gallery)) : existing.gallery,
+      isPopular: isPopular !== undefined ? Boolean(isPopular) : existing.isPopular,
+      status: status ?? existing.status,
+      lastModifiedById: userId(req),
+    };
+
+    const changedFields = diffPackage(existing as any, nextData, AUDITED_FIELDS);
+
     const pkg = await prisma.package.update({
       where: { id },
-      data: {
-        name: name?.trim() ?? existing.name,
-        code: code ? code.trim().toUpperCase() : existing.code,
-        description: description !== undefined ? description?.trim() || null : existing.description,
-        overview: overview !== undefined ? overview?.trim() || null : existing.overview,
-        destinationId: destinationId !== undefined ? destinationId || null : existing.destinationId,
-        tourCategoryId: tourCategoryId !== undefined ? tourCategoryId || null : existing.tourCategoryId,
-        nights: nights !== undefined ? Number(nights) : existing.nights,
-        days: days !== undefined ? Number(days) : existing.days,
-        inclusions: inclusions !== undefined ? JSON.stringify(parseList(inclusions)) : existing.inclusions,
-        exclusions: exclusions !== undefined ? JSON.stringify(parseList(exclusions)) : existing.exclusions,
-        highlights: highlights !== undefined ? JSON.stringify(parseList(highlights)) : existing.highlights,
-        thingsToCarry: thingsToCarry !== undefined ? JSON.stringify(parseList(thingsToCarry)) : existing.thingsToCarry,
-        pricePerPerson: pricePerPerson !== undefined ? Number(pricePerPerson) : existing.pricePerPerson,
-        priceSingle: priceSingle !== undefined ? (priceSingle != null ? Number(priceSingle) : null) : existing.priceSingle,
-        priceDouble: priceDouble !== undefined ? (priceDouble != null ? Number(priceDouble) : null) : existing.priceDouble,
-        priceTriple: priceTriple !== undefined ? (priceTriple != null ? Number(priceTriple) : null) : existing.priceTriple,
-        priceQuad: priceQuad !== undefined ? (priceQuad != null ? Number(priceQuad) : null) : existing.priceQuad,
-        offerPrice: offerPrice !== undefined ? (offerPrice != null ? Number(offerPrice) : null) : existing.offerPrice,
-        capacityMin: capacityMin !== undefined ? (capacityMin != null ? Number(capacityMin) : null) : existing.capacityMin,
-        capacityMax: capacityMax !== undefined ? (capacityMax != null ? Number(capacityMax) : null) : existing.capacityMax,
-        difficultyLevel: difficultyLevel !== undefined ? difficultyLevel || null : existing.difficultyLevel,
-        bestSeason: bestSeason !== undefined ? JSON.stringify(parseList(bestSeason)) : existing.bestSeason,
-        pickupLocation: pickupLocation !== undefined ? pickupLocation?.trim() || null : existing.pickupLocation,
-        dropLocation: dropLocation !== undefined ? dropLocation?.trim() || null : existing.dropLocation,
-        cancellationPolicy: cancellationPolicy !== undefined ? cancellationPolicy?.trim() || null : existing.cancellationPolicy,
-        termsAndConditions: termsAndConditions !== undefined ? termsAndConditions?.trim() || null : existing.termsAndConditions,
-        packageNotes: packageNotes !== undefined ? packageNotes?.trim() || null : existing.packageNotes,
-        images: images !== undefined ? JSON.stringify(parseList(images)) : existing.images,
-        gallery: gallery !== undefined ? JSON.stringify(parseList(gallery)) : existing.gallery,
-        isPopular: isPopular !== undefined ? Boolean(isPopular) : existing.isPopular,
-        status: status ?? existing.status,
-      },
+      data: nextData,
       include: {
         destination: { select: { id: true, name: true, country: true, state: true } },
         tourCategory: { select: { id: true, name: true, icon: true } },
+        createdBy: { select: { id: true, name: true, employeeId: true } },
+        lastModifiedBy: { select: { id: true, name: true } },
       },
     });
+
+    // Regenerate itinerary only when nights count changes
+    if (nightsChanged) {
+      await prisma.packageItinerary.deleteMany({ where: { packageId: id, taskType: 'TRIP_DAY' } });
+      const itineraryData = [
+        {
+          packageId: id, dayOffset: 0, title: 'Departure Journey',
+          description: 'Departure from origin city. Journey to destination begins.',
+          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0,
+        },
+        ...Array.from({ length: newNights }, (_, i) => ({
+          packageId: id, dayOffset: i + 1, title: `Day ${i + 1}`,
+          description: '',
+          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: i + 1,
+        })),
+        {
+          packageId: id, dayOffset: newNights + 1, title: 'Return Journey',
+          description: 'Return journey to origin city.',
+          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: newNights + 1,
+        },
+      ];
+      await prisma.packageItinerary.createMany({ data: itineraryData });
+    }
+
+    if (changedFields.length > 0) {
+      await recordAudit({
+        packageId: id, req, action: 'UPDATE',
+        changedFields,
+        packageName: pkg.name, packageCode: pkg.code, packageType: pkg.packageType,
+      });
+    }
 
     res.json({ success: true, data: pkg });
   } catch (e: any) {
@@ -214,6 +392,20 @@ export const deletePackage = async (req: AuthenticatedRequest, res: Response): P
     const { id } = req.params;
     const existing = await prisma.package.findFirst({ where: { id, organizationId: orgId(req) } });
     if (!existing) { res.status(404).json({ success: false, error: 'Package not found' }); return; }
+
+    if (!canMutatePackage(userRole(req), existing.packageType, existing.createdById, userId(req))) {
+      if (existing.packageType === 'GIT') {
+        res.status(403).json({ success: false, error: 'Only Admin can delete GIT packages' }); return;
+      }
+      res.status(403).json({ success: false, error: 'You can only delete FIT packages you created' }); return;
+    }
+
+    // Record audit before deletion (cascade will remove audit logs too, but we store denormalized data)
+    await recordAudit({
+      packageId: id, req, action: 'DELETE',
+      packageName: existing.name, packageCode: existing.code, packageType: existing.packageType,
+    });
+
     await prisma.package.delete({ where: { id } });
     res.json({ success: true, message: 'Package deleted' });
   } catch {

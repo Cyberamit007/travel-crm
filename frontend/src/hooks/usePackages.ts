@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
-import { Package, ApiResponse } from '../types/index';
+import { Package, PackageAuditLog, ApiResponse } from '../types/index';
 import toast from 'react-hot-toast';
 
 export interface PackageFilters {
@@ -8,6 +8,29 @@ export interface PackageFilters {
   destinationId?: string;
   tourCategoryId?: string;
   search?: string;
+  packageType?: string;
+}
+
+export function usePackage(id: string | null | undefined) {
+  return useQuery<ApiResponse<Package>>({
+    queryKey: ['packages', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/packages/${id}`);
+      return data;
+    },
+    enabled: !!id,
+  });
+}
+
+export function usePackageAudit(id: string | null | undefined) {
+  return useQuery<ApiResponse<PackageAuditLog[]>>({
+    queryKey: ['packages', id, 'audit'],
+    queryFn: async () => {
+      const { data } = await api.get(`/packages/${id}/audit`);
+      return data;
+    },
+    enabled: !!id,
+  });
 }
 
 export function usePackages(filters: PackageFilters = {}) {
@@ -16,6 +39,7 @@ export function usePackages(filters: PackageFilters = {}) {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.status) params.set('status', filters.status);
+      if (filters.packageType) params.set('packageType', filters.packageType);
       if (filters.destinationId) params.set('destinationId', filters.destinationId);
       if (filters.tourCategoryId) params.set('tourCategoryId', filters.tourCategoryId);
       if (filters.search) params.set('search', filters.search);

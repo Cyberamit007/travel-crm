@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import {
   Package as PackageIcon, Plus, Edit, Trash2, Search, Star, MapPin, Tag, Clock,
-  IndianRupee, ChevronDown, Layers, Calendar, Users, ChevronRight, GripVertical,
-  AlertCircle, Settings, BookOpen,
+  IndianRupee, Calendar, Users, ChevronRight,
+  BookOpen, Info, ShieldCheck, UserCircle, History, Lock,
 } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { usePackages, useCreatePackage, useUpdatePackage, useDeletePackage } from '../../hooks/usePackages';
-import { useItinerary, useCreateItineraryItem, useUpdateItineraryItem, useDeleteItineraryItem } from '../../hooks/useItinerary';
+import { usePackages, useCreatePackage, useUpdatePackage, useDeletePackage, usePackageAudit } from '../../hooks/usePackages';
+import { useItinerary, useUpdateItineraryItem } from '../../hooks/useItinerary';
 import { useDestinations, useTourCategories } from '../../hooks/useMasters';
-import { Package, PackageItinerary, TaskType, TaskDepartment } from '../../types/index';
+import { Package, PackageAuditLog, PackageItinerary, PackageType } from '../../types/index';
 import Modal from '../../components/ui/Modal';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { formatCurrency, cn } from '../../utils/helpers';
+import { useAuthStore } from '../../store/authStore';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -31,18 +32,6 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   MODERATE: 'text-amber-600 bg-amber-50',
   DIFFICULT: 'text-orange-600 bg-orange-50',
   EXTREME: 'text-red-600 bg-red-50',
-};
-
-const TASK_TYPE_LABELS: Record<string, string> = {
-  GENERAL: 'General',
-  COLLECT_DOCS: 'Collect Docs',
-  COLLECT_PAYMENT: 'Collect Payment',
-  CONFIRM_HOTEL: 'Confirm Hotel',
-  CONFIRM_VEHICLE: 'Confirm Vehicle',
-  SEND_REMINDER: 'Send Reminder',
-  TRIP_DAY: 'Trip Day',
-  COLLECT_REVIEW: 'Collect Review',
-  REFERRAL: 'Referral',
 };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -114,7 +103,7 @@ interface PackageFormData {
   destinationId: string;
   tourCategoryId: string;
   nights: number;
-  days: number;
+  packageType: PackageType;
   inclusions: { value: string }[];
   exclusions: { value: string }[];
   highlights: { value: string }[];
@@ -142,6 +131,8 @@ function PackageFormModal({ open, onClose, existing }: { open: boolean; onClose:
   const { data: catData } = useTourCategories();
   const createPkg = useCreatePackage();
   const updatePkg = useUpdatePackage();
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = currentUser?.role === 'ADMIN';
   const isEdit = !!existing;
   const [activeTab, setActiveTab] = useState<'basic' | 'pricing' | 'details' | 'logistics'>('basic');
   const [bestSeason, setBestSeason] = useState<string[]>(
@@ -150,7 +141,7 @@ function PackageFormModal({ open, onClose, existing }: { open: boolean; onClose:
 
   const toFields = (raw: string | string[]) => parseList(raw).map((v) => ({ value: v }));
 
-  const { register, handleSubmit, control, formState: { errors } } = useForm<PackageFormData>({
+  const { register, handleSubmit, control, watch, formState: { errors } } = useForm<PackageFormData>({
     defaultValues: {
       name: existing?.name ?? '',
       code: existing?.code ?? '',
@@ -159,7 +150,7 @@ function PackageFormModal({ open, onClose, existing }: { open: boolean; onClose:
       destinationId: existing?.destinationId ?? '',
       tourCategoryId: existing?.tourCategoryId ?? '',
       nights: existing?.nights ?? 1,
-      days: existing?.days ?? 2,
+      packageType: existing?.packageType ?? (isAdmin ? 'GIT' : 'FIT'),
       inclusions: existing ? toFields(existing.inclusions) : [],
       exclusions: existing ? toFields(existing.exclusions) : [],
       highlights: existing ? toFields(existing.highlights) : [],
@@ -192,7 +183,7 @@ function PackageFormModal({ open, onClose, existing }: { open: boolean; onClose:
       destinationId: data.destinationId || undefined,
       tourCategoryId: data.tourCategoryId || undefined,
       nights: Number(data.nights),
-      days: Number(data.days),
+      packageType: data.packageType,
       inclusions: data.inclusions.map((f) => f.value).filter(Boolean),
       exclusions: data.exclusions.map((f) => f.value).filter(Boolean),
       highlights: data.highlights.map((f) => f.value).filter(Boolean),
@@ -289,6 +280,51 @@ function PackageFormModal({ open, onClose, existing }: { open: boolean; onClose:
                 </select>
               </div>
               <div>
+                <label className="label">Package Type *</label>
+                {isEdit ? (
+                  <div className={cn(
+                    'input flex items-center gap-2 cursor-not-allowed select-none',
+                    existing?.packageType === 'GIT' ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700',
+                  )}>
+                    <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="font-semibold">{existing?.packageType}</span>
+                    <span className="text-xs font-normal text-slate-400 ml-1">— cannot change after creation</span>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    {(['GIT', 'FIT'] as PackageType[]).map((type) => {
+                      const disabled = type === 'GIT' && !isAdmin;
+                      return (
+                        <label
+                          key={type}
+                          className={cn(
+                            'flex-1 flex items-center gap-2 p-2.5 border-2 rounded-xl cursor-pointer transition-colors text-sm font-medium',
+                            watch('packageType') === type
+                              ? type === 'GIT' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-violet-500 bg-violet-50 text-violet-700'
+                              : 'border-slate-200 text-slate-500 hover:border-slate-300',
+                            disabled ? 'opacity-40 cursor-not-allowed' : '',
+                          )}
+                        >
+                          <input
+                            type="radio" value={type}
+                            {...register('packageType')}
+                            disabled={disabled}
+                            className="sr-only"
+                          />
+                          {type === 'GIT' ? <ShieldCheck className="w-4 h-4" /> : <UserCircle className="w-4 h-4" />}
+                          <span>{type}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {watch('packageType') === 'GIT'
+                    ? 'GIT — Admin-managed group tours'
+                    : 'FIT — Sales-created individual tours'}
+                </p>
+              </div>
+              <div>
                 <label className="label">Destination</label>
                 <select {...register('destinationId')} className="input">
                   <option value="">-- Select destination --</option>
@@ -303,12 +339,22 @@ function PackageFormModal({ open, onClose, existing }: { open: boolean; onClose:
                 </select>
               </div>
               <div>
-                <label className="label">Nights *</label>
-                <input type="number" min={0} {...register('nights', { required: true, min: 0, valueAsNumber: true })} className="input" />
+                <label className="label">Stay Nights *</label>
+                <input
+                  type="number" min={1}
+                  {...register('nights', { required: 'Stay nights is required', min: { value: 1, message: 'At least 1 night' }, valueAsNumber: true })}
+                  className="input"
+                  placeholder="e.g. 3"
+                />
+                {errors.nights && <p className="text-red-500 text-xs mt-1">{errors.nights.message}</p>}
               </div>
               <div>
-                <label className="label">Days *</label>
-                <input type="number" min={1} {...register('days', { required: true, min: 1, valueAsNumber: true })} className="input" />
+                <label className="label">Total Days (Auto)</label>
+                <div className="input bg-slate-50 text-slate-600 font-medium flex items-center gap-2 cursor-default select-none">
+                  <Info className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                  <span>{(Number(watch('nights')) || 1) + 2} days</span>
+                  <span className="text-xs text-slate-400 font-normal">— departure + {Number(watch('nights')) || 1} stay + return</span>
+                </div>
               </div>
               <div>
                 <label className="label">Difficulty Level</label>
@@ -424,213 +470,184 @@ function PackageFormModal({ open, onClose, existing }: { open: boolean; onClose:
   );
 }
 
-// ─── Itinerary Builder ────────────────────────────────────────────────────────
+// ─── Travel Day Editor ────────────────────────────────────────────────────────
 
-function dayLabel(offset: number): string {
-  if (offset < 0) return `D-${Math.abs(offset)}`;
-  if (offset === 0) return 'D-Day';
-  return `D+${offset}`;
-}
+function TravelDayEditor({ packageId, totalNights }: { packageId: string; totalNights: number }) {
+  const { data, isLoading } = useItinerary(packageId);
+  const updateItem = useUpdateItineraryItem(packageId);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ title: '', description: '', notes: '' });
 
-const DEPT_COLORS: Record<string, string> = {
-  SALES: 'bg-blue-100 text-blue-700',
-  OPERATIONS: 'bg-purple-100 text-purple-700',
-  CUSTOMER_CARE: 'bg-emerald-100 text-emerald-700',
-  ALL: 'bg-slate-100 text-slate-600',
-};
+  const items = (data?.data ?? [])
+    .filter((item) => item.taskType === 'TRIP_DAY')
+    .sort((a, b) => a.dayOffset - b.dayOffset);
 
-function ItineraryItemForm({ packageId, existing, onClose }: {
-  packageId: string;
-  existing?: PackageItinerary | null;
-  onClose: () => void;
-}) {
-  const create = useCreateItineraryItem(packageId);
-  const update = useUpdateItineraryItem(packageId);
-  const [form, setForm] = useState({
-    dayOffset: existing?.dayOffset?.toString() ?? '-7',
-    title: existing?.title ?? '',
-    description: existing?.description ?? '',
-    notes: existing?.notes ?? '',
-    taskType: existing?.taskType ?? 'GENERAL',
-    department: existing?.department ?? 'SALES',
-    sortOrder: existing?.sortOrder?.toString() ?? '0',
-  });
-
-  const handleSave = () => {
-    if (!form.title.trim()) return;
-    const payload = {
-      dayOffset: Number(form.dayOffset),
-      title: form.title.trim(),
-      description: form.description || undefined,
-      notes: form.notes || undefined,
-      taskType: form.taskType,
-      department: form.department,
-      sortOrder: Number(form.sortOrder),
-    };
-    if (existing) {
-      update.mutate({ id: existing.id, ...payload }, { onSuccess: onClose });
-    } else {
-      create.mutate(payload, { onSuccess: onClose });
-    }
+  const startEdit = (item: PackageItinerary) => {
+    setEditingId(item.id);
+    setEditForm({ title: item.title, description: item.description ?? '', notes: item.notes ?? '' });
   };
 
-  const isPending = create.isPending || update.isPending;
+  const saveEdit = (item: PackageItinerary) => {
+    updateItem.mutate(
+      { id: item.id, title: editForm.title.trim() || item.title, description: editForm.description || undefined, notes: editForm.notes || undefined },
+      { onSuccess: () => setEditingId(null) },
+    );
+  };
 
-  return (
-    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div>
-          <label className="label text-xs">Day Offset</label>
-          <input
-            type="number"
-            value={form.dayOffset}
-            onChange={(e) => setForm((f) => ({ ...f, dayOffset: e.target.value }))}
-            className="input text-sm"
-            placeholder="-7"
-          />
-          <p className="text-[10px] text-slate-400 mt-0.5">Negative = before trip</p>
-        </div>
-        <div className="sm:col-span-3">
-          <label className="label text-xs">Task Title *</label>
-          <input
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            className="input text-sm"
-            placeholder="e.g. Collect passport copies"
-          />
-        </div>
-        <div>
-          <label className="label text-xs">Task Type</label>
-          <select value={form.taskType} onChange={(e) => setForm((f) => ({ ...f, taskType: e.target.value as TaskType }))} className="input text-sm">
-            {Object.entries(TASK_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="label text-xs">Department</label>
-          <select value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value as TaskDepartment }))} className="input text-sm">
-            <option value="SALES">Sales</option>
-            <option value="OPERATIONS">Operations</option>
-            <option value="CUSTOMER_CARE">Customer Care</option>
-            <option value="ALL">All</option>
-          </select>
-        </div>
-        <div className="sm:col-span-2">
-          <label className="label text-xs">Description</label>
-          <input
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            className="input text-sm"
-            placeholder="Optional details…"
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-2 justify-end">
-        <button type="button" onClick={onClose} className="btn-secondary text-xs">Cancel</button>
-        <button type="button" onClick={handleSave} disabled={isPending || !form.title.trim()} className="btn-primary text-xs">
-          {isPending ? 'Saving…' : existing ? 'Update Step' : 'Add Step'}
-        </button>
-      </div>
+  const returnOffset = totalNights + 1;
+
+  const dayBorderBg = (offset: number) => {
+    if (offset === 0) return 'border-l-amber-400 bg-amber-50/60';
+    if (offset === returnOffset) return 'border-l-emerald-400 bg-emerald-50/60';
+    return 'border-l-blue-300 bg-white';
+  };
+
+  const dayBadge = (offset: number) => {
+    if (offset === 0) return 'bg-amber-100 text-amber-700';
+    if (offset === returnOffset) return 'bg-emerald-100 text-emerald-700';
+    return 'bg-blue-100 text-blue-700';
+  };
+
+  if (isLoading) return <div className="py-8 text-center text-slate-400 text-sm">Loading day plan…</div>;
+
+  if (items.length === 0) return (
+    <div className="text-center py-10 text-slate-400">
+      <Calendar className="w-10 h-10 mx-auto mb-2 opacity-30" />
+      <p className="text-sm">No day plan generated yet</p>
+      <p className="text-xs mt-1">Save the package to auto-generate the day plan</p>
     </div>
   );
-}
-
-function ItineraryBuilder({ packageId }: { packageId: string }) {
-  const { data, isLoading } = useItinerary(packageId);
-  const deleteItem = useDeleteItineraryItem(packageId);
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<PackageItinerary | null>(null);
-
-  const items = data?.data ?? [];
-
-  const grouped = items.reduce<Record<number, PackageItinerary[]>>((acc, item) => {
-    if (!acc[item.dayOffset]) acc[item.dayOffset] = [];
-    acc[item.dayOffset].push(item);
-    return acc;
-  }, {});
-
-  const offsets = Object.keys(grouped).map(Number).sort((a, b) => a - b);
-
-  if (isLoading) return <div className="py-8 text-center text-slate-400 text-sm">Loading itinerary…</div>;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">{items.length} steps in workflow</p>
-        <button
-          onClick={() => { setEditing(null); setShowForm(true); }}
-          className="btn-primary text-xs gap-1.5"
-        >
-          <Plus className="w-3.5 h-3.5" /> Add Step
-        </button>
-      </div>
-
-      {showForm && !editing && (
-        <ItineraryItemForm packageId={packageId} onClose={() => setShowForm(false)} />
-      )}
-
-      {items.length === 0 && !showForm && (
-        <div className="text-center py-10 text-slate-400">
-          <Layers className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">No workflow steps yet</p>
-          <p className="text-xs mt-1">Add steps like "D-15: Collect Documents", "D-7: Confirm Hotel"</p>
-        </div>
-      )}
-
-      {offsets.map((offset) => (
-        <div key={offset}>
-          <div className="flex items-center gap-2 mb-2">
-            <span className={cn(
-              'text-[10px] font-bold px-2 py-0.5 rounded-full',
-              offset < 0 ? 'bg-blue-100 text-blue-700' : offset === 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-            )}>
-              {dayLabel(offset)}
-            </span>
-            <div className="flex-1 h-px bg-slate-100" />
-            <span className="text-[10px] text-slate-400">
-              {offset < 0 ? `${Math.abs(offset)} days before departure` : offset === 0 ? 'Departure day' : `${offset} days after departure`}
-            </span>
-          </div>
-          <div className="space-y-2 ml-2">
-            {grouped[offset].map((item) => (
-              <div key={item.id}>
-                {editing?.id === item.id ? (
-                  <ItineraryItemForm packageId={packageId} existing={item} onClose={() => setEditing(null)} />
-                ) : (
-                  <div className="flex items-start gap-3 p-3 bg-white border border-slate-200 rounded-xl group hover:border-slate-300 transition-colors">
-                    <GripVertical className="w-4 h-4 text-slate-300 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                        <span className="text-sm font-medium text-slate-800">{item.title}</span>
-                        <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', DEPT_COLORS[item.department] ?? 'bg-slate-100 text-slate-600')}>
-                          {item.department}
-                        </span>
-                        <span className="text-[10px] text-slate-400">{TASK_TYPE_LABELS[item.taskType] ?? item.taskType}</span>
-                      </div>
-                      {item.description && <p className="text-xs text-slate-500 truncate">{item.description}</p>}
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setEditing(item)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-primary-600 transition-colors">
-                        <Edit className="w-3 h-3" />
-                      </button>
-                      <button onClick={() => deleteItem.mutate(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                )}
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">{totalNights + 2} days total — click the edit icon to customise each day's title and description</p>
+      {items.map((item) => (
+        <div key={item.id} className={cn('border-l-4 rounded-xl p-4 border border-slate-200 transition-colors', dayBorderBg(item.dayOffset))}>
+          {editingId === item.id ? (
+            <div className="space-y-2">
+              <input
+                value={editForm.title}
+                onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                className="input text-sm font-medium"
+                placeholder="Day title"
+              />
+              <textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                className="input text-sm resize-none"
+                rows={2}
+                placeholder="Activities and places for this day…"
+              />
+              <textarea
+                value={editForm.notes}
+                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                className="input text-sm resize-none"
+                rows={1}
+                placeholder="Notes — hotel name, meal plan, tips…"
+              />
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={() => setEditingId(null)} className="btn-secondary text-xs">Cancel</button>
+                <button type="button" onClick={() => saveEdit(item)} disabled={updateItem.isPending} className="btn-primary text-xs">
+                  {updateItem.isPending ? 'Saving…' : 'Save'}
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3">
+              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 tabular-nums', dayBadge(item.dayOffset))}>
+                D{item.dayOffset}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-800">{item.title}</p>
+                {item.description
+                  ? <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{item.description}</p>
+                  : <p className="text-xs text-slate-300 mt-0.5 italic">No description — click edit to add</p>
+                }
+                {item.notes && <p className="text-xs text-slate-400 mt-1 italic">{item.notes}</p>}
+              </div>
+              <button
+                type="button" onClick={() => startEdit(item)}
+                className="p-1.5 rounded-lg hover:bg-white text-slate-300 hover:text-primary-600 transition-colors flex-shrink-0"
+              >
+                <Edit className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
+// ─── Audit Trail Tab ─────────────────────────────────────────────────────────
+
+function AuditTrail({ packageId }: { packageId: string }) {
+  const { data, isLoading } = usePackageAudit(packageId);
+  const logs: PackageAuditLog[] = data?.data ?? [];
+
+  const ACTION_STYLES: Record<string, string> = {
+    CREATE: 'bg-emerald-100 text-emerald-700',
+    UPDATE: 'bg-blue-100 text-blue-700',
+    DELETE: 'bg-red-100 text-red-700',
+  };
+
+  if (isLoading) return <div className="py-8 text-center text-slate-400 text-sm">Loading audit trail…</div>;
+  if (logs.length === 0) return (
+    <div className="text-center py-10 text-slate-400">
+      <History className="w-10 h-10 mx-auto mb-2 opacity-30" />
+      <p className="text-sm">No audit records yet</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">{logs.length} audit record{logs.length !== 1 ? 's' : ''} — read-only history</p>
+      {logs.map((log) => {
+        let changed: { field: string; from: any; to: any }[] = [];
+        try { if (log.changedFields) changed = JSON.parse(log.changedFields); } catch { /* */ }
+        return (
+          <div key={log.id} className="border border-slate-200 rounded-xl p-3 space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full uppercase', ACTION_STYLES[log.action] ?? 'bg-slate-100 text-slate-600')}>
+                {log.action}
+              </span>
+              <span className="text-xs font-medium text-slate-700">{log.userName}</span>
+              {log.employeeId && <span className="text-[10px] text-slate-400">({log.employeeId})</span>}
+              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{log.userRole}</span>
+              <span className="text-[10px] text-slate-400 ml-auto">
+                {new Date(log.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+              </span>
+            </div>
+            {changed.length > 0 && (
+              <div className="space-y-1 ml-1">
+                {changed.map((c, i) => (
+                  <div key={i} className="text-xs flex gap-1 items-start">
+                    <span className="font-medium text-slate-600 min-w-[100px] flex-shrink-0">{c.field}:</span>
+                    <span className="text-red-400 line-through max-w-[120px] truncate">{String(c.from ?? '—')}</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-emerald-600 max-w-[120px] truncate">{String(c.to ?? '—')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {log.action === 'DELETE' && (
+              <p className="text-xs text-slate-400 italic">Deleted package: {log.packageName} ({log.packageCode})</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Package Detail Modal ─────────────────────────────────────────────────────
 
-function PackageDetailModal({ pkg, onClose, onEdit }: { pkg: Package; onClose: () => void; onEdit: () => void }) {
-  const [tab, setTab] = useState<'overview' | 'itinerary'>('overview');
+function PackageDetailModal({ pkg, onClose, onEdit, canEdit }: {
+  pkg: Package; onClose: () => void; onEdit: () => void; canEdit: boolean;
+}) {
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const [tab, setTab] = useState<'overview' | 'itinerary' | 'audit'>('overview');
   const highlights = parseList(pkg.highlights);
   const inclusions = parseList(pkg.inclusions);
   const exclusions = parseList(pkg.exclusions);
@@ -642,7 +659,9 @@ function PackageDetailModal({ pkg, onClose, onEdit }: { pkg: Package; onClose: (
       footer={
         <>
           <button onClick={onClose} className="btn-secondary">Close</button>
-          <button onClick={onEdit} className="btn-primary gap-1.5"><Edit className="w-3.5 h-3.5" /> Edit Package</button>
+          {canEdit && (
+            <button onClick={onEdit} className="btn-primary gap-1.5"><Edit className="w-3.5 h-3.5" /> Edit Package</button>
+          )}
         </>
       }
     >
@@ -652,6 +671,9 @@ function PackageDetailModal({ pkg, onClose, onEdit }: { pkg: Package; onClose: (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{pkg.code}</span>
             <span className={cn('badge text-[10px]', STATUS_COLORS[pkg.status])}>{pkg.status}</span>
+            <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full',
+              pkg.packageType === 'GIT' ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700'
+            )}>{pkg.packageType}</span>
             {pkg.difficultyLevel && (
               <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium', DIFFICULTY_COLORS[pkg.difficultyLevel])}>
                 {pkg.difficultyLevel}
@@ -667,6 +689,11 @@ function PackageDetailModal({ pkg, onClose, onEdit }: { pkg: Package; onClose: (
                 {pkg.capacityMin ?? 1}–{pkg.capacityMax ?? '∞'} pax
               </span>
             )}
+            {pkg.createdBy && (
+              <span className="flex items-center gap-1"><UserCircle className="w-3 h-3" />
+                {pkg.createdBy.name}{pkg.createdBy.employeeId ? ` (${pkg.createdBy.employeeId})` : ''}
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right flex-shrink-0">
@@ -678,7 +705,11 @@ function PackageDetailModal({ pkg, onClose, onEdit }: { pkg: Package; onClose: (
 
       {/* Tab switcher */}
       <div className="flex gap-1 border-b border-slate-200 mb-4 -mx-1">
-        {[{ key: 'overview', label: 'Overview' }, { key: 'itinerary', label: 'Itinerary Builder' }].map((t) => (
+        {[
+          { key: 'overview', label: 'Overview' },
+          { key: 'itinerary', label: 'Day Plan' },
+          ...(isAdmin ? [{ key: 'audit', label: 'Audit Trail' }] : []),
+        ].map((t) => (
           <button key={t.key} onClick={() => setTab(t.key as any)}
             className={cn('px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
               tab === t.key ? 'border-primary-600 text-primary-700' : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -769,14 +800,17 @@ function PackageDetailModal({ pkg, onClose, onEdit }: { pkg: Package; onClose: (
         </div>
       )}
 
-      {tab === 'itinerary' && <ItineraryBuilder packageId={pkg.id} />}
+      {tab === 'itinerary' && <TravelDayEditor packageId={pkg.id} totalNights={pkg.nights} />}
+      {tab === 'audit' && isAdmin && <AuditTrail packageId={pkg.id} />}
     </Modal>
   );
 }
 
 // ─── Package Card ─────────────────────────────────────────────────────────────
 
-function PackageCard({ pkg, onView, onEdit, onDelete }: { pkg: Package; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+function PackageCard({ pkg, onView, onEdit, onDelete, canMutate }: {
+  pkg: Package; onView: () => void; onEdit: () => void; onDelete: () => void; canMutate: boolean;
+}) {
   const highlights = parseList(pkg.highlights);
 
   return (
@@ -790,6 +824,9 @@ function PackageCard({ pkg, onView, onEdit, onDelete }: { pkg: Package; onView: 
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{pkg.code}</span>
+            <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded',
+              pkg.packageType === 'GIT' ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700'
+            )}>{pkg.packageType ?? 'GIT'}</span>
             <span className={cn('badge text-[10px]', STATUS_COLORS[pkg.status] ?? 'badge-muted')}>{pkg.status}</span>
             {pkg.difficultyLevel && (
               <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', DIFFICULTY_COLORS[pkg.difficultyLevel])}>
@@ -798,14 +835,16 @@ function PackageCard({ pkg, onView, onEdit, onDelete }: { pkg: Package; onView: 
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-          <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-primary-600 transition-colors">
-            <Edit className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        {canMutate && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+            <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-primary-600 transition-colors">
+              <Edit className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Meta */}
@@ -862,7 +901,7 @@ function PackageCard({ pkg, onView, onEdit, onDelete }: { pkg: Package; onView: 
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-100">
         <div className="flex items-center gap-3 text-[10px] text-slate-400">
           {pkg._count?.itineraryItems !== undefined && (
-            <span className="flex items-center gap-1"><Layers className="w-3 h-3" />{pkg._count.itineraryItems} steps</span>
+            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{pkg._count.itineraryItems} days</span>
           )}
           {pkg._count?.bookings !== undefined && (
             <span className="flex items-center gap-1"><BookOpen className="w-3 h-3" />{pkg._count.bookings} bookings</span>
@@ -883,26 +922,38 @@ export default function PackagesPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDest, setFilterDest] = useState('');
   const [filterCat, setFilterCat] = useState('');
+  const [filterType, setFilterType] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Package | null>(null);
   const [viewing, setViewing] = useState<Package | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Package | null>(null);
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = currentUser?.role === 'ADMIN';
 
-  const { data, isLoading } = usePackages({ search, status: filterStatus, destinationId: filterDest, tourCategoryId: filterCat });
+  const { data, isLoading } = usePackages({ search, status: filterStatus, destinationId: filterDest, tourCategoryId: filterCat, packageType: filterType });
   const { data: destData } = useDestinations({ status: 'ACTIVE' });
   const { data: catData } = useTourCategories();
   const deletePkg = useDeletePackage();
+
+  const pkgCanMutate = (pkg: Package) => {
+    if (isAdmin) return true;
+    if (pkg.packageType === 'GIT') return false;
+    return pkg.createdById === currentUser?.id;
+  };
 
   const packages = data?.data ?? [];
   const destinations = destData?.data ?? [];
   const categories = catData?.data ?? [];
 
   const openCreate = () => { setEditing(null); setModalOpen(true); };
-  const openEdit = (pkg: Package) => { setEditing(pkg); setViewing(null); setModalOpen(true); };
+  const openEdit = (pkg: Package) => {
+    if (!pkgCanMutate(pkg)) return;
+    setEditing(pkg); setViewing(null); setModalOpen(true);
+  };
   const closeModal = () => { setModalOpen(false); setEditing(null); };
 
   const handleDelete = () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || !pkgCanMutate(deleteTarget)) return;
     deletePkg.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) });
   };
 
@@ -956,6 +1007,11 @@ export default function PackagesPage() {
           <option value="">All Categories</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="input sm:w-32">
+          <option value="">All Types</option>
+          <option value="GIT">GIT</option>
+          <option value="FIT">FIT</option>
+        </select>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input sm:w-36">
           <option value="">All Status</option>
           <option value="ACTIVE">Active</option>
@@ -984,6 +1040,7 @@ export default function PackagesPage() {
             <PackageCard
               key={pkg.id}
               pkg={pkg}
+              canMutate={pkgCanMutate(pkg)}
               onView={() => setViewing(pkg)}
               onEdit={() => openEdit(pkg)}
               onDelete={() => setDeleteTarget(pkg)}
@@ -996,6 +1053,7 @@ export default function PackagesPage() {
       {viewing && (
         <PackageDetailModal
           pkg={viewing}
+          canEdit={pkgCanMutate(viewing)}
           onClose={() => setViewing(null)}
           onEdit={() => openEdit(viewing)}
         />

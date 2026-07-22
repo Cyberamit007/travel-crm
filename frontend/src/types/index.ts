@@ -339,6 +339,7 @@ export interface TourCategory {
 // ─── Packages ─────────────────────────────────────────────────────────────────
 
 export type PackageStatus = 'ACTIVE' | 'INACTIVE' | 'DRAFT';
+export type PackageType = 'GIT' | 'FIT';
 export type DifficultyLevel = 'EASY' | 'MODERATE' | 'DIFFICULT' | 'EXTREME';
 export type TaskType = 'GENERAL' | 'COLLECT_DOCS' | 'COLLECT_PAYMENT' | 'CONFIRM_HOTEL' | 'CONFIRM_VEHICLE' | 'SEND_REMINDER' | 'TRIP_DAY' | 'COLLECT_REVIEW' | 'REFERRAL';
 export type TaskDepartment = 'SALES' | 'OPERATIONS' | 'CUSTOMER_CARE' | 'ALL';
@@ -382,10 +383,30 @@ export interface Package {
   gallery: string;  // JSON string array of URLs
   isPopular: boolean;
   status: PackageStatus;
+  packageType: PackageType;
+  createdById?: string;
+  createdBy?: { id: string; name: string; employeeId?: string };
+  lastModifiedById?: string;
+  lastModifiedBy?: { id: string; name: string };
   itineraryItems?: PackageItinerary[];
   _count?: { itineraryItems: number; bookings: number };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PackageAuditLog {
+  id: string;
+  packageId: string | null;
+  userId: string;
+  userName: string;
+  employeeId?: string;
+  userRole: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  changedFields?: string; // JSON: [{ field, from, to }]
+  packageName?: string;
+  packageCode?: string;
+  packageType?: string;
+  createdAt: string;
 }
 
 export interface PackageItinerary {

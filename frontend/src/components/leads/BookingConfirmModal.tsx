@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import { IndianRupee, Users, MapPin, Package, Utensils, BedDouble, Calendar, FileText } from 'lucide-react';
+import {
+  IndianRupee, Users, MapPin, Package, Utensils, BedDouble, Calendar, FileText,
+  ChevronRight, Info,
+} from 'lucide-react';
 import Modal from '../ui/Modal';
 import { Lead, Booking, FoodPreference, RoomSharing, TourType } from '../../types/index';
 import { useCreateBooking, useUpdateBooking } from '../../hooks/useBookings';
-import { usePackages } from '../../hooks/usePackages';
+import { usePackages, usePackage } from '../../hooks/usePackages';
 import { formatCurrency, cn } from '../../utils/helpers';
 
 interface BookingForm {
@@ -48,21 +51,6 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
   const isEdit = !!existingBooking;
   const todayDate = new Date().toISOString().split('T')[0];
 
-  const { data: packagesData } = usePackages({ status: 'ACTIVE' });
-  const packages = packagesData?.data ?? [];
-
-  // Packages whose master destination matches the destination/campaign chosen
-  // when this lead was created — surfaced first so Ops doesn't have to hunt
-  // through every active package. Ops can still see everything via the toggle.
-  const matchingPackages = useMemo(
-    () => (lead.destination
-      ? packages.filter((p) => p.destination?.name?.toLowerCase() === lead.destination!.toLowerCase())
-      : []),
-    [packages, lead.destination]
-  );
-  const [showAllPackages, setShowAllPackages] = useState(false);
-  const displayedPackages = matchingPackages.length > 0 && !showAllPackages ? matchingPackages : packages;
-
   const { register, handleSubmit, control, setValue, formState: { errors } } = useForm<BookingForm>({
     defaultValues: {
       travelerName: existingBooking?.travelerName ?? lead.name,
@@ -80,36 +68,56 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
       returnDate: existingBooking?.returnDate ? existingBooking.returnDate.split('T')[0] : '',
       finalPrice: existingBooking?.finalPrice ?? lead.budget ?? 0,
       amountPaid: existingBooking?.amountPaid ?? 0,
-      balanceDueDate: existingBooking?.balanceDueDate
-        ? existingBooking.balanceDueDate.split('T')[0]
-        : '',
+      balanceDueDate: existingBooking?.balanceDueDate ? existingBooking.balanceDueDate.split('T')[0] : '',
     },
   });
 
   const finalPrice = useWatch({ control, name: 'finalPrice' });
   const amountPaid = useWatch({ control, name: 'amountPaid' });
+  const watchedTourType = useWatch({ control, name: 'tourType' });
+  const watchedPackageId = useWatch({ control, name: 'packageId' });
+  const watchedDepartureDate = useWatch({ control, name: 'departureDate' });
+
   const balanceAmount = Math.max(0, Number(finalPrice || 0) - Number(amountPaid || 0));
 
-  const packageId = useWatch({ control, name: 'packageId' });
-  const departureDate = useWatch({ control, name: 'departureDate' });
-  const selectedPackage = packages.find((p) => p.id === packageId);
+  // Type-filtered package list
+  const { data: packagesData } = usePackages({ status: 'ACTIVE', packageType: watchedTourType });
+  const packages = packagesData?.data ?? [];
 
-  // Linking a package makes it the source of truth for the trip's destination —
-  // matches booking.controller.ts, which overrides departureLocation with the
-  // package's destination when both are present, so this keeps the form in
-  // sync with what will actually be saved.
-  useEffect(() => {
-    if (selectedPackage?.destination?.name) setValue('departureLocation', selectedPackage.destination.name);
-  }, [selectedPackage, setValue]);
+  // Destination-matching within type-filtered list
+  const matchingPackages = useMemo(
+    () => (lead.destination
+      ? packages.filter((p) => p.destination?.name?.toLowerCase() === lead.destination!.toLowerCase())
+      : []),
+    [packages, lead.destination]
+  );
+  const [showAllPackages, setShowAllPackages] = useState(false);
+  const displayedPackages = matchingPackages.length > 0 && !showAllPackages ? matchingPackages : packages;
 
-  // Return date = departure date + package nights, recalculated whenever
-  // either changes. Still a plain input afterward, so Ops can override it.
+  // Fetch selected package detail (with itinerary)
+  const { data: selectedPkgData } = usePackage(watchedPackageId || null);
+  const selectedPkg = selectedPkgData?.data ?? null;
+
+  // Auto-fill destination from package
   useEffect(() => {
-    if (!departureDate || !selectedPackage) return;
-    const d = new Date(departureDate);
-    d.setDate(d.getDate() + selectedPackage.nights);
-    setValue('returnDate', d.toISOString().split('T')[0]);
-  }, [departureDate, selectedPackage, setValue]);
+    if (selectedPkg?.destination?.name) setValue('departureLocation', selectedPkg.destination.name);
+  }, [selectedPkg, setValue]);
+
+  // Auto-fill price and return date when package or departure date changes
+  useEffect(() => {
+    if (!selectedPkg) return;
+    setValue('finalPrice', selectedPkg.offerPrice ?? selectedPkg.pricePerPerson);
+    if (watchedDepartureDate) {
+      const dep = new Date(watchedDepartureDate);
+      dep.setDate(dep.getDate() + selectedPkg.nights + 1);
+      setValue('returnDate', dep.toISOString().split('T')[0]);
+    }
+  }, [watchedPackageId, watchedDepartureDate, selectedPkg]);
+
+  // Reset package when tour type changes
+  useEffect(() => {
+    if (!isEdit) setValue('packageId', '');
+  }, [watchedTourType]);
 
   useEffect(() => {
     if (open) {
@@ -154,16 +162,20 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
     };
 
     if (isEdit && existingBooking) {
-      updateBooking.mutate(
-        { ...payload, id: existingBooking.id },
-        { onSuccess: onClose }
-      );
+      updateBooking.mutate({ ...payload, id: existingBooking.id }, { onSuccess: onClose });
     } else {
       createBooking.mutate(payload, { onSuccess: onClose });
     }
   };
 
   const isPending = createBooking.isPending || updateBooking.isPending;
+
+  // Itinerary preview items (TRIP_DAY type only, sorted by dayOffset)
+  const itineraryPreview = (selectedPkg?.itineraryItems ?? [])
+    .filter((i) => i.taskType === 'TRIP_DAY')
+    .sort((a, b) => a.dayOffset - b.dayOffset);
+
+  const returnOffset = selectedPkg ? selectedPkg.nights + 1 : -1;
 
   return (
     <Modal
@@ -182,7 +194,6 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
     >
       <form id="booking-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 
-        {/* Booking number display for edit mode */}
         {isEdit && existingBooking?.bookingNumber && (
           <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 border border-primary-200 rounded-xl">
             <span className="text-xs font-semibold text-primary-600">Booking #</span>
@@ -194,16 +205,47 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
         <div>
           <SectionHeader icon={Package} label="Package & Dates" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            {/* Tour Type */}
+            <div className="sm:col-span-2">
+              <label className="label">Package Type</label>
+              <div className="flex gap-2">
+                {(['GIT', 'FIT'] as const).map((type) => (
+                  <label key={type} className={cn(
+                    'flex-1 flex items-center justify-center gap-2 p-2.5 border-2 rounded-xl cursor-pointer transition-colors text-sm font-medium',
+                    watchedTourType === type
+                      ? type === 'GIT'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-violet-500 bg-violet-50 text-violet-700'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                  )}>
+                    <input type="radio" value={type} {...register('tourType')} className="sr-only" />
+                    <span>{type}</span>
+                    <span className="text-xs font-normal opacity-70">
+                      {type === 'GIT' ? '— Group Tour' : '— Individual Tour'}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Package selector — filtered by tour type */}
             <div className="sm:col-span-2">
               <label className="label">Tour Package</label>
               <select {...register('packageId')} className="input">
-                <option value="">-- No package linked --</option>
+                <option value="">-- Select a {watchedTourType} package --</option>
                 {displayedPackages.map((p) => (
-                  <option key={p.id} value={p.id}>{p.code} — {p.name} ({p.nights}N/{p.days}D)</option>
+                  <option key={p.id} value={p.id}>
+                    {p.code} — {p.name} ({p.nights}N/{p.days}D) — {formatCurrency(p.offerPrice ?? p.pricePerPerson)}/person
+                  </option>
                 ))}
               </select>
               <div className="flex items-center justify-between mt-0.5">
-                <p className="text-[10px] text-slate-400">Linking a package auto-generates workflow tasks on departure date</p>
+                <p className="text-[10px] text-slate-400">
+                  {packages.length === 0
+                    ? `No active ${watchedTourType} packages found. Create one in Package Master first.`
+                    : 'Linking a package auto-generates workflow tasks on departure date'}
+                </p>
                 {matchingPackages.length > 0 && (
                   <button
                     type="button"
@@ -215,12 +257,63 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
                 )}
               </div>
             </div>
+
+            {/* Selected package summary */}
+            {selectedPkg && (
+              <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full',
+                    selectedPkg.packageType === 'GIT' ? 'bg-blue-100 text-blue-700' : 'bg-violet-100 text-violet-700'
+                  )}>{selectedPkg.packageType}</span>
+                  <span className="text-xs font-mono font-bold bg-white border border-slate-200 text-slate-600 px-2 py-0.5 rounded">
+                    {selectedPkg.code}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-800">{selectedPkg.name}</span>
+                  <span className="text-xs text-slate-500 ml-auto">{selectedPkg.nights}N / {selectedPkg.days}D</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-slate-600">
+                  <Info className="w-3 h-3 text-slate-400" />
+                  <span>Price auto-filled: <strong>{formatCurrency(selectedPkg.offerPrice ?? selectedPkg.pricePerPerson)}</strong>/person</span>
+                  {watchedDepartureDate && (
+                    <span className="ml-2 text-slate-400">· Return auto-set to <strong>{new Date(watchedDepartureDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</strong> + {selectedPkg.nights + 1}d</span>
+                  )}
+                </div>
+
+                {/* Day Plan preview */}
+                {itineraryPreview.length > 0 && (
+                  <div className="space-y-1 pt-1 border-t border-slate-200 mt-1">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Day Plan</p>
+                    {itineraryPreview.map((item) => {
+                      const isDepart = item.dayOffset === 0;
+                      const isReturn = item.dayOffset === returnOffset;
+                      return (
+                        <div key={item.id} className="flex items-start gap-2 py-0.5">
+                          <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5 tabular-nums',
+                            isDepart ? 'bg-amber-100 text-amber-700'
+                            : isReturn ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-blue-100 text-blue-700'
+                          )}>D{item.dayOffset}</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-700 leading-tight">{item.title}</p>
+                            {item.description && (
+                              <p className="text-[10px] text-slate-400 truncate">{item.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Departure + Return dates */}
             <div>
               <label className="label">Departure Date</label>
               <input type="date" {...register('departureDate')} className="input" />
             </div>
             <div>
-              <label className="label">Return Date</label>
+              <label className="label">Return Date {selectedPkg ? '(Auto)' : ''}</label>
               <input
                 type="date"
                 {...register('returnDate', {
@@ -229,6 +322,9 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
                 className="input"
               />
               {errors.returnDate && <p className="text-red-500 text-xs mt-1">{errors.returnDate.message}</p>}
+              {selectedPkg && watchedDepartureDate && (
+                <p className="text-[10px] text-slate-400 mt-0.5">Auto-calculated from departure + {selectedPkg.nights + 1} days</p>
+              )}
             </div>
           </div>
         </div>
@@ -293,13 +389,6 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
               <input {...register('departurePackage')} className="input" placeholder="e.g. Ex-Delhi 6N7D" />
             </div>
             <div>
-              <label className="label">Tour Type</label>
-              <select {...register('tourType')} className="input">
-                <option value="GIT">GIT — Group Inclusive Tour</option>
-                <option value="FIT">FIT — Fixed / Independent Tour</option>
-              </select>
-            </div>
-            <div>
               <label className="label">Special Request</label>
               <input {...register('specialRequest')} className="input" placeholder="Any special requirement…" />
             </div>
@@ -321,6 +410,9 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
                 {...register('finalPrice', { required: 'Price is required', min: { value: 0, message: 'Must be ≥ 0' }, valueAsNumber: true })}
                 className="input"
               />
+              {selectedPkg && (
+                <p className="text-[10px] text-slate-400 mt-0.5">Auto-filled from package — edit if negotiated differently</p>
+              )}
               {errors.finalPrice && <p className="text-red-500 text-xs mt-1">{errors.finalPrice.message}</p>}
             </div>
             <div>
@@ -338,7 +430,6 @@ export default function BookingConfirmModal({ open, onClose, lead, existingBooki
             </div>
           </div>
 
-          {/* Balance summary strip */}
           <div className="mt-3 flex items-center gap-4 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
             <div className="flex-1 text-center">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Final Price</p>
