@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
-  Package as PackageIcon, Plus, Edit, Trash2, Search, Star, MapPin, Tag, Clock,
+  Package as PackageIcon, Plus, Minus, Edit, Trash2, Search, Star, MapPin, Tag, Clock,
   IndianRupee, Calendar, Users, ChevronRight,
   BookOpen, Info, ShieldCheck, UserCircle, History, Lock,
 } from 'lucide-react';
@@ -90,6 +90,236 @@ function SeasonSelector({ value, onChange }: { value: string[]; onChange: (v: st
         >{m}</button>
       ))}
     </div>
+  );
+}
+
+// ─── Package Create Modal (minimal) ──────────────────────────────────────────
+
+function PackageCreateModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const createPkg = useCreatePackage();
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const { data: destData } = useDestinations({ status: 'ACTIVE' });
+  const destinations = destData?.data ?? [];
+
+  const [nights, setNights] = useState(3);
+  const [pkgType, setPkgType] = useState<PackageType>(isAdmin ? 'GIT' : 'FIT');
+  const [stayLocations, setStayLocations] = useState<string[]>(['', '', '']);
+
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<{ name: string; code: string }>({
+    defaultValues: { name: '', code: '' },
+  });
+
+  const changeNights = (n: number) => {
+    const clamped = Math.max(1, Math.min(30, n));
+    setNights(clamped);
+    setStayLocations((prev) => Array.from({ length: clamped }, (_, i) => prev[i] ?? ''));
+  };
+
+  const setLocation = (idx: number, val: string) =>
+    setStayLocations((prev) => prev.map((v, i) => (i === idx ? val : v)));
+
+  const handleClose = () => {
+    onClose();
+    reset();
+    setNights(3);
+    setStayLocations(['', '', '']);
+    setPkgType(isAdmin ? 'GIT' : 'FIT');
+  };
+
+  const onSubmit = (data: { name: string; code: string }) => {
+    const locationNames = stayLocations.map((id) => {
+      const d = destinations.find((dest) => dest.id === id);
+      return d ? `${d.name}${d.country ? `, ${d.country}` : ''}` : '';
+    });
+    createPkg.mutate(
+      { name: data.name, code: data.code, packageType: pkgType, nights, stayLocations: locationNames } as any,
+      { onSuccess: handleClose },
+    );
+  };
+
+  const totalDays = nights + 2;
+  const returnOffset = nights + 1;
+
+  const dayRows = useMemo(() => [
+    { offset: 0, label: 'Departure Journey', type: 'departure' as const },
+    ...Array.from({ length: nights }, (_, i) => ({
+      offset: i + 1, label: `Stay Night ${i + 1}`, type: 'stay' as const,
+    })),
+    { offset: returnOffset, label: 'Return Journey', type: 'return' as const },
+  ], [nights, returnOffset]);
+
+  const QUICK_NIGHTS = [1, 2, 3, 4, 5, 6, 7, 10, 14];
+
+  return (
+    <Modal
+      open={open} onClose={handleClose}
+      title="New Package"
+      size="xl"
+      footer={
+        <>
+          <button type="button" onClick={handleClose} className="btn-secondary">Cancel</button>
+          <button form="pkg-create-form" type="submit" disabled={createPkg.isPending} className="btn-primary">
+            {createPkg.isPending ? 'Creating…' : 'Create Package'}
+          </button>
+        </>
+      }
+    >
+      <form id="pkg-create-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+
+        {/* Name, Code, Type */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="label">Package Name *</label>
+            <input
+              {...register('name', { required: 'Package name is required' })}
+              className="input"
+              placeholder="e.g. Goa Beach Holiday"
+            />
+            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
+          </div>
+          <div>
+            <label className="label">Package Code *</label>
+            <input
+              {...register('code', { required: 'Package code is required' })}
+              className="input uppercase"
+              placeholder="e.g. GOA-3N4D"
+            />
+            {errors.code && <p className="text-red-500 text-xs mt-1">{errors.code.message}</p>}
+          </div>
+          <div>
+            <label className="label">Package Type *</label>
+            <div className="flex gap-2">
+              {(['GIT', 'FIT'] as PackageType[]).map((type) => {
+                const disabled = type === 'GIT' && !isAdmin;
+                return (
+                  <button
+                    key={type} type="button"
+                    disabled={disabled}
+                    onClick={() => !disabled && setPkgType(type)}
+                    className={cn(
+                      'flex-1 flex items-center justify-center gap-2 p-2.5 border-2 rounded-xl text-sm font-medium transition-colors',
+                      pkgType === type
+                        ? type === 'GIT' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-violet-500 bg-violet-50 text-violet-700'
+                        : 'border-slate-200 text-slate-500 hover:border-slate-300',
+                      disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
+                    )}
+                  >
+                    {type === 'GIT' ? <ShieldCheck className="w-4 h-4" /> : <UserCircle className="w-4 h-4" />}
+                    <span>{type}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {pkgType === 'GIT' ? 'Admin-managed group tour' : 'Sales-created individual tour'}
+            </p>
+          </div>
+        </div>
+
+        {/* Stay Nights stepper */}
+        <div>
+          <label className="label">Stay Nights</label>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => changeNights(nights - 1)}
+              disabled={nights <= 1}
+              className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center text-slate-600 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+            <div className="flex-1 text-center py-2 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-3xl font-bold text-slate-800 tabular-nums">{nights}</span>
+              <span className="text-sm text-slate-500 ml-2">Nights</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => changeNights(nights + 1)}
+              disabled={nights >= 30}
+              className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center text-slate-600 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          {/* Quick-select pills */}
+          <div className="flex flex-wrap gap-1.5 mt-2.5">
+            {QUICK_NIGHTS.map((n) => (
+              <button
+                key={n} type="button"
+                onClick={() => changeNights(n)}
+                className={cn(
+                  'text-xs px-3 py-1.5 rounded-lg font-medium transition-colors',
+                  nights === n ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                )}
+              >{n}N</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Total Days (auto) */}
+        <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-200">
+          <Calendar className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <div>
+            <span className="text-sm font-semibold text-slate-800">{totalDays} Total Days</span>
+            <span className="text-xs text-slate-400 ml-2">Departure day + {nights} stay nights + return day</span>
+          </div>
+        </div>
+
+        {/* Auto itinerary with location selectors */}
+        <div>
+          <label className="label mb-2">Day Plan</label>
+          <div className="space-y-2">
+            {dayRows.map((row) => {
+              const isDepart = row.type === 'departure';
+              const isReturn = row.type === 'return';
+              const isStay = row.type === 'stay';
+              return (
+                <div
+                  key={row.offset}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-xl border',
+                    isDepart ? 'bg-amber-50 border-amber-200' :
+                    isReturn ? 'bg-emerald-50 border-emerald-200' :
+                    'bg-white border-slate-200',
+                  )}
+                >
+                  <span className={cn(
+                    'text-[10px] font-bold px-2 py-0.5 rounded-full tabular-nums flex-shrink-0 w-8 text-center',
+                    isDepart ? 'bg-amber-100 text-amber-700' :
+                    isReturn ? 'bg-emerald-100 text-emerald-700' :
+                    'bg-blue-100 text-blue-700',
+                  )}>D{row.offset}</span>
+                  <span className={cn(
+                    'text-sm font-medium flex-shrink-0',
+                    isDepart ? 'text-amber-800' : isReturn ? 'text-emerald-800' : 'text-slate-700',
+                  )}>{row.label}</span>
+                  {isStay && (
+                    <>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+                      <select
+                        value={stayLocations[row.offset - 1]}
+                        onChange={(e) => setLocation(row.offset - 1, e.target.value)}
+                        className="input flex-1 text-sm py-1"
+                      >
+                        <option value="">— Select location —</option>
+                        {destinations.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}, {d.country}</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                  {(isDepart || isReturn) && (
+                    <span className="text-[10px] text-slate-400 ml-auto">Travel day</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+      </form>
+    </Modal>
   );
 }
 
@@ -923,7 +1153,7 @@ export default function PackagesPage() {
   const [filterDest, setFilterDest] = useState('');
   const [filterCat, setFilterCat] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Package | null>(null);
   const [viewing, setViewing] = useState<Package | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Package | null>(null);
@@ -945,12 +1175,12 @@ export default function PackagesPage() {
   const destinations = destData?.data ?? [];
   const categories = catData?.data ?? [];
 
-  const openCreate = () => { setEditing(null); setModalOpen(true); };
+  const openCreate = () => setCreateOpen(true);
   const openEdit = (pkg: Package) => {
     if (!pkgCanMutate(pkg)) return;
-    setEditing(pkg); setViewing(null); setModalOpen(true);
+    setEditing(pkg); setViewing(null);
   };
-  const closeModal = () => { setModalOpen(false); setEditing(null); };
+  const closeEdit = () => setEditing(null);
 
   const handleDelete = () => {
     if (!deleteTarget || !pkgCanMutate(deleteTarget)) return;
@@ -1059,10 +1289,11 @@ export default function PackagesPage() {
         />
       )}
 
-      {/* Create / Edit Modal */}
-      {modalOpen && (
-        <PackageFormModal open={modalOpen} onClose={closeModal} existing={editing} />
-      )}
+      {/* Create Modal — minimal stepper UI */}
+      {createOpen && <PackageCreateModal open={createOpen} onClose={() => setCreateOpen(false)} />}
+
+      {/* Edit Modal — full tabbed form */}
+      {editing && <PackageFormModal open={!!editing} onClose={closeEdit} existing={editing} />}
 
       {/* Delete Confirm */}
       <Modal

@@ -166,15 +166,13 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
       pickupLocation, dropLocation, cancellationPolicy, termsAndConditions, packageNotes,
       images, gallery, isPopular, status,
       packageType = 'GIT',
+      stayLocations,
     } = req.body;
 
     if (!name?.trim()) { res.status(400).json({ success: false, error: 'Package name is required' }); return; }
     if (!code?.trim()) { res.status(400).json({ success: false, error: 'Package code is required' }); return; }
     if (nights === undefined || nights === '' || isNaN(Number(nights))) {
       res.status(400).json({ success: false, error: 'Stay nights is required' }); return;
-    }
-    if (pricePerPerson === undefined || isNaN(Number(pricePerPerson))) {
-      res.status(400).json({ success: false, error: 'Price per person is required' }); return;
     }
     if (!['GIT', 'FIT'].includes(packageType)) {
       res.status(400).json({ success: false, error: 'Invalid package type' }); return;
@@ -205,7 +203,7 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
         exclusions: JSON.stringify(parseList(exclusions)),
         highlights: JSON.stringify(parseList(highlights)),
         thingsToCarry: JSON.stringify(parseList(thingsToCarry)),
-        pricePerPerson: Number(pricePerPerson),
+        pricePerPerson: pricePerPerson != null ? Number(pricePerPerson) : 0,
         priceSingle: priceSingle != null ? Number(priceSingle) : null,
         priceDouble: priceDouble != null ? Number(priceDouble) : null,
         priceTriple: priceTriple != null ? Number(priceTriple) : null,
@@ -234,20 +232,21 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
     });
 
     // Auto-generate travel day itinerary
+    const locations: string[] = Array.isArray(stayLocations) ? stayLocations : [];
     const itineraryData = [
       {
         packageId: pkg.id, dayOffset: 0, title: 'Departure Journey',
-        description: 'Departure from origin city. Journey to destination begins.',
+        description: '',
         taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0,
       },
       ...Array.from({ length: stayNights }, (_, i) => ({
-        packageId: pkg.id, dayOffset: i + 1, title: `Day ${i + 1}`,
-        description: '',
+        packageId: pkg.id, dayOffset: i + 1, title: `Stay Night ${i + 1}`,
+        description: locations[i] ? locations[i] : '',
         taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: i + 1,
       })),
       {
         packageId: pkg.id, dayOffset: stayNights + 1, title: 'Return Journey',
-        description: 'Return journey to origin city.',
+        description: '',
         taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: stayNights + 1,
       },
     ];
@@ -351,17 +350,17 @@ export const updatePackage = async (req: AuthenticatedRequest, res: Response): P
       const itineraryData = [
         {
           packageId: id, dayOffset: 0, title: 'Departure Journey',
-          description: 'Departure from origin city. Journey to destination begins.',
+          description: '',
           taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0,
         },
         ...Array.from({ length: newNights }, (_, i) => ({
-          packageId: id, dayOffset: i + 1, title: `Day ${i + 1}`,
+          packageId: id, dayOffset: i + 1, title: `Stay Night ${i + 1}`,
           description: '',
           taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: i + 1,
         })),
         {
           packageId: id, dayOffset: newNights + 1, title: 'Return Journey',
-          description: 'Return journey to origin city.',
+          description: '',
           taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: newNights + 1,
         },
       ];
