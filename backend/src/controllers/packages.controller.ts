@@ -167,6 +167,7 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
       images, gallery, isPopular, status,
       packageType = 'GIT',
       stayLocations,
+      itineraryRows,
     } = req.body;
 
     if (!name?.trim()) { res.status(400).json({ success: false, error: 'Package name is required' }); return; }
@@ -231,25 +232,39 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
       },
     });
 
-    // Auto-generate travel day itinerary
-    const locations: string[] = Array.isArray(stayLocations) ? stayLocations : [];
-    const itineraryData = [
-      {
-        packageId: pkg.id, dayOffset: 0, title: 'Departure Journey',
-        description: '',
-        taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0,
-      },
-      ...Array.from({ length: stayNights }, (_, i) => ({
-        packageId: pkg.id, dayOffset: i + 1, title: `Stay Night ${i + 1}`,
-        description: locations[i] ? locations[i] : '',
-        taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: i + 1,
-      })),
-      {
-        packageId: pkg.id, dayOffset: stayNights + 1, title: 'Return Journey',
-        description: '',
-        taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: stayNights + 1,
-      },
-    ];
+    // Build itinerary — use caller-supplied rows when provided, else auto-generate
+    let itineraryData: any[];
+    if (Array.isArray(itineraryRows) && itineraryRows.length > 0) {
+      itineraryData = itineraryRows.map((row: any) => ({
+        packageId: pkg.id,
+        dayOffset: Number(row.dayOffset),
+        title: String(row.title || `Day ${row.dayOffset}`),
+        description: row.activityDetails ? String(row.activityDetails) : '',
+        notes: row.activityType ? String(row.activityType) : 'JOURNEY',
+        taskType: 'TRIP_DAY' as const,
+        department: 'SALES' as const,
+        sortOrder: Number(row.dayOffset),
+      }));
+    } else {
+      const locations: string[] = Array.isArray(stayLocations) ? stayLocations : [];
+      itineraryData = [
+        {
+          packageId: pkg.id, dayOffset: 0, title: 'Day 0 / Night 0',
+          description: '', notes: 'JOURNEY',
+          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0,
+        },
+        ...Array.from({ length: stayNights }, (_, i) => ({
+          packageId: pkg.id, dayOffset: i + 1, title: `Day ${i + 1} / Night ${i + 1}`,
+          description: locations[i] || '', notes: 'STAY',
+          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: i + 1,
+        })),
+        {
+          packageId: pkg.id, dayOffset: stayNights + 1, title: `Day ${stayNights + 1}`,
+          description: '', notes: 'JOURNEY',
+          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: stayNights + 1,
+        },
+      ];
+    }
     await prisma.packageItinerary.createMany({ data: itineraryData });
 
     await recordAudit({
@@ -349,18 +364,18 @@ export const updatePackage = async (req: AuthenticatedRequest, res: Response): P
       await prisma.packageItinerary.deleteMany({ where: { packageId: id, taskType: 'TRIP_DAY' } });
       const itineraryData = [
         {
-          packageId: id, dayOffset: 0, title: 'Departure Journey',
-          description: '',
+          packageId: id, dayOffset: 0, title: 'Day 0 / Night 0',
+          description: '', notes: 'JOURNEY',
           taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0,
         },
         ...Array.from({ length: newNights }, (_, i) => ({
-          packageId: id, dayOffset: i + 1, title: `Stay Night ${i + 1}`,
-          description: '',
+          packageId: id, dayOffset: i + 1, title: `Day ${i + 1} / Night ${i + 1}`,
+          description: '', notes: 'STAY',
           taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: i + 1,
         })),
         {
-          packageId: id, dayOffset: newNights + 1, title: 'Return Journey',
-          description: '',
+          packageId: id, dayOffset: newNights + 1, title: `Day ${newNights + 1}`,
+          description: '', notes: 'JOURNEY',
           taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: newNights + 1,
         },
       ];

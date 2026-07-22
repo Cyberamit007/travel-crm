@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   Package, Search, Star, MapPin, Tag, Clock, IndianRupee, ChevronDown,
-  Plus, Minus, Info, Calendar, UserCircle, ChevronRight,
+  Plus, Info, Calendar, UserCircle,
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { usePackages, useCreatePackage } from '../../hooks/usePackages';
@@ -17,65 +17,94 @@ const parseList = (raw: string | string[]): string[] => {
   try { return JSON.parse(raw) ?? []; } catch { return []; }
 };
 
-// ─── FIT Create Form ──────────────────────────────────────────────────────────
+// ─── Itinerary row helpers (FIT) ─────────────────────────────────────────────
 
-const QUICK_NIGHTS = [1, 2, 3, 4, 5, 6, 7, 10, 14];
+type ActivityType = 'JOURNEY' | 'STAY' | 'SIGHTSEEING';
+
+interface ItineraryRow {
+  offset: number;
+  label: string;
+  activityType: ActivityType;
+  activityDetails: string;
+}
+
+function buildItineraryRows(nights: number): ItineraryRow[] {
+  return [
+    { offset: 0, label: 'Day 0 / Night 0', activityType: 'JOURNEY', activityDetails: '' },
+    ...Array.from({ length: nights }, (_, i) => ({
+      offset: i + 1,
+      label: `Day ${i + 1} / Night ${i + 1}`,
+      activityType: 'STAY' as ActivityType,
+      activityDetails: '',
+    })),
+    { offset: nights + 1, label: `Day ${nights + 1}`, activityType: 'JOURNEY' as ActivityType, activityDetails: '' },
+  ];
+}
+
+const ACTIVITY_OPTIONS: { value: ActivityType; label: string }[] = [
+  { value: 'JOURNEY', label: 'Journey' },
+  { value: 'STAY', label: 'Stay' },
+  { value: 'SIGHTSEEING', label: 'Sightseeing' },
+];
+
+// ─── FIT Create Form ──────────────────────────────────────────────────────────
 
 function NewFITModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const createPkg = useCreatePackage();
-  const { data: destData } = useDestinations({ status: 'ACTIVE' });
-  const destinations = destData?.data ?? [];
 
   const [nights, setNights] = useState(3);
-  const [stayLocations, setStayLocations] = useState<string[]>(['', '', '']);
+  const [rows, setRows] = useState<ItineraryRow[]>(() => buildItineraryRows(3));
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<{ name: string; code: string }>({
     defaultValues: { name: '', code: '' },
   });
 
   const changeNights = (n: number) => {
-    const clamped = Math.max(1, Math.min(30, n));
-    setNights(clamped);
-    setStayLocations((prev) => Array.from({ length: clamped }, (_, i) => prev[i] ?? ''));
+    setNights(n);
+    setRows((prev) => {
+      const next = buildItineraryRows(n);
+      return next.map((row) => {
+        const existing = prev.find((r) => r.offset === row.offset);
+        return existing ? { ...row, activityType: existing.activityType, activityDetails: existing.activityDetails } : row;
+      });
+    });
   };
 
-  const setLocation = (idx: number, val: string) =>
-    setStayLocations((prev) => prev.map((v, i) => (i === idx ? val : v)));
+  const changeDays = (d: number) => changeNights(Math.max(1, d - 2));
+
+  const updateRow = (offset: number, field: 'activityType' | 'activityDetails', value: string) => {
+    setRows((prev) => prev.map((r) => {
+      if (r.offset !== offset) return r;
+      const updated = { ...r, [field]: value as ActivityType };
+      if (field === 'activityType' && value === 'JOURNEY') updated.activityDetails = '';
+      return updated;
+    }));
+  };
 
   const handleClose = () => {
-    onClose();
-    reset();
-    setNights(3);
-    setStayLocations(['', '', '']);
+    onClose(); reset();
+    setNights(3); setRows(buildItineraryRows(3));
   };
 
   const onSubmit = (data: { name: string; code: string }) => {
-    const locationNames = stayLocations.map((id) => {
-      const d = destinations.find((dest) => dest.id === id);
-      return d ? `${d.name}${d.country ? `, ${d.country}` : ''}` : '';
-    });
-    createPkg.mutate(
-      { name: data.name, code: data.code, nights, packageType: 'FIT', stayLocations: locationNames } as any,
-      { onSuccess: handleClose },
-    );
+    createPkg.mutate({
+      name: data.name, code: data.code, nights, packageType: 'FIT',
+      itineraryRows: rows.map((r) => ({
+        dayOffset: r.offset, title: r.label,
+        activityType: r.activityType, activityDetails: r.activityDetails,
+      })),
+    } as any, { onSuccess: handleClose });
   };
 
   const totalDays = nights + 2;
-  const returnOffset = nights + 1;
-
-  const dayRows = useMemo(() => [
-    { offset: 0, label: 'Departure Journey', type: 'departure' as const },
-    ...Array.from({ length: nights }, (_, i) => ({
-      offset: i + 1, label: `Stay Night ${i + 1}`, type: 'stay' as const,
-    })),
-    { offset: returnOffset, label: 'Return Journey', type: 'return' as const },
-  ], [nights, returnOffset]);
+  const nightsOptions = Array.from({ length: 30 }, (_, i) => i + 1);
+  const daysOptions = Array.from({ length: 30 }, (_, i) => i + 3);
 
   return (
     <Modal
       open={open} onClose={handleClose}
       title="New FIT Package"
-      size="xl"
+      size="2xl"
       footer={
         <>
           <button type="button" onClick={handleClose} className="btn-secondary">Cancel</button>
@@ -95,117 +124,88 @@ function NewFITModal({ open, onClose }: { open: boolean; onClose: () => void }) 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className="label">Package Name *</label>
-            <input {...register('name', { required: 'Name is required' })} className="input" placeholder="e.g. Goa Private Trip — Sharma Family" />
+            <input {...register('name', { required: 'Name is required' })} className="input" placeholder="e.g. Manali Private Trip — Sharma Family" />
             {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
           </div>
           <div>
             <label className="label">Package Code *</label>
-            <input {...register('code', { required: 'Code is required' })} className="input uppercase" placeholder="e.g. FIT-GOA-3N" />
+            <input {...register('code', { required: 'Code is required' })} className="input uppercase" placeholder="e.g. FIT-MNL-5N" />
             {errors.code && <p className="text-red-500 text-xs mt-1">{errors.code.message}</p>}
           </div>
           <div className="flex items-center gap-3 px-4 py-2 bg-violet-50 border border-violet-200 rounded-xl self-end">
             <UserCircle className="w-4 h-4 text-violet-500 flex-shrink-0" />
             <div>
               <p className="text-xs font-semibold text-violet-700">FIT Package</p>
-              <p className="text-[10px] text-violet-500">Individual tour</p>
+              <p className="text-[10px] text-violet-500">Individual / independent tour</p>
             </div>
           </div>
         </div>
 
-        {/* Stay Nights stepper */}
-        <div>
-          <label className="label">Stay Nights</label>
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => changeNights(nights - 1)}
-              disabled={nights <= 1}
-              className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center text-slate-600 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <Minus className="w-4 h-4" />
-            </button>
-            <div className="flex-1 text-center py-2 bg-slate-50 rounded-xl border border-slate-200">
-              <span className="text-3xl font-bold text-slate-800 tabular-nums">{nights}</span>
-              <span className="text-sm text-slate-500 ml-2">Nights</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => changeNights(nights + 1)}
-              disabled={nights >= 30}
-              className="w-10 h-10 rounded-xl border-2 border-slate-200 flex items-center justify-center text-slate-600 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-1.5 mt-2.5">
-            {QUICK_NIGHTS.map((n) => (
-              <button
-                key={n} type="button"
-                onClick={() => changeNights(n)}
-                className={cn(
-                  'text-xs px-3 py-1.5 rounded-lg font-medium transition-colors',
-                  nights === n ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-                )}
-              >{n}N</button>
-            ))}
-          </div>
-        </div>
-
-        {/* Total Days */}
-        <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-200">
-          <Calendar className="w-4 h-4 text-slate-400 flex-shrink-0" />
+        {/* Duration dropdowns */}
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <span className="text-sm font-semibold text-slate-800">{totalDays} Total Days</span>
-            <span className="text-xs text-slate-400 ml-2">Departure day + {nights} stay nights + return day</span>
+            <label className="label">Total Stay Nights</label>
+            <select value={nights} onChange={(e) => changeNights(Number(e.target.value))} className="input">
+              {nightsOptions.map((n) => (
+                <option key={n} value={n}>{n} {n === 1 ? 'Night' : 'Nights'}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Total Days</label>
+            <select value={totalDays} onChange={(e) => changeDays(Number(e.target.value))} className="input">
+              {daysOptions.map((d) => (
+                <option key={d} value={d}>{d} {d === 1 ? 'Day' : 'Days'}</option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Day Plan with location selectors */}
+        {/* Itinerary table */}
         <div>
           <label className="label mb-2">Day Plan</label>
+          <div className="hidden sm:grid sm:grid-cols-[9rem_8rem_1fr] gap-x-3 mb-1.5 px-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Day / Night</p>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Type</p>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Details</p>
+          </div>
           <div className="space-y-2">
-            {dayRows.map((row) => {
-              const isDepart = row.type === 'departure';
-              const isReturn = row.type === 'return';
-              const isStay = row.type === 'stay';
+            {rows.map((row) => {
+              const isFirst = row.offset === 0;
+              const isLast = row.offset === nights + 1;
+              const isJourney = row.activityType === 'JOURNEY';
               return (
-                <div
-                  key={row.offset}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-xl border',
-                    isDepart ? 'bg-amber-50 border-amber-200' :
-                    isReturn ? 'bg-emerald-50 border-emerald-200' :
-                    'bg-white border-slate-200',
-                  )}
-                >
-                  <span className={cn(
-                    'text-[10px] font-bold px-2 py-0.5 rounded-full tabular-nums flex-shrink-0 w-8 text-center',
-                    isDepart ? 'bg-amber-100 text-amber-700' :
-                    isReturn ? 'bg-emerald-100 text-emerald-700' :
-                    'bg-blue-100 text-blue-700',
-                  )}>D{row.offset}</span>
-                  <span className={cn(
-                    'text-sm font-medium flex-shrink-0',
-                    isDepart ? 'text-amber-800' : isReturn ? 'text-emerald-800' : 'text-slate-700',
-                  )}>{row.label}</span>
-                  {isStay && (
-                    <>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
-                      <select
-                        value={stayLocations[row.offset - 1]}
-                        onChange={(e) => setLocation(row.offset - 1, e.target.value)}
-                        className="input flex-1 text-sm py-1"
-                      >
-                        <option value="">— Select location —</option>
-                        {destinations.map((d) => (
-                          <option key={d.id} value={d.id}>{d.name}, {d.country}</option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-                  {(isDepart || isReturn) && (
-                    <span className="text-[10px] text-slate-400 ml-auto">Travel day</span>
-                  )}
+                <div key={row.offset} className="grid grid-cols-1 sm:grid-cols-[9rem_8rem_1fr] gap-2 sm:gap-x-3 sm:items-center">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      'text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums flex-shrink-0',
+                      isFirst ? 'bg-amber-100 text-amber-700' :
+                      isLast  ? 'bg-emerald-100 text-emerald-700' :
+                                'bg-blue-100 text-blue-700',
+                    )}>D{row.offset}</span>
+                    <span className="text-xs font-medium text-slate-700 whitespace-nowrap">{row.label}</span>
+                  </div>
+                  <select
+                    value={row.activityType}
+                    onChange={(e) => updateRow(row.offset, 'activityType', e.target.value)}
+                    className="input text-sm py-1.5"
+                  >
+                    {ACTIVITY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={row.activityDetails}
+                    onChange={(e) => updateRow(row.offset, 'activityDetails', e.target.value)}
+                    disabled={isJourney}
+                    placeholder={
+                      isJourney ? '—'
+                      : row.activityType === 'STAY' ? 'Hotel / camp name or location…'
+                      : 'Place or activity name…'
+                    }
+                    className={cn('input text-sm py-1.5', isJourney && 'bg-slate-50 text-slate-300 cursor-not-allowed')}
+                  />
                 </div>
               );
             })}
