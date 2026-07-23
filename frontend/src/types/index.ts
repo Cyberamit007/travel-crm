@@ -901,9 +901,15 @@ export interface OpsDashboardStats {
   completedTrips: number;
   totalTravelersToday: number;
   pendingHotelBookings: number;
+  bookedHotelBookings: number;
   pendingVehicleBookings: number;
+  bookedVehicleBookings: number;
   pendingRoomAllocation: number;
   pendingTripCaptainAssignment: number;
+  assignedTripCaptains: number;
+  roomsRequired: number;
+  roomsBooked: number;
+  roomsPending: number;
   todaysCheckins: number;
   todaysCheckouts: number;
   todaysTransfers: number;
@@ -911,6 +917,31 @@ export interface OpsDashboardStats {
   totalTravelersOnTour: number;
   pendingTravelerVerification: number;
   checklistProgressAvg: number;
+}
+
+export interface StayPlanEntry {
+  destination: string;
+  guestCount: number;
+  rooms: { SINGLE: number; DOUBLE: number; TRIPLE: number; QUAD: number; total: number };
+  vehicles: { type: string; count: number; seats: number }[];
+  departureIds: string[];
+  packageNames: string[];
+}
+
+export interface StayPlanDateItem {
+  date: string;
+  entries: StayPlanEntry[];
+}
+
+export interface StayPlanPackageItem {
+  packageId: string;
+  packageName: string;
+  dates: { date: string; destination: string; guestCount: number }[];
+}
+
+export interface StayPlan {
+  dateWise: StayPlanDateItem[];
+  packageWise: StayPlanPackageItem[];
 }
 
 // ─── Finance Panel ───────────────────────────────────────────────────────────

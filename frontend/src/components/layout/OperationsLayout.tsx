@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Mountain, LayoutDashboard, CalendarRange, Truck, Bell,
-  LogOut, ChevronDown, Menu, X, Settings, UserCircle,
+  LogOut, ChevronDown, Menu, X, Settings, UserCircle, Map,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useNotifications, useMarkAllAsRead, useMarkAsRead } from '../../hooks/useNotifications';
@@ -13,10 +13,11 @@ import { formatRelativeTime, cn } from '../../utils/helpers';
 import { SEVERITY_DOT, CATEGORIES } from '../../utils/notificationMeta';
 
 const navLinks = [
-  { to: '/operations/dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
-  { to: '/operations/departures', label: 'Departures', icon: CalendarRange },
-  { to: '/operations/vendors',    label: 'Vendors',    icon: Truck },
-  { to: '/operations/settings',   label: 'Settings',   icon: Settings },
+  { to: '/operations/dashboard',  label: 'Dashboard',     icon: LayoutDashboard },
+  { to: '/operations/departures', label: 'Departures',    icon: CalendarRange },
+  { to: '/operations/stay-plan',  label: 'Stay Planning', icon: Map },
+  { to: '/operations/vendors',    label: 'Vendors',       icon: Truck },
+  { to: '/operations/settings',   label: 'Settings',      icon: Settings },
 ];
 
 export default function OperationsLayout() {

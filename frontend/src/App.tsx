@@ -35,6 +35,7 @@ import TasksPage from './pages/employee/TasksPage';
 import OperationsDashboardPage from './pages/operations/DashboardPage';
 import DeparturesPage from './pages/operations/DeparturesPage';
 import DepartureDetailPage from './pages/operations/DepartureDetailPage';
+import StayPlanningPage from './pages/operations/StayPlanningPage';
 import VendorsPage from './pages/operations/VendorsPage';
 import VendorDetailPage from './pages/operations/VendorDetailPage';
 import FinanceDashboardPage from './pages/finance/DashboardPage';
@@ -103,6 +104,7 @@ export default function App() {
         <Route path="operations/dashboard" element={<OperationsDashboardPage />} />
         <Route path="operations/departures" element={<DeparturesPage />} />
         <Route path="operations/departures/:id" element={<DepartureDetailPage />} />
+        <Route path="operations/stay-plan" element={<StayPlanningPage />} />
         <Route path="operations/vendors" element={<VendorsPage />} />
         <Route path="operations/vendors/:id" element={<VendorDetailPage />} />
         <Route path="finance" element={<Navigate to="/admin/finance/dashboard" replace />} />
@@ -129,6 +131,7 @@ export default function App() {
         <Route path="dashboard" element={<OperationsDashboardPage />} />
         <Route path="departures" element={<DeparturesPage />} />
         <Route path="departures/:id" element={<DepartureDetailPage />} />
+        <Route path="stay-plan" element={<StayPlanningPage />} />
         <Route path="vendors" element={<VendorsPage />} />
         <Route path="vendors/:id" element={<VendorDetailPage />} />
         <Route path="settings" element={<EmployeeSettingsPage />} />

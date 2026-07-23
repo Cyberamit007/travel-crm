@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Truck, Plus, Pencil, Trash2, MapPin, Phone, User } from 'lucide-react';
+import { Truck, Plus, Pencil, Trash2, MapPin, Phone, User, Info } from 'lucide-react';
 import { useCreateVehicle, useUpdateVehicle, useDeleteVehicle } from '../../hooks/useOperations';
 import { Vehicle } from '../../types/index';
 import Modal from '../ui/Modal';
@@ -11,6 +11,58 @@ const STATUS_BADGE: Record<string, string> = {
   CONFIRMED: 'bg-emerald-50 text-emerald-700',
   CANCELLED: 'bg-red-50 text-red-600',
 };
+
+// ─── Vehicle requirement auto-calculator ─────────────────────────────────────
+
+const VEHICLE_SIZES = [
+  { label: '54-Seater Bus', cap: 54 },
+  { label: '40-Seater Bus', cap: 40 },
+  { label: '26-Seater Bus', cap: 26 },
+  { label: '20-Seater Tempo Traveller', cap: 20 },
+  { label: '12-Seater Tempo Traveller', cap: 12 },
+];
+
+function calcVehicles(pax: number) {
+  const result: { label: string; count: number; seats: number }[] = [];
+  let rem = pax;
+  for (const v of VEHICLE_SIZES) {
+    if (rem <= 0) break;
+    const n = Math.floor(rem / v.cap);
+    if (n > 0) { result.push({ label: v.label, count: n, seats: v.cap * n }); rem -= v.cap * n; }
+  }
+  if (rem > 0) result.push({ label: '12-Seater Tempo Traveller', count: 1, seats: 12 });
+  return result;
+}
+
+function VehicleRequirements({ totalTravelers }: { totalTravelers: number }) {
+  if (totalTravelers <= 0) return null;
+  const recommendations = calcVehicles(totalTravelers);
+  return (
+    <div className="card p-4 bg-primary-50 border border-primary-100">
+      <div className="flex items-center gap-2 mb-3">
+        <Info className="w-4 h-4 text-primary-600 flex-shrink-0" />
+        <p className="text-sm font-semibold text-primary-800">
+          Auto-calculated requirements for {totalTravelers} passengers
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {recommendations.map((r, i) => (
+          <div key={i} className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-primary-200 shadow-sm">
+            <Truck className="w-3.5 h-3.5 text-primary-500" />
+            <span className="text-xs font-bold text-slate-700">{r.count} ×</span>
+            <span className="text-xs text-slate-600">{r.label}</span>
+            <span className="text-[10px] text-slate-400">({r.seats} seats)</span>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-primary-500 mt-2">
+        This is a recommendation. Actual booking may vary based on route requirements.
+      </p>
+    </div>
+  );
+}
+
+// ─── Form ─────────────────────────────────────────────────────────────────────
 
 interface VehicleForm {
   vehicleType?: string; vehicleNumber?: string; driverName?: string; driverMobile?: string;
@@ -89,7 +141,15 @@ function VehicleFormModal({ open, onClose, defaultValues, onSubmit, isLoading }:
   );
 }
 
-export default function VehiclesTab({ departureId, vehicles }: { departureId: string; vehicles: Vehicle[] }) {
+// ─── Main Tab ─────────────────────────────────────────────────────────────────
+
+export default function VehiclesTab({
+  departureId, vehicles, totalTravelers = 0,
+}: {
+  departureId: string;
+  vehicles: Vehicle[];
+  totalTravelers?: number;
+}) {
   const [addOpen, setAddOpen] = useState(false);
   const [editVehicle, setEditVehicle] = useState<Vehicle | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -100,6 +160,8 @@ export default function VehiclesTab({ departureId, vehicles }: { departureId: st
 
   return (
     <div className="space-y-4">
+      <VehicleRequirements totalTravelers={totalTravelers} />
+
       <button onClick={() => setAddOpen(true)} className="btn-primary text-sm">
         <Plus className="w-4 h-4" />Add Vehicle
       </button>

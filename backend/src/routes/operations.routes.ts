@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate, requireOperationsOrAdmin } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import {
-  getDashboardStats, listDepartures, getDepartureDetail, updateDeparture,
+  getDashboardStats, getStayPlan, listDepartures, getDepartureDetail, updateDeparture,
   createTraveler, updateTraveler, deleteTraveler,
   approveTraveler, rejectTraveler, requestTravelerCorrection, regenerateTravelerPortalLink,
   updateChecklist, suggestRoomAllocation, getTravelCalendar, getDepartureActivity,
@@ -23,6 +23,7 @@ router.use(authenticate, requireOperationsOrAdmin);
 // Dashboard
 router.get('/dashboard', getDashboardStats);
 router.get('/calendar', getTravelCalendar);
+router.get('/stay-plan', getStayPlan);
 
 // Departures
 router.get('/departures', listDepartures);

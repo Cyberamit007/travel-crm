@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import {
-  ApiResponse, PaginatedResponse, OpsDashboardStats, Departure, DepartureListItem,
+  ApiResponse, PaginatedResponse, OpsDashboardStats, StayPlan, Departure, DepartureListItem,
   Traveler, Hotel, Vehicle, Vendor, VendorDetail, DepartureTask, OperationsDocument, OperationsNote,
   RoomAllocationSuggestion, TravelCalendarItem, VendorDocument, ActivityLog,
 } from '../types/index';
@@ -22,6 +22,14 @@ export function useTravelCalendar() {
     queryKey: ['operations', 'calendar'],
     queryFn: async () => (await api.get('/operations/calendar')).data,
     staleTime: 60 * 1000,
+  });
+}
+
+export function useStayPlan() {
+  return useQuery<ApiResponse<StayPlan>>({
+    queryKey: ['operations', 'stay-plan'],
+    queryFn: async () => (await api.get('/operations/stay-plan')).data,
+    staleTime: 2 * 60 * 1000,
   });
 }
 

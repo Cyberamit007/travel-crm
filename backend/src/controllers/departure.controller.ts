@@ -262,6 +262,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
     const in7 = addDays(today, 7);
     const in30 = addDays(today, 30);
 
+    const activeUpcomingFilter = { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] } } as const;
+
     const [
       todaysDepartures,
       upcomingDepartures,
@@ -269,8 +271,11 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       completedTrips,
       todaysBookings,
       pendingHotels,
+      bookedHotels,
       pendingVehicles,
+      bookedVehicles,
       unassignedCaptains,
+      assignedCaptains,
       todaysCheckins,
       todaysCheckouts,
       todaysVehicles,
@@ -279,26 +284,31 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       candidateTasks,
       pendingTravelerVerification,
       checklistDepartures,
+      activeUpcomingBookings,
+      bookedRoomsAgg,
     ] = await Promise.all([
       prisma.departure.count({ where: { ...orgFilter(req), departureDate: { gte: today, lte: todayEnd } } }),
       prisma.departure.count({ where: { ...orgFilter(req), departureDate: { gt: todayEnd, lte: in30 }, status: 'UPCOMING' } }),
       prisma.departure.count({ where: { ...orgFilter(req), status: 'ACTIVE' } }),
       prisma.departure.count({ where: { ...orgFilter(req), status: 'COMPLETED' } }),
       prisma.booking.findMany({ where: { departure: { ...orgFilter(req), departureDate: { gte: today, lte: todayEnd } } }, select: { numberOfTravelers: true } }),
-      prisma.hotel.count({ where: { status: 'PENDING', departure: { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] } } } }),
-      prisma.vehicle.count({ where: { status: 'PENDING', departure: { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] } } } }),
+      prisma.hotel.count({ where: { status: 'PENDING', departure: activeUpcomingFilter } }),
+      prisma.hotel.count({ where: { status: 'CONFIRMED', departure: activeUpcomingFilter } }),
+      prisma.vehicle.count({ where: { status: 'PENDING', departure: activeUpcomingFilter } }),
+      prisma.vehicle.count({ where: { status: 'CONFIRMED', departure: activeUpcomingFilter } }),
       prisma.departure.count({ where: { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] }, tripCaptainStatus: 'UNASSIGNED' } }),
+      prisma.departure.count({ where: { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] }, tripCaptainStatus: { in: ['ASSIGNED', 'CONFIRMED'] } } }),
       prisma.hotel.count({ where: { checkInDate: { gte: today, lte: todayEnd }, departure: { ...orgFilter(req) } } }),
       prisma.hotel.count({ where: { checkOutDate: { gte: today, lte: todayEnd }, departure: { ...orgFilter(req) } } }),
       prisma.vehicle.count({ where: { pickupTime: { gte: today, lte: todayEnd }, departure: { ...orgFilter(req) } } }),
       prisma.booking.findMany({ where: { departure: { ...orgFilter(req), status: 'ACTIVE' } }, select: { numberOfTravelers: true } }),
-      prisma.hotel.count({ where: { OR: [{ roomAllocation: null }, { roomAllocation: '' }], departure: { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] } } } }),
+      prisma.hotel.count({ where: { OR: [{ roomAllocation: null }, { roomAllocation: '' }], departure: activeUpcomingFilter } }),
       prisma.departureTask.findMany({
         where: { status: { not: 'COMPLETED' }, departure: { ...orgFilter(req), departureDate: { gte: addDays(today, -30), lte: in30 } } },
         select: { dayOffset: true, departure: { select: { departureDate: true } } },
       }),
       prisma.traveler.count({
-        where: { verificationStatus: { in: ['SUBMITTED', 'CORRECTION_REQUESTED'] }, booking: { departure: { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] } } } },
+        where: { verificationStatus: { in: ['SUBMITTED', 'CORRECTION_REQUESTED'] }, booking: { departure: activeUpcomingFilter } },
       }),
       prisma.departure.findMany({
         where: { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] } },
@@ -310,6 +320,8 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
           bookings: { select: { travelers: { select: { verificationStatus: true } } } },
         },
       }),
+      prisma.booking.findMany({ where: { departure: activeUpcomingFilter, status: { not: 'CANCELLED' } }, select: { numberOfTravelers: true, roomSharing: true } }),
+      prisma.hotel.aggregate({ _sum: { numberOfRooms: true }, where: { status: 'CONFIRMED', departure: activeUpcomingFilter } }),
     ]);
 
     const upcomingActivities = candidateTasks.filter((t) => {
@@ -323,15 +335,27 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       ? Math.round(checklistDepartures.reduce((s, d) => s + computeChecklist(d as any).progress, 0) / checklistDepartures.length)
       : 0;
 
+    const CAP: Record<string, number> = { SINGLE: 1, DOUBLE: 2, TRIPLE: 3, QUAD: 4 };
+    const roomsRequired = activeUpcomingBookings.reduce((sum, b) => {
+      const cap = CAP[b.roomSharing] ?? 2;
+      return sum + Math.ceil(b.numberOfTravelers / cap);
+    }, 0);
+    const roomsBooked = bookedRoomsAgg._sum.numberOfRooms ?? 0;
+    const roomsPending = Math.max(0, roomsRequired - roomsBooked);
+
     res.json({
       success: true,
       data: {
         todaysDepartures, upcomingDepartures, activeTrips, completedTrips,
         totalTravelersToday,
         pendingHotelBookings: pendingHotels,
+        bookedHotelBookings: bookedHotels,
         pendingVehicleBookings: pendingVehicles,
+        bookedVehicleBookings: bookedVehicles,
         pendingRoomAllocation,
         pendingTripCaptainAssignment: unassignedCaptains,
+        assignedTripCaptains: assignedCaptains,
+        roomsRequired, roomsBooked, roomsPending,
         todaysCheckins, todaysCheckouts, todaysTransfers: todaysVehicles,
         upcomingActivities, totalTravelersOnTour,
         pendingTravelerVerification, checklistProgressAvg,
@@ -972,6 +996,161 @@ export const regenerateTravelerPortalLink = async (req: AuthenticatedRequest, re
     res.json({ success: true, data: { travelerPortalToken } });
   } catch (e) {
     console.error('[operations] regenerateTravelerPortalLink error:', e);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// ─── Stay Planning ────────────────────────────────────────────────────────────
+// Computes date-wise and package-wise stay requirements from all confirmed
+// bookings. Each STAY night in the package itinerary is mapped to its actual
+// calendar date using: departureDate + Math.floor(dayOffset / 2).
+
+const ROOM_CAP: Record<string, number> = { SINGLE: 1, DOUBLE: 2, TRIPLE: 3, QUAD: 4 };
+
+function calcRoomsForBookings(bookings: { numberOfTravelers: number; roomSharing: string }[]) {
+  const rooms = { SINGLE: 0, DOUBLE: 0, TRIPLE: 0, QUAD: 0 };
+  for (const b of bookings) {
+    const type = (b.roomSharing || 'DOUBLE') as keyof typeof rooms;
+    const cap = ROOM_CAP[type] ?? 2;
+    rooms[type] += Math.ceil(b.numberOfTravelers / cap);
+  }
+  return { ...rooms, total: rooms.SINGLE + rooms.DOUBLE + rooms.TRIPLE + rooms.QUAD };
+}
+
+function calcVehiclesForPax(pax: number) {
+  const SIZES = [54, 40, 26, 20, 12];
+  const LABELS: Record<number, string> = {
+    54: '54-Seater Bus', 40: '40-Seater Bus', 26: '26-Seater Bus',
+    20: '20-Seater Tempo Traveller', 12: '12-Seater Tempo Traveller',
+  };
+  const result: { type: string; count: number; seats: number }[] = [];
+  let rem = pax;
+  for (const sz of SIZES) {
+    if (rem <= 0) break;
+    const n = Math.floor(rem / sz);
+    if (n > 0) { result.push({ type: LABELS[sz], count: n, seats: sz * n }); rem -= sz * n; }
+  }
+  if (rem > 0) result.push({ type: '12-Seater Tempo Traveller', count: 1, seats: 12 });
+  return result;
+}
+
+export const getStayPlan = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const activeUpcomingFilter = { ...orgFilter(req), status: { in: ['UPCOMING', 'ACTIVE'] } } as const;
+    const departures = await prisma.departure.findMany({
+      where: activeUpcomingFilter,
+      include: {
+        bookings: {
+          where: { status: { not: 'CANCELLED' } },
+          select: { numberOfTravelers: true, roomSharing: true },
+        },
+        package: {
+          select: {
+            id: true, name: true, code: true, nights: true,
+            itineraryItems: {
+              where: { taskType: 'TRIP_DAY' },
+              select: { dayOffset: true, title: true, notes: true, description: true },
+              orderBy: { dayOffset: 'asc' },
+            },
+          },
+        },
+      },
+      orderBy: { departureDate: 'asc' },
+    });
+
+    // date → destination → aggregated data
+    type DestEntry = {
+      guestCount: number;
+      rooms: { SINGLE: number; DOUBLE: number; TRIPLE: number; QUAD: number; total: number };
+      vehicles: { type: string; count: number; seats: number }[];
+      departureIds: string[];
+      packageNames: string[];
+    };
+    const dateMap: Record<string, Record<string, DestEntry>> = {};
+
+    // packageId → dates
+    type PkgDate = { date: string; destination: string; guestCount: number };
+    const packageMap: Record<string, { packageId: string; packageName: string; dates: PkgDate[] }> = {};
+
+    for (const dep of departures) {
+      const depDate = new Date(dep.departureDate);
+      depDate.setHours(0, 0, 0, 0);
+      const items = dep.package?.itineraryItems ?? [];
+      const totalGuests = dep.bookings.reduce((s, b) => s + b.numberOfTravelers, 0);
+      if (totalGuests === 0) continue;
+
+      const rooms = calcRoomsForBookings(dep.bookings);
+      const veh = calcVehiclesForPax(totalGuests);
+
+      for (const item of items) {
+        if (item.notes !== 'STAY') continue;
+        const dayIndex = Math.floor(item.dayOffset / 2);
+        const date = new Date(depDate);
+        date.setDate(date.getDate() + dayIndex);
+        const dateStr = date.toISOString().split('T')[0];
+        const dest = (item.description || dep.destination || '').trim() || 'Unknown';
+
+        if (!dateMap[dateStr]) dateMap[dateStr] = {};
+        if (!dateMap[dateStr][dest]) {
+          dateMap[dateStr][dest] = {
+            guestCount: 0,
+            rooms: { SINGLE: 0, DOUBLE: 0, TRIPLE: 0, QUAD: 0, total: 0 },
+            vehicles: [],
+            departureIds: [],
+            packageNames: [],
+          };
+        }
+        const entry = dateMap[dateStr][dest];
+        entry.guestCount += totalGuests;
+        entry.rooms.SINGLE += rooms.SINGLE;
+        entry.rooms.DOUBLE += rooms.DOUBLE;
+        entry.rooms.TRIPLE += rooms.TRIPLE;
+        entry.rooms.QUAD += rooms.QUAD;
+        entry.rooms.total += rooms.total;
+        if (!entry.departureIds.includes(dep.id)) {
+          entry.departureIds.push(dep.id);
+          entry.packageNames.push(dep.package?.name ?? dep.destination);
+        }
+        // Recompute vehicles based on cumulative guests for this date/dest
+        entry.vehicles = calcVehiclesForPax(entry.guestCount);
+      }
+
+      // Package-wise
+      if (dep.package) {
+        const pkgId = dep.package.id;
+        if (!packageMap[pkgId]) {
+          packageMap[pkgId] = { packageId: pkgId, packageName: dep.package.name, dates: [] };
+        }
+        for (const item of items) {
+          if (item.notes !== 'STAY') continue;
+          const dayIndex = Math.floor(item.dayOffset / 2);
+          const date = new Date(depDate);
+          date.setDate(date.getDate() + dayIndex);
+          const dateStr = date.toISOString().split('T')[0];
+          const dest = (item.description || dep.destination || '').trim() || 'Unknown';
+          const existing = packageMap[pkgId].dates.find((d) => d.date === dateStr && d.destination === dest);
+          if (existing) existing.guestCount += totalGuests;
+          else packageMap[pkgId].dates.push({ date: dateStr, destination: dest, guestCount: totalGuests });
+        }
+      }
+    }
+
+    const dateWise = Object.entries(dateMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, destMap]) => ({
+        date,
+        entries: Object.entries(destMap)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([destination, data]) => ({ destination, ...data })),
+      }));
+
+    const packageWise = Object.values(packageMap)
+      .sort((a, b) => a.packageName.localeCompare(b.packageName))
+      .map((p) => ({ ...p, dates: p.dates.sort((a, b) => a.date.localeCompare(b.date)) }));
+
+    res.json({ success: true, data: { dateWise, packageWise } });
+  } catch (e: any) {
+    console.error('[operations] getStayPlan error:', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };

@@ -186,7 +186,7 @@ export default function DepartureDetailPage() {
         </div>
       )}
       {tab === 'hotels' && <HotelsTab departureId={departure.id} hotels={departure.hotels} />}
-      {tab === 'vehicles' && <VehiclesTab departureId={departure.id} vehicles={departure.vehicles} />}
+      {tab === 'vehicles' && <VehiclesTab departureId={departure.id} vehicles={departure.vehicles} totalTravelers={departure.groupSummary?.totalTravelers ?? 0} />}
       {tab === 'timeline' && <TimelineTab departureId={departure.id} timeline={departure.timeline} />}
       {tab === 'checklist' && <ChecklistTab departureId={departure.id} checklist={departure.checklist} />}
       {tab === 'documents' && <DocumentsTab departureId={departure.id} documents={departure.documents} />}

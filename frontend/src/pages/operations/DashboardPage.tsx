@@ -3,6 +3,7 @@ import {
   CalendarDays, CalendarClock, Plane, CheckCircle2, Users, Building2,
   Truck, BedDouble, UserCog, LogIn, LogOut, ArrowRightLeft, ListChecks,
   Users2, Truck as TruckIcon, ArrowRight, ShieldCheck, ClipboardCheck, PartyPopper,
+  Map, CheckSquare, XSquare,
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useOpsDashboard } from '../../hooks/useOperations';
@@ -37,9 +38,6 @@ export default function OperationsDashboardPage() {
       ].filter((d) => d.value > 0)
     : [];
 
-  // Grouped into sections with a clear purpose each, instead of one flat wall
-  // of 16 identical cards — and "Pending Actions" only shows what's actually
-  // pending, same "don't show a zero" rule as the room-type breakdown.
   const tripStatusCards = stats
     ? [
         { label: "Today's Departures", value: stats.todaysDepartures, icon: CalendarDays, iconBg: 'bg-primary-100', iconColor: 'text-primary-600', onClick: () => navigate(`${base}/departures`) },
@@ -58,12 +56,28 @@ export default function OperationsDashboardPage() {
       ]
     : [];
 
+  const hotelCards = stats
+    ? [
+        { label: 'Hotels Booked', value: stats.bookedHotelBookings, icon: CheckSquare, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Hotels Pending', value: stats.pendingHotelBookings, icon: Building2, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Vehicles Booked', value: stats.bookedVehicleBookings, icon: CheckSquare, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Vehicles Pending', value: stats.pendingVehicleBookings, icon: Truck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
+      ]
+    : [];
+
+  const captainRoomCards = stats
+    ? [
+        { label: 'Trip Captains Assigned', value: stats.assignedTripCaptains, icon: CheckSquare, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Trip Captains Pending', value: stats.pendingTripCaptainAssignment, icon: UserCog, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Rooms Required', value: stats.roomsRequired, icon: BedDouble, iconBg: 'bg-primary-100', iconColor: 'text-primary-600', onClick: () => navigate(`${base}/stay-plan`) },
+        { label: 'Rooms Booked', value: stats.roomsBooked, icon: CheckSquare, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/stay-plan`) },
+        { label: 'Rooms Pending', value: stats.roomsPending, icon: XSquare, iconBg: 'bg-red-100', iconColor: 'text-red-600', onClick: () => navigate(`${base}/stay-plan`) },
+      ]
+    : [];
+
   const pendingActionCards = (stats
     ? [
-        { label: 'Pending Hotel Bookings', value: stats.pendingHotelBookings, icon: Building2, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
-        { label: 'Pending Vehicle Bookings', value: stats.pendingVehicleBookings, icon: Truck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
         { label: 'Pending Room Allocation', value: stats.pendingRoomAllocation, icon: BedDouble, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
-        { label: 'Pending Trip Captain', value: stats.pendingTripCaptainAssignment, icon: UserCog, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
         { label: 'Pending Traveler Verification', value: stats.pendingTravelerVerification, icon: ShieldCheck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
       ]
     : []
@@ -85,6 +99,10 @@ export default function OperationsDashboardPage() {
           <p className="text-sm text-slate-500 mt-0.5">Live view of every trip currently in motion</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => navigate(`${base}/stay-plan`)} className="btn-secondary text-sm">
+            <Map className="w-4 h-4" />
+            Stay Planning
+          </button>
           <button onClick={() => navigate(`${base}/departures`)} className="btn-secondary text-sm">
             View All Departures
           </button>
@@ -97,7 +115,7 @@ export default function OperationsDashboardPage() {
 
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+          {Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
         </div>
       ) : (
         <>
@@ -120,22 +138,33 @@ export default function OperationsDashboardPage() {
           </div>
 
           <div>
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Pending Actions</h3>
-            {pendingActionCards.length === 0 ? (
-              <div className="card p-5 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <PartyPopper className="w-4.5 h-4.5 text-emerald-600" />
-                </div>
-                <p className="text-sm font-medium text-slate-700">Nothing pending across upcoming and active trips — all caught up.</p>
-              </div>
-            ) : (
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Hotels & Vehicles</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {hotelCards.map((c) => (
+                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} onClick={c.onClick} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Trip Captains & Rooms</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {captainRoomCards.map((c) => (
+                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} onClick={c.onClick} />
+              ))}
+            </div>
+          </div>
+
+          {pendingActionCards.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Other Pending Actions</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {pendingActionCards.map((c) => (
                   <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} onClick={c.onClick} />
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <div>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Overview</h3>
@@ -163,7 +192,8 @@ export default function OperationsDashboardPage() {
             <div className="card p-5">
               <h3 className="font-semibold text-slate-800 mb-4 text-sm">Pending Items Breakdown</h3>
               {pendingBreakdown.length === 0 ? (
-                <div className="h-[220px] flex items-center justify-center text-sm text-slate-400">
+                <div className="h-[220px] flex items-center justify-center text-sm text-slate-400 flex-col gap-2">
+                  <PartyPopper className="w-8 h-8 text-emerald-400" />
                   Nothing pending — all caught up
                 </div>
               ) : (
@@ -185,6 +215,11 @@ export default function OperationsDashboardPage() {
           <div className="card p-5">
             <h3 className="font-semibold text-slate-800 mb-4 text-sm">Quick Actions</h3>
             <div className="flex flex-wrap gap-3">
+              <button onClick={() => navigate(`${base}/stay-plan`)} className="btn-secondary text-sm">
+                <Map className="w-4 h-4" />
+                Stay Planning
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
               <button onClick={() => navigate(`${base}/departures?status=UPCOMING`)} className="btn-secondary text-sm">
                 <CalendarClock className="w-4 h-4" />
                 Upcoming Departures
