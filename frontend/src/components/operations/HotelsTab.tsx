@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Building2, Plus, Pencil, Trash2, MapPin, Phone, FileCheck, Wand2 } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, MapPin, Phone, FileCheck, Wand2, BedDouble, Info } from 'lucide-react';
 import { useCreateHotel, useUpdateHotel, useDeleteHotel, useRoomAllocationSuggestion } from '../../hooks/useOperations';
 import { Hotel } from '../../types/index';
 import Modal from '../ui/Modal';
@@ -155,7 +155,59 @@ function RoomAllocationModal({ open, onClose, departureId, hotels }: {
   );
 }
 
-export default function HotelsTab({ departureId, hotels }: { departureId: string; hotels: Hotel[] }) {
+// ─── Room requirements panel ──────────────────────────────────────────────────
+
+interface RoomReqProps {
+  roomsRequired: number;
+  hotels: Hotel[];
+}
+
+function RoomRequirements({ roomsRequired, hotels }: RoomReqProps) {
+  if (roomsRequired <= 0) return null;
+  const roomsBooked = hotels
+    .filter((h) => h.status === 'CONFIRMED')
+    .reduce((s, h) => s + (h.numberOfRooms ?? 0), 0);
+  const roomsPending = Math.max(0, roomsRequired - roomsBooked);
+  return (
+    <div className="card p-4 bg-primary-50 border border-primary-100">
+      <div className="flex items-center gap-2 mb-3">
+        <Info className="w-4 h-4 text-primary-600 flex-shrink-0" />
+        <p className="text-sm font-semibold text-primary-800">Room requirements from bookings</p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-primary-200 shadow-sm">
+          <BedDouble className="w-3.5 h-3.5 text-primary-500" />
+          <span className="text-xs text-slate-600">Required</span>
+          <span className="text-xs font-bold text-slate-700">{roomsRequired} rooms</span>
+        </div>
+        <div className={cn(
+          'flex items-center gap-2 rounded-xl px-3 py-2 border shadow-sm',
+          roomsBooked >= roomsRequired ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-primary-200',
+        )}>
+          <BedDouble className={cn('w-3.5 h-3.5', roomsBooked >= roomsRequired ? 'text-emerald-500' : 'text-slate-400')} />
+          <span className="text-xs text-slate-600">Confirmed</span>
+          <span className="text-xs font-bold text-slate-700">{roomsBooked} rooms</span>
+        </div>
+        {roomsPending > 0 && (
+          <div className="flex items-center gap-2 bg-amber-50 rounded-xl px-3 py-2 border border-amber-200 shadow-sm">
+            <BedDouble className="w-3.5 h-3.5 text-amber-500" />
+            <span className="text-xs text-slate-600">Still needed</span>
+            <span className="text-xs font-bold text-amber-700">{roomsPending} rooms</span>
+          </div>
+        )}
+      </div>
+      <p className="text-[10px] text-primary-500 mt-2">
+        Rooms required are calculated from booking room-sharing preferences. Confirmed rooms are from hotels with CONFIRMED status.
+      </p>
+    </div>
+  );
+}
+
+export default function HotelsTab({ departureId, hotels, roomsRequired = 0 }: {
+  departureId: string;
+  hotels: Hotel[];
+  roomsRequired?: number;
+}) {
   const [addOpen, setAddOpen] = useState(false);
   const [editHotel, setEditHotel] = useState<Hotel | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -167,6 +219,8 @@ export default function HotelsTab({ departureId, hotels }: { departureId: string
 
   return (
     <div className="space-y-4">
+      <RoomRequirements roomsRequired={roomsRequired} hotels={hotels} />
+
       <div className="flex items-center gap-2 flex-wrap">
         <button onClick={() => setAddOpen(true)} className="btn-primary text-sm">
           <Plus className="w-4 h-4" />Add Hotel

@@ -12,20 +12,29 @@ const STATUS_CONFIG: Record<DepartureTaskStatus, { label: string; icon: typeof C
   COMPLETED: { label: 'Completed', icon: CheckCircle2, color: 'text-emerald-500' },
 };
 
-function dayLabel(dayOffset: number) {
-  if (dayOffset === 0) return 'Departure Day';
-  if (dayOffset < 0) return `${Math.abs(dayOffset)} day(s) before departure`;
-  return `Day ${dayOffset + 1}`;
+function dayLabel(dayOffset: number, departureDate?: string) {
+  let label: string;
+  if (dayOffset === 0) label = 'Departure Day';
+  else if (dayOffset < 0) label = `${Math.abs(dayOffset)} day(s) before departure`;
+  else label = `Day ${dayOffset + 1}`;
+
+  if (departureDate) {
+    const d = new Date(departureDate + 'T00:00:00');
+    d.setDate(d.getDate() + dayOffset);
+    const cal = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    return `${label} · ${cal}`;
+  }
+  return label;
 }
 
-function TaskRow({ task, departureId }: { task: DepartureTask; departureId: string }) {
+function TaskRow({ task, departureId, departureDate }: { task: DepartureTask; departureId: string; departureDate?: string }) {
   const updateStatus = useUpdateTaskStatus(departureId);
   const cfg = STATUS_CONFIG[task.status];
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 border border-slate-200 rounded-xl bg-white">
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-slate-400">{dayLabel(task.dayOffset)}</p>
+        <p className="text-xs text-slate-400">{dayLabel(task.dayOffset, departureDate)}</p>
         <p className="font-medium text-slate-800 text-sm">{task.title}</p>
         {task.description && <p className="text-xs text-slate-500 mt-0.5">{task.description}</p>}
       </div>
@@ -57,7 +66,11 @@ function TaskRow({ task, departureId }: { task: DepartureTask; departureId: stri
 
 interface TaskForm { title: string; description?: string; dayOffset?: number; }
 
-export default function TimelineTab({ departureId, timeline }: { departureId: string; timeline: DepartureTask[] }) {
+export default function TimelineTab({ departureId, timeline, departureDate }: {
+  departureId: string;
+  timeline: DepartureTask[];
+  departureDate?: string;
+}) {
   const [addOpen, setAddOpen] = useState(false);
   const createTask = useCreateTask(departureId);
   const { register, handleSubmit, reset } = useForm<TaskForm>();
@@ -83,7 +96,7 @@ export default function TimelineTab({ departureId, timeline }: { departureId: st
         </div>
       ) : (
         <div className="space-y-2">
-          {timeline.map((t) => <TaskRow key={t.id} task={t} departureId={departureId} />)}
+          {timeline.map((t) => <TaskRow key={t.id} task={t} departureId={departureId} departureDate={departureDate} />)}
         </div>
       )}
 

@@ -185,9 +185,16 @@ export default function DepartureDetailPage() {
           <GroupSummaryGrid summary={departure.groupSummary} />
         </div>
       )}
-      {tab === 'hotels' && <HotelsTab departureId={departure.id} hotels={departure.hotels} />}
+      {tab === 'hotels' && <HotelsTab
+        departureId={departure.id}
+        hotels={departure.hotels}
+        roomsRequired={departure.bookings.reduce((sum, b) => {
+          const cap = ({ SINGLE: 1, DOUBLE: 2, TRIPLE: 3, QUAD: 4 } as Record<string, number>)[b.roomSharing] ?? 2;
+          return sum + Math.ceil(b.numberOfTravelers / cap);
+        }, 0)}
+      />}
       {tab === 'vehicles' && <VehiclesTab departureId={departure.id} vehicles={departure.vehicles} totalTravelers={departure.groupSummary?.totalTravelers ?? 0} />}
-      {tab === 'timeline' && <TimelineTab departureId={departure.id} timeline={departure.timeline} />}
+      {tab === 'timeline' && <TimelineTab departureId={departure.id} timeline={departure.timeline} departureDate={departure.departureDate} />}
       {tab === 'checklist' && <ChecklistTab departureId={departure.id} checklist={departure.checklist} />}
       {tab === 'documents' && <DocumentsTab departureId={departure.id} documents={departure.documents} />}
       {tab === 'notes' && <NotesTab departureId={departure.id} notes={departure.notes} />}
