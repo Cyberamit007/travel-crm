@@ -98,23 +98,22 @@ function SeasonSelector({ value, onChange }: { value: string[]; onChange: (v: st
 type ActivityType = 'JOURNEY' | 'STAY' | 'SIGHTSEEING';
 
 interface ItineraryRow {
-  offset: number;
+  key: string;
   label: string;
+  rowType: 'day' | 'night';
+  dayIndex: number;
   activityType: ActivityType;
   activityDetails: string;
 }
 
 function buildItineraryRows(nights: number): ItineraryRow[] {
-  return [
-    { offset: 0, label: 'Day 0 / Night 0', activityType: 'JOURNEY', activityDetails: '' },
-    ...Array.from({ length: nights }, (_, i) => ({
-      offset: i + 1,
-      label: `Day ${i + 1} / Night ${i + 1}`,
-      activityType: 'STAY' as ActivityType,
-      activityDetails: '',
-    })),
-    { offset: nights + 1, label: `Day ${nights + 1}`, activityType: 'JOURNEY' as ActivityType, activityDetails: '' },
-  ];
+  const rows: ItineraryRow[] = [];
+  for (let i = 0; i <= nights + 1; i++) {
+    const isEdge = i === 0 || i === nights + 1;
+    rows.push({ key: `day-${i}`, label: `Day ${i}`, rowType: 'day', dayIndex: i, activityType: isEdge ? 'JOURNEY' : 'SIGHTSEEING', activityDetails: '' });
+    rows.push({ key: `night-${i}`, label: `Night ${i}`, rowType: 'night', dayIndex: i, activityType: isEdge ? 'JOURNEY' : 'STAY', activityDetails: '' });
+  }
+  return rows;
 }
 
 const ACTIVITY_OPTIONS: { value: ActivityType; label: string }[] = [
@@ -148,9 +147,8 @@ function PackageCreateModal({ open, onClose }: { open: boolean; onClose: () => v
     setNights(n);
     setRows((prev) => {
       const next = buildItineraryRows(n);
-      // Preserve existing activity type/details for rows that already exist at the same offset
       return next.map((row) => {
-        const existing = prev.find((r) => r.offset === row.offset);
+        const existing = prev.find((r) => r.key === row.key);
         return existing ? { ...row, activityType: existing.activityType, activityDetails: existing.activityDetails } : row;
       });
     });
@@ -158,9 +156,9 @@ function PackageCreateModal({ open, onClose }: { open: boolean; onClose: () => v
 
   const changeDays = (d: number) => changeNights(Math.max(1, d - 2));
 
-  const updateRow = (offset: number, field: 'activityType' | 'activityDetails', value: string) => {
+  const updateRow = (key: string, field: 'activityType' | 'activityDetails', value: string) => {
     setRows((prev) => prev.map((r) => {
-      if (r.offset !== offset) return r;
+      if (r.key !== key) return r;
       const updated = { ...r, [field]: value as ActivityType };
       if (field === 'activityType' && value === 'JOURNEY') updated.activityDetails = '';
       return updated;
@@ -177,8 +175,10 @@ function PackageCreateModal({ open, onClose }: { open: boolean; onClose: () => v
     createPkg.mutate({
       name: data.name, code: data.code, packageType: pkgType, nights,
       itineraryRows: rows.map((r) => ({
-        dayOffset: r.offset, title: r.label,
-        activityType: r.activityType, activityDetails: r.activityDetails,
+        dayOffset: r.dayIndex * 2 + (r.rowType === 'night' ? 1 : 0),
+        title: r.label,
+        activityType: r.activityType,
+        activityDetails: r.activityDetails,
       })),
     } as any, { onSuccess: handleClose });
   };
@@ -272,38 +272,38 @@ function PackageCreateModal({ open, onClose }: { open: boolean; onClose: () => v
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Type</p>
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Details</p>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {rows.map((row) => {
-              const isFirst = row.offset === 0;
-              const isLast = row.offset === nights + 1;
+              const isDep = row.dayIndex === 0;
+              const isRet = row.dayIndex === nights + 1;
               const isJourney = row.activityType === 'JOURNEY';
+              const badgeColor = isDep
+                ? 'bg-amber-100 text-amber-700'
+                : isRet
+                ? 'bg-emerald-100 text-emerald-700'
+                : row.rowType === 'day' ? 'bg-sky-100 text-sky-700' : 'bg-blue-100 text-blue-700';
+              const badgeText = row.rowType === 'day' ? `D${row.dayIndex}` : `N${row.dayIndex}`;
               return (
-                <div key={row.offset} className="grid grid-cols-1 sm:grid-cols-[9rem_8rem_1fr] gap-2 sm:gap-x-3 sm:items-center">
-                  {/* Day/Night label */}
+                <div key={row.key} className="grid grid-cols-1 sm:grid-cols-[9rem_8rem_1fr] gap-2 sm:gap-x-3 sm:items-center">
                   <div className="flex items-center gap-2">
-                    <span className={cn(
-                      'text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums flex-shrink-0',
-                      isFirst ? 'bg-amber-100 text-amber-700' :
-                      isLast  ? 'bg-emerald-100 text-emerald-700' :
-                                'bg-blue-100 text-blue-700',
-                    )}>D{row.offset}</span>
+                    <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums flex-shrink-0', badgeColor)}>
+                      {badgeText}
+                    </span>
                     <span className="text-xs font-medium text-slate-700 whitespace-nowrap">{row.label}</span>
                   </div>
-                  {/* Activity Type dropdown */}
                   <select
                     value={row.activityType}
-                    onChange={(e) => updateRow(row.offset, 'activityType', e.target.value)}
+                    onChange={(e) => updateRow(row.key, 'activityType', e.target.value)}
                     className="input text-sm py-1.5"
                   >
                     {ACTIVITY_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
-                  {/* Activity Details */}
                   <input
                     type="text"
                     value={row.activityDetails}
-                    onChange={(e) => updateRow(row.offset, 'activityDetails', e.target.value)}
+                    onChange={(e) => updateRow(row.key, 'activityDetails', e.target.value)}
                     disabled={isJourney}
                     placeholder={
                       isJourney ? '—'
@@ -716,7 +716,11 @@ function TravelDayEditor({ packageId, totalNights }: { packageId: string; totalN
     .filter((item) => item.taskType === 'TRIP_DAY')
     .sort((a, b) => a.dayOffset - b.dayOffset);
 
-  const returnOffset = totalNights + 1;
+  const returnStartOffset = (totalNights + 1) * 2;
+  const getDayIndex = (offset: number) => Math.floor(offset / 2);
+  const isNightRow = (offset: number) => offset % 2 === 1;
+  const isDeparture = (offset: number) => offset <= 1;
+  const isReturn = (offset: number) => offset >= returnStartOffset;
 
   const getActivityType = (item: PackageItinerary) =>
     VALID_ACTIVITY_TYPES.includes(item.notes ?? '') ? item.notes! : '';
@@ -737,15 +741,15 @@ function TravelDayEditor({ packageId, totalNights }: { packageId: string; totalN
   };
 
   const dayBorderBg = (offset: number) => {
-    if (offset === 0) return 'border-l-amber-400 bg-amber-50/60';
-    if (offset === returnOffset) return 'border-l-emerald-400 bg-emerald-50/60';
-    return 'border-l-blue-300 bg-white';
+    if (isDeparture(offset)) return 'border-l-amber-400 bg-amber-50/60';
+    if (isReturn(offset)) return 'border-l-emerald-400 bg-emerald-50/60';
+    return isNightRow(offset) ? 'border-l-blue-300 bg-white' : 'border-l-sky-300 bg-sky-50/30';
   };
 
   const dayBadge = (offset: number) => {
-    if (offset === 0) return 'bg-amber-100 text-amber-700';
-    if (offset === returnOffset) return 'bg-emerald-100 text-emerald-700';
-    return 'bg-blue-100 text-blue-700';
+    if (isDeparture(offset)) return 'bg-amber-100 text-amber-700';
+    if (isReturn(offset)) return 'bg-emerald-100 text-emerald-700';
+    return isNightRow(offset) ? 'bg-blue-100 text-blue-700' : 'bg-sky-100 text-sky-700';
   };
 
   if (isLoading) return <div className="py-8 text-center text-slate-400 text-sm">Loading day plan…</div>;
@@ -760,7 +764,7 @@ function TravelDayEditor({ packageId, totalNights }: { packageId: string; totalN
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-500">{totalNights + 2} days total — click the edit icon to update activity type and details</p>
+      <p className="text-xs text-slate-500">{(totalNights + 2) * 2} entries total — click the edit icon to update activity type and details</p>
       {items.map((item) => {
         const actType = getActivityType(item) as ActivityType | '';
         const isJourney = actType === 'JOURNEY';
@@ -770,7 +774,7 @@ function TravelDayEditor({ packageId, totalNights }: { packageId: string; totalN
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full tabular-nums', dayBadge(item.dayOffset))}>
-                    D{item.dayOffset}
+                    {isNightRow(item.dayOffset) ? `N${getDayIndex(item.dayOffset)}` : `D${getDayIndex(item.dayOffset)}`}
                   </span>
                   <p className="text-sm font-semibold text-slate-700">{item.title}</p>
                 </div>
@@ -816,7 +820,7 @@ function TravelDayEditor({ packageId, totalNights }: { packageId: string; totalN
             ) : (
               <div className="flex items-start gap-3">
                 <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 tabular-nums', dayBadge(item.dayOffset))}>
-                  D{item.dayOffset}
+                  {isNightRow(item.dayOffset) ? `N${getDayIndex(item.dayOffset)}` : `D${getDayIndex(item.dayOffset)}`}
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

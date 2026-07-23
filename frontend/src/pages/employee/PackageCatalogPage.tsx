@@ -22,23 +22,22 @@ const parseList = (raw: string | string[]): string[] => {
 type ActivityType = 'JOURNEY' | 'STAY' | 'SIGHTSEEING';
 
 interface ItineraryRow {
-  offset: number;
+  key: string;
   label: string;
+  rowType: 'day' | 'night';
+  dayIndex: number;
   activityType: ActivityType;
   activityDetails: string;
 }
 
 function buildItineraryRows(nights: number): ItineraryRow[] {
-  return [
-    { offset: 0, label: 'Day 0 / Night 0', activityType: 'JOURNEY', activityDetails: '' },
-    ...Array.from({ length: nights }, (_, i) => ({
-      offset: i + 1,
-      label: `Day ${i + 1} / Night ${i + 1}`,
-      activityType: 'STAY' as ActivityType,
-      activityDetails: '',
-    })),
-    { offset: nights + 1, label: `Day ${nights + 1}`, activityType: 'JOURNEY' as ActivityType, activityDetails: '' },
-  ];
+  const rows: ItineraryRow[] = [];
+  for (let i = 0; i <= nights + 1; i++) {
+    const isEdge = i === 0 || i === nights + 1;
+    rows.push({ key: `day-${i}`, label: `Day ${i}`, rowType: 'day', dayIndex: i, activityType: isEdge ? 'JOURNEY' : 'SIGHTSEEING', activityDetails: '' });
+    rows.push({ key: `night-${i}`, label: `Night ${i}`, rowType: 'night', dayIndex: i, activityType: isEdge ? 'JOURNEY' : 'STAY', activityDetails: '' });
+  }
+  return rows;
 }
 
 const ACTIVITY_OPTIONS: { value: ActivityType; label: string }[] = [
@@ -64,7 +63,7 @@ function NewFITModal({ open, onClose }: { open: boolean; onClose: () => void }) 
     setRows((prev) => {
       const next = buildItineraryRows(n);
       return next.map((row) => {
-        const existing = prev.find((r) => r.offset === row.offset);
+        const existing = prev.find((r) => r.key === row.key);
         return existing ? { ...row, activityType: existing.activityType, activityDetails: existing.activityDetails } : row;
       });
     });
@@ -72,9 +71,9 @@ function NewFITModal({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   const changeDays = (d: number) => changeNights(Math.max(1, d - 2));
 
-  const updateRow = (offset: number, field: 'activityType' | 'activityDetails', value: string) => {
+  const updateRow = (key: string, field: 'activityType' | 'activityDetails', value: string) => {
     setRows((prev) => prev.map((r) => {
-      if (r.offset !== offset) return r;
+      if (r.key !== key) return r;
       const updated = { ...r, [field]: value as ActivityType };
       if (field === 'activityType' && value === 'JOURNEY') updated.activityDetails = '';
       return updated;
@@ -90,8 +89,10 @@ function NewFITModal({ open, onClose }: { open: boolean; onClose: () => void }) 
     createPkg.mutate({
       name: data.name, code: data.code, nights, packageType: 'FIT',
       itineraryRows: rows.map((r) => ({
-        dayOffset: r.offset, title: r.label,
-        activityType: r.activityType, activityDetails: r.activityDetails,
+        dayOffset: r.dayIndex * 2 + (r.rowType === 'night' ? 1 : 0),
+        title: r.label,
+        activityType: r.activityType,
+        activityDetails: r.activityDetails,
       })),
     } as any, { onSuccess: handleClose });
   };
@@ -169,25 +170,28 @@ function NewFITModal({ open, onClose }: { open: boolean; onClose: () => void }) 
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Type</p>
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Activity Details</p>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {rows.map((row) => {
-              const isFirst = row.offset === 0;
-              const isLast = row.offset === nights + 1;
+              const isDep = row.dayIndex === 0;
+              const isRet = row.dayIndex === nights + 1;
               const isJourney = row.activityType === 'JOURNEY';
+              const badgeColor = isDep
+                ? 'bg-amber-100 text-amber-700'
+                : isRet
+                ? 'bg-emerald-100 text-emerald-700'
+                : row.rowType === 'day' ? 'bg-sky-100 text-sky-700' : 'bg-blue-100 text-blue-700';
+              const badgeText = row.rowType === 'day' ? `D${row.dayIndex}` : `N${row.dayIndex}`;
               return (
-                <div key={row.offset} className="grid grid-cols-1 sm:grid-cols-[9rem_8rem_1fr] gap-2 sm:gap-x-3 sm:items-center">
+                <div key={row.key} className="grid grid-cols-1 sm:grid-cols-[9rem_8rem_1fr] gap-2 sm:gap-x-3 sm:items-center">
                   <div className="flex items-center gap-2">
-                    <span className={cn(
-                      'text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums flex-shrink-0',
-                      isFirst ? 'bg-amber-100 text-amber-700' :
-                      isLast  ? 'bg-emerald-100 text-emerald-700' :
-                                'bg-blue-100 text-blue-700',
-                    )}>D{row.offset}</span>
+                    <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums flex-shrink-0', badgeColor)}>
+                      {badgeText}
+                    </span>
                     <span className="text-xs font-medium text-slate-700 whitespace-nowrap">{row.label}</span>
                   </div>
                   <select
                     value={row.activityType}
-                    onChange={(e) => updateRow(row.offset, 'activityType', e.target.value)}
+                    onChange={(e) => updateRow(row.key, 'activityType', e.target.value)}
                     className="input text-sm py-1.5"
                   >
                     {ACTIVITY_OPTIONS.map((opt) => (
@@ -197,7 +201,7 @@ function NewFITModal({ open, onClose }: { open: boolean; onClose: () => void }) 
                   <input
                     type="text"
                     value={row.activityDetails}
-                    onChange={(e) => updateRow(row.offset, 'activityDetails', e.target.value)}
+                    onChange={(e) => updateRow(row.key, 'activityDetails', e.target.value)}
                     disabled={isJourney}
                     placeholder={
                       isJourney ? '—'

@@ -246,23 +246,15 @@ export const createPackage = async (req: AuthenticatedRequest, res: Response): P
         sortOrder: Number(row.dayOffset),
       }));
     } else {
-      const locations: string[] = Array.isArray(stayLocations) ? stayLocations : [];
       itineraryData = [
-        {
-          packageId: pkg.id, dayOffset: 0, title: 'Day 0 / Night 0',
-          description: '', notes: 'JOURNEY',
-          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0,
-        },
-        ...Array.from({ length: stayNights }, (_, i) => ({
-          packageId: pkg.id, dayOffset: i + 1, title: `Day ${i + 1} / Night ${i + 1}`,
-          description: locations[i] || '', notes: 'STAY',
-          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: i + 1,
-        })),
-        {
-          packageId: pkg.id, dayOffset: stayNights + 1, title: `Day ${stayNights + 1}`,
-          description: '', notes: 'JOURNEY',
-          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: stayNights + 1,
-        },
+        { packageId: pkg.id, dayOffset: 0, title: 'Day 0', description: '', notes: 'JOURNEY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0 },
+        { packageId: pkg.id, dayOffset: 1, title: 'Night 0', description: '', notes: 'JOURNEY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 1 },
+        ...Array.from({ length: stayNights }, (_, i) => [
+          { packageId: pkg.id, dayOffset: (i + 1) * 2, title: `Day ${i + 1}`, description: '', notes: 'SIGHTSEEING', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: (i + 1) * 2 },
+          { packageId: pkg.id, dayOffset: (i + 1) * 2 + 1, title: `Night ${i + 1}`, description: '', notes: 'STAY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: (i + 1) * 2 + 1 },
+        ]).flat(),
+        { packageId: pkg.id, dayOffset: (stayNights + 1) * 2, title: `Day ${stayNights + 1}`, description: '', notes: 'JOURNEY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: (stayNights + 1) * 2 },
+        { packageId: pkg.id, dayOffset: (stayNights + 1) * 2 + 1, title: `Night ${stayNights + 1}`, description: '', notes: 'JOURNEY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: (stayNights + 1) * 2 + 1 },
       ];
     }
     await prisma.packageItinerary.createMany({ data: itineraryData });
@@ -363,21 +355,14 @@ export const updatePackage = async (req: AuthenticatedRequest, res: Response): P
     if (nightsChanged) {
       await prisma.packageItinerary.deleteMany({ where: { packageId: id, taskType: 'TRIP_DAY' } });
       const itineraryData = [
-        {
-          packageId: id, dayOffset: 0, title: 'Day 0 / Night 0',
-          description: '', notes: 'JOURNEY',
-          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0,
-        },
-        ...Array.from({ length: newNights }, (_, i) => ({
-          packageId: id, dayOffset: i + 1, title: `Day ${i + 1} / Night ${i + 1}`,
-          description: '', notes: 'STAY',
-          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: i + 1,
-        })),
-        {
-          packageId: id, dayOffset: newNights + 1, title: `Day ${newNights + 1}`,
-          description: '', notes: 'JOURNEY',
-          taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: newNights + 1,
-        },
+        { packageId: id, dayOffset: 0, title: 'Day 0', description: '', notes: 'JOURNEY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0 },
+        { packageId: id, dayOffset: 1, title: 'Night 0', description: '', notes: 'JOURNEY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 1 },
+        ...Array.from({ length: newNights }, (_, i) => [
+          { packageId: id, dayOffset: (i + 1) * 2, title: `Day ${i + 1}`, description: '', notes: 'SIGHTSEEING', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: (i + 1) * 2 },
+          { packageId: id, dayOffset: (i + 1) * 2 + 1, title: `Night ${i + 1}`, description: '', notes: 'STAY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: (i + 1) * 2 + 1 },
+        ]).flat(),
+        { packageId: id, dayOffset: (newNights + 1) * 2, title: `Day ${newNights + 1}`, description: '', notes: 'JOURNEY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: (newNights + 1) * 2 },
+        { packageId: id, dayOffset: (newNights + 1) * 2 + 1, title: `Night ${newNights + 1}`, description: '', notes: 'JOURNEY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: (newNights + 1) * 2 + 1 },
       ];
       await prisma.packageItinerary.createMany({ data: itineraryData });
     }
