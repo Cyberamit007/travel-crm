@@ -32,24 +32,24 @@ export default function FinanceDashboardPage() {
 
   const cards = stats
     ? [
-        { label: "Today's Collections", value: formatCurrency(stats.todaysCollections), icon: CalendarDays, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
-        { label: 'Monthly Collections', value: formatCurrency(stats.monthlyCollections), icon: TrendingUp, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
-        { label: 'Total Revenue', value: formatCurrency(stats.totalRevenue), icon: IndianRupee, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
-        { label: 'Pending Verification', value: stats.pendingPaymentVerification, icon: CheckSquare, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: 'Pending Customer Balances', value: stats.pendingCustomerBalances, icon: Wallet, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: 'Upcoming Due Payments', value: stats.upcomingDuePayments, icon: CalendarClock, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: 'Overdue Payments', value: stats.overduePayments, icon: AlertCircle, iconBg: 'bg-red-100', iconColor: 'text-red-600' },
-        { label: 'Refund Requests', value: stats.refundRequests, icon: RotateCcw, iconBg: 'bg-red-100', iconColor: 'text-red-600' },
-        { label: 'Vendor Payments Pending', value: stats.vendorPaymentsPending, icon: Truck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: "Today's Expenses", value: formatCurrency(stats.todaysExpenses), icon: Receipt, iconBg: 'bg-red-100', iconColor: 'text-red-600' },
-        { label: 'Pending Expense Approval', value: stats.pendingExpenseApproval, icon: CheckSquare, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: 'Profit This Month', value: formatCurrency(stats.profitThisMonth), icon: PiggyBank, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
-        { label: 'Top Revenue Package', value: stats.topRevenuePackage ? stats.topRevenuePackage.name : '—', icon: Award, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
-        { label: 'Payment Completion', value: `${stats.paymentCompletionPct}%`, icon: Percent, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
-        { label: 'Cash Collection', value: formatCurrency(stats.cashCollection), icon: Banknote, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
-        { label: 'Online Collection', value: formatCurrency(stats.onlineCollection), icon: CreditCard, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
-        { label: 'UPI Collection', value: formatCurrency(stats.upiCollection), icon: Smartphone, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
-        { label: 'Bank Transfer Collection', value: formatCurrency(stats.bankTransferCollection), icon: Landmark, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
+        { label: "Today's Collections", value: formatCurrency(stats.todaysCollections), icon: CalendarDays, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/reports`) },
+        { label: 'Monthly Collections', value: formatCurrency(stats.monthlyCollections), icon: TrendingUp, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/reports`) },
+        { label: 'Total Revenue', value: formatCurrency(stats.totalRevenue), icon: IndianRupee, iconBg: 'bg-primary-100', iconColor: 'text-primary-600', onClick: () => navigate(`${base}/reports`) },
+        { label: 'Pending Verification', value: stats.pendingPaymentVerification, icon: CheckSquare, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/verification`) },
+        { label: 'Pending Customer Balances', value: stats.pendingCustomerBalances, icon: Wallet, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/pending`) },
+        { label: 'Upcoming Due Payments', value: stats.upcomingDuePayments, icon: CalendarClock, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/pending`) },
+        { label: 'Overdue Payments', value: stats.overduePayments, icon: AlertCircle, iconBg: 'bg-red-100', iconColor: 'text-red-600', onClick: () => navigate(`${base}/pending`) },
+        { label: 'Refund Requests', value: stats.refundRequests, icon: RotateCcw, iconBg: 'bg-red-100', iconColor: 'text-red-600', onClick: () => navigate(`${base}/refunds`) },
+        { label: 'Vendor Payments Pending', value: stats.vendorPaymentsPending, icon: Truck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/vendor-payments`) },
+        { label: "Today's Expenses", value: formatCurrency(stats.todaysExpenses), icon: Receipt, iconBg: 'bg-red-100', iconColor: 'text-red-600', onClick: () => navigate(`${base}/expenses`) },
+        { label: 'Pending Expense Approval', value: stats.pendingExpenseApproval, icon: CheckSquare, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/expenses`) },
+        { label: 'Profit This Month', value: formatCurrency(stats.profitThisMonth), icon: PiggyBank, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/reports`) },
+        { label: 'Top Revenue Package', value: stats.topRevenuePackage ? stats.topRevenuePackage.name : '—', icon: Award, iconBg: 'bg-primary-100', iconColor: 'text-primary-600', onClick: () => navigate(`${base}/reports`) },
+        { label: 'Payment Completion', value: `${stats.paymentCompletionPct}%`, icon: Percent, iconBg: 'bg-primary-100', iconColor: 'text-primary-600', onClick: () => navigate(`${base}/reports`) },
+        { label: 'Cash Collection', value: formatCurrency(stats.cashCollection), icon: Banknote, iconBg: 'bg-slate-100', iconColor: 'text-slate-600', onClick: () => navigate(`${base}/reports`) },
+        { label: 'Online Collection', value: formatCurrency(stats.onlineCollection), icon: CreditCard, iconBg: 'bg-slate-100', iconColor: 'text-slate-600', onClick: () => navigate(`${base}/reports`) },
+        { label: 'UPI Collection', value: formatCurrency(stats.upiCollection), icon: Smartphone, iconBg: 'bg-slate-100', iconColor: 'text-slate-600', onClick: () => navigate(`${base}/reports`) },
+        { label: 'Bank Transfer Collection', value: formatCurrency(stats.bankTransferCollection), icon: Landmark, iconBg: 'bg-slate-100', iconColor: 'text-slate-600', onClick: () => navigate(`${base}/reports`) },
       ]
     : [];
 
@@ -78,7 +78,7 @@ export default function FinanceDashboardPage() {
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {cards.map((c) => (
-              <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
+              <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} onClick={c.onClick} />
             ))}
           </div>
 

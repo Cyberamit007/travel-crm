@@ -351,8 +351,23 @@ export const updatePackage = async (req: AuthenticatedRequest, res: Response): P
       },
     });
 
-    // Regenerate itinerary only when nights count changes
-    if (nightsChanged) {
+    // Regenerate itinerary — use caller-supplied rows when provided, else regenerate on nights change
+    const { itineraryRows } = req.body;
+    if (Array.isArray(itineraryRows) && itineraryRows.length > 0) {
+      await prisma.packageItinerary.deleteMany({ where: { packageId: id, taskType: 'TRIP_DAY' } });
+      await prisma.packageItinerary.createMany({
+        data: itineraryRows.map((row: any) => ({
+          packageId: id,
+          dayOffset: Number(row.dayOffset),
+          title: String(row.title || `Day ${row.dayOffset}`),
+          description: row.activityDetails ? String(row.activityDetails) : '',
+          notes: row.activityType ? String(row.activityType) : 'JOURNEY',
+          taskType: 'TRIP_DAY' as const,
+          department: 'SALES' as const,
+          sortOrder: Number(row.dayOffset),
+        })),
+      });
+    } else if (nightsChanged) {
       await prisma.packageItinerary.deleteMany({ where: { packageId: id, taskType: 'TRIP_DAY' } });
       const itineraryData = [
         { packageId: id, dayOffset: 0, title: 'Day 0', description: '', notes: 'JOURNEY', taskType: 'TRIP_DAY' as const, department: 'SALES' as const, sortOrder: 0 },

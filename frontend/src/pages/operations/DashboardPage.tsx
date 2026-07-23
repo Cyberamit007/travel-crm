@@ -42,38 +42,38 @@ export default function OperationsDashboardPage() {
   // pending, same "don't show a zero" rule as the room-type breakdown.
   const tripStatusCards = stats
     ? [
-        { label: "Today's Departures", value: stats.todaysDepartures, icon: CalendarDays, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
-        { label: 'Upcoming Departures', value: stats.upcomingDepartures, icon: CalendarClock, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
-        { label: 'Active Trips', value: stats.activeTrips, icon: Plane, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
-        { label: 'Completed Trips', value: stats.completedTrips, icon: CheckCircle2, iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
+        { label: "Today's Departures", value: stats.todaysDepartures, icon: CalendarDays, iconBg: 'bg-primary-100', iconColor: 'text-primary-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Upcoming Departures', value: stats.upcomingDepartures, icon: CalendarClock, iconBg: 'bg-primary-100', iconColor: 'text-primary-600', onClick: () => navigate(`${base}/departures?status=UPCOMING`) },
+        { label: 'Active Trips', value: stats.activeTrips, icon: Plane, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/departures?status=ACTIVE`) },
+        { label: 'Completed Trips', value: stats.completedTrips, icon: CheckCircle2, iconBg: 'bg-slate-100', iconColor: 'text-slate-600', onClick: () => navigate(`${base}/departures?status=COMPLETED`) },
       ]
     : [];
 
   const todaysOpsCards = stats
     ? [
-        { label: 'Total Travelers Today', value: stats.totalTravelersToday, icon: Users, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
-        { label: "Today's Check-ins", value: stats.todaysCheckins, icon: LogIn, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
-        { label: "Today's Check-outs", value: stats.todaysCheckouts, icon: LogOut, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
-        { label: "Today's Transfers", value: stats.todaysTransfers, icon: ArrowRightLeft, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600' },
+        { label: 'Total Travelers Today', value: stats.totalTravelersToday, icon: Users, iconBg: 'bg-primary-100', iconColor: 'text-primary-600', onClick: () => navigate(`${base}/departures`) },
+        { label: "Today's Check-ins", value: stats.todaysCheckins, icon: LogIn, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600', onClick: () => navigate(`${base}/departures`) },
+        { label: "Today's Check-outs", value: stats.todaysCheckouts, icon: LogOut, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600', onClick: () => navigate(`${base}/departures`) },
+        { label: "Today's Transfers", value: stats.todaysTransfers, icon: ArrowRightLeft, iconBg: 'bg-mountain-100', iconColor: 'text-mountain-600', onClick: () => navigate(`${base}/departures`) },
       ]
     : [];
 
   const pendingActionCards = (stats
     ? [
-        { label: 'Pending Hotel Bookings', value: stats.pendingHotelBookings, icon: Building2, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: 'Pending Vehicle Bookings', value: stats.pendingVehicleBookings, icon: Truck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: 'Pending Room Allocation', value: stats.pendingRoomAllocation, icon: BedDouble, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: 'Pending Trip Captain', value: stats.pendingTripCaptainAssignment, icon: UserCog, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
-        { label: 'Pending Traveler Verification', value: stats.pendingTravelerVerification, icon: ShieldCheck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' },
+        { label: 'Pending Hotel Bookings', value: stats.pendingHotelBookings, icon: Building2, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Pending Vehicle Bookings', value: stats.pendingVehicleBookings, icon: Truck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Pending Room Allocation', value: stats.pendingRoomAllocation, icon: BedDouble, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Pending Trip Captain', value: stats.pendingTripCaptainAssignment, icon: UserCog, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
+        { label: 'Pending Traveler Verification', value: stats.pendingTravelerVerification, icon: ShieldCheck, iconBg: 'bg-amber-100', iconColor: 'text-amber-600', onClick: () => navigate(`${base}/departures`) },
       ]
     : []
   ).filter((c) => c.value > 0);
 
   const overviewCards = stats
     ? [
-        { label: 'Total Travelers on Tour', value: stats.totalTravelersOnTour, icon: Users2, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
-        { label: 'Upcoming Activities', value: stats.upcomingActivities, icon: ListChecks, iconBg: 'bg-primary-100', iconColor: 'text-primary-600' },
-        { label: 'Avg. Checklist Progress', value: `${stats.checklistProgressAvg}%`, icon: ClipboardCheck, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
+        { label: 'Total Travelers on Tour', value: stats.totalTravelersOnTour, icon: Users2, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/departures?status=ACTIVE`) },
+        { label: 'Upcoming Activities', value: stats.upcomingActivities, icon: ListChecks, iconBg: 'bg-primary-100', iconColor: 'text-primary-600', onClick: () => navigate(`${base}/departures?status=UPCOMING`) },
+        { label: 'Avg. Checklist Progress', value: `${stats.checklistProgressAvg}%`, icon: ClipboardCheck, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600', onClick: () => navigate(`${base}/departures`) },
       ]
     : [];
 
@@ -105,7 +105,7 @@ export default function OperationsDashboardPage() {
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Trip Status</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {tripStatusCards.map((c) => (
-                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
+                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} onClick={c.onClick} />
               ))}
             </div>
           </div>
@@ -114,7 +114,7 @@ export default function OperationsDashboardPage() {
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Today's Operations</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {todaysOpsCards.map((c) => (
-                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
+                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} onClick={c.onClick} />
               ))}
             </div>
           </div>
@@ -131,7 +131,7 @@ export default function OperationsDashboardPage() {
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {pendingActionCards.map((c) => (
-                  <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
+                  <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} onClick={c.onClick} />
                 ))}
               </div>
             )}
@@ -141,7 +141,7 @@ export default function OperationsDashboardPage() {
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Overview</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {overviewCards.map((c) => (
-                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} />
+                <StatsCard key={c.label} label={c.label} value={c.value} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} onClick={c.onClick} />
               ))}
             </div>
           </div>
